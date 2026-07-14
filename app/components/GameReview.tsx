@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Chess } from "chess.js";
 import type { GameData, Ply, Judgment } from "../lib/game";
 import { fenAt } from "../lib/game";
 import { analyzeGameLocally } from "../lib/analyze";
 import { explainMove } from "../lib/motifs";
+import { BOARD_THEMES, loadBoardTheme, saveBoardTheme, type BoardTheme } from "../lib/boardThemes";
 import { Chessboard } from "./Chessboard";
 
 const JUDGMENT: Record<Judgment, { glyph: string; color: string }> = {
@@ -46,7 +47,6 @@ function moveSquares(uci?: string): [number, number] | undefined {
   return [sqIndex(uci.slice(0, 2)), sqIndex(uci.slice(2, 4))];
 }
 
-/** Plies where the evaluation swings sharply — the game's turning points. */
 function keypointPlies(plies: Ply[]): Set<number> {
   const swings: { ply: number; swing: number }[] = [];
   let prev = 0;
@@ -57,78 +57,123 @@ function keypointPlies(plies: Ply[]): Set<number> {
     prev = e;
   }
   return new Set(
-    swings
-      .filter((s) => s.swing >= 150)
-      .sort((a, b) => b.swing - a.swing)
-      .slice(0, 8)
-      .map((s) => s.ply),
+    swings.filter((s) => s.swing >= 150).sort((a, b) => b.swing - a.swing).slice(0, 8).map((s) => s.ply),
   );
 }
 
-function EvalGraph({
+// ---------------------------------------------------------------------------
+// The vertical eval spine: white moves left, black moves right, the evaluation
+// curve running down the middle. Zoomed (one row per ply) so it scrolls.
+// ---------------------------------------------------------------------------
+const ROW = 30;
+const SPINE = 88;
+const MAXCP = 600;
+
+function Glyph({ j }: { j?: Ply["judgment"] }) {
+  if (!j) return null;
+  const s = JUDGMENT[j.name];
+  return <sup className="font-semibold" style={{ color: s.color }}>{s.glyph}</sup>;
+}
+
+function EvalTimeline({
   plies,
   current,
   keypoints,
+  hasAnalysis,
   onSeek,
 }: {
   plies: Ply[];
   current: number;
   keypoints: Set<number>;
+  hasAnalysis: boolean;
   onSeek: (i: number) => void;
 }) {
-  const W = 640;
-  const H = 104;
-  const MAX = 800;
-  const mid = H / 2;
-  const clampCp = (p: Ply): number => {
-    const cp = p.mate !== undefined ? (p.mate > 0 ? MAX : -MAX) : (p.evalCp ?? 0);
-    return Math.max(-MAX, Math.min(MAX, cp));
-  };
-  const X = (i: number) => (plies.length <= 1 ? 0 : (i / (plies.length - 1)) * W);
-  const Y = (cp: number) => mid - (cp / MAX) * (mid - 3);
-  const pts = plies.map((p, i) => `${X(i).toFixed(1)},${Y(clampCp(p)).toFixed(1)}`).join(" ");
-  const area = `0,${mid} ${pts} ${W},${mid}`;
+  const scroller = useRef<HTMLDivElement>(null);
+  const H = plies.length * ROW;
+  const cx = SPINE / 2;
+  const clampCp = (p: Ply) =>
+    Math.max(-MAXCP, Math.min(MAXCP, p.mate !== undefined ? (p.mate > 0 ? MAXCP : -MAXCP) : (p.evalCp ?? 0)));
+  const px = (cp: number) => cx + (cp / MAXCP) * (cx - 5);
+  const py = (i: number) => i * ROW + ROW / 2;
+  const pts = plies.map((p, i) => `${px(clampCp(p)).toFixed(1)},${py(i)}`).join(" ");
 
-  const seek = (clientX: number, rect: DOMRect) => {
-    const i = Math.round(((clientX - rect.left) / rect.width) * (plies.length - 1));
-    onSeek(Math.max(0, Math.min(plies.length, i + 1)));
-  };
-
-  const kp = plies.map((p, i) => ({ p, i })).filter(({ p }) => keypoints.has(p.ply));
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || current <= 0) return;
+    const target = (current - 1) * ROW - el.clientHeight / 2 + ROW / 2;
+    el.scrollTo({ top: Math.max(0, target), behavior: "smooth" });
+  }, [current]);
 
   return (
-    <div
-      className="relative cursor-pointer overflow-hidden rounded-[6px] border border-line"
-      style={{ height: H }}
-      onClick={(e) => seek(e.clientX, e.currentTarget.getBoundingClientRect())}
-    >
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block">
-        <rect x="0" y="0" width={W} height={mid} fill="var(--color-ink)" opacity="0.05" />
-        <polygon points={area} fill="var(--color-ink)" opacity="0.13" />
-        <polyline points={pts} fill="none" stroke="var(--color-ink-muted)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-        <line x1="0" y1={mid} x2={W} y2={mid} stroke="var(--color-line-strong)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-      </svg>
-      {current > 0 && (
-        <div className="pointer-events-none absolute top-0 bottom-0 w-px bg-accent" style={{ left: `${(X(current - 1) / W) * 100}%` }} />
-      )}
-      {kp.map(({ p, i }) => (
-        <button
-          key={p.ply}
-          type="button"
-          title={`Move ${p.moveNumber}: ${formatEval(p)}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSeek(p.ply);
-          }}
-          className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2"
-          style={{
-            left: `${(X(i) / W) * 100}%`,
-            top: Y(clampCp(p)),
-            background: "var(--color-accent)",
-            ["--tw-ring-color" as string]: "var(--color-bg)",
-          }}
-        />
-      ))}
+    <div>
+      <div className="mb-1.5 grid text-center" style={{ gridTemplateColumns: `1fr ${SPINE}px 1fr` }}>
+        <span className="cap text-right">White</span>
+        <span className="cap">eval</span>
+        <span className="cap text-left">Black</span>
+      </div>
+      <div ref={scroller} className="relative h-[560px] overflow-y-auto rounded-panel border border-line">
+        <div className="relative" style={{ height: H }}>
+          {/* spine (behind the rows; center column is transparent so it shows) */}
+          <svg
+            className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2"
+            width={SPINE}
+            height={H}
+            viewBox={`0 0 ${SPINE} ${H}`}
+          >
+            <line x1={cx} y1={0} x2={cx} y2={H} stroke="var(--color-line)" strokeWidth="1" />
+            {hasAnalysis && plies.length > 1 && (
+              <>
+                <polygon points={`${cx},${py(0)} ${pts} ${cx},${py(plies.length - 1)}`} fill="var(--color-ink)" opacity="0.1" />
+                <polyline points={pts} fill="none" stroke="var(--color-ink-muted)" strokeWidth="1.5" strokeLinejoin="round" />
+                {plies.map((p, i) =>
+                  keypoints.has(p.ply) ? (
+                    <circle key={p.ply} cx={px(clampCp(p))} cy={py(i)} r="3" fill="var(--color-accent)" />
+                  ) : null,
+                )}
+              </>
+            )}
+          </svg>
+
+          {plies.map((p, i) => {
+            const active = current === p.ply;
+            const white = p.color === "white";
+            const cell = `flex items-center gap-1.5 px-2 text-sm ${active ? "bg-surface-2" : ""}`;
+            return (
+              <button
+                key={p.ply}
+                type="button"
+                onClick={() => onSeek(p.ply)}
+                className="absolute inset-x-0 grid"
+                style={{ top: i * ROW, height: ROW, gridTemplateColumns: `1fr ${SPINE}px 1fr` }}
+              >
+                <span className={`${cell} justify-end rounded-l-[5px]`}>
+                  {white && (
+                    <>
+                      <span className={active ? "text-ink" : "text-ink-muted"}>
+                        {p.moveNumber}. {p.san}
+                        <Glyph j={p.judgment} />
+                      </span>
+                      {hasAnalysis && <span className="metric text-xs text-ink-faint">{formatEval(p)}</span>}
+                    </>
+                  )}
+                </span>
+                <span />
+                <span className={`${cell} justify-start rounded-r-[5px]`}>
+                  {!white && (
+                    <>
+                      {hasAnalysis && <span className="metric text-xs text-ink-faint">{formatEval(p)}</span>}
+                      <span className={active ? "text-ink" : "text-ink-muted"}>
+                        {p.san}
+                        <Glyph j={p.judgment} />
+                      </span>
+                    </>
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -146,38 +191,16 @@ function NavButton({ children, onClick, disabled }: { children: React.ReactNode;
   );
 }
 
-function MoveCell({ ply, active, isKey, onClick }: { ply?: Ply; active: boolean; isKey: boolean; onClick: () => void }) {
-  if (!ply) return <td className="w-[44%]" />;
-  const j = ply.judgment ? JUDGMENT[ply.judgment.name] : null;
-  return (
-    <td className="w-[44%] py-0.5">
-      <button
-        type="button"
-        onClick={onClick}
-        className={`metric flex w-full items-baseline gap-1.5 rounded-[4px] px-1.5 py-0.5 text-sm transition-colors ${
-          active ? "bg-surface-2 text-ink" : "text-ink-muted hover:text-ink"
-        }`}
-      >
-        {isKey && <span className="h-1 w-1 shrink-0 rounded-full" style={{ background: "var(--color-accent)" }} />}
-        <span>
-          {ply.san}
-          {j && <sup className="font-semibold" style={{ color: j.color }}>{j.glyph}</sup>}
-        </span>
-        <span className="ml-auto text-xs text-ink-faint">{formatEval(ply)}</span>
-      </button>
-    </td>
-  );
-}
-
 export function GameReview({ game }: { game: GameData }) {
   const [analyzed, setAnalyzed] = useState<GameData | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const g = analyzed ?? game;
-
   const n = g.plies.length;
   const [idx, setIdx] = useState(n);
   const [flip, setFlip] = useState(false);
+  const [theme, setTheme] = useState<BoardTheme>(() => loadBoardTheme());
+  const boardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -189,6 +212,19 @@ export function GameReview({ game }: { game: GameData }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [n]);
+
+  // Wheel over the board steps through moves (non-passive so we can preventDefault).
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.deltaY > 0) setIdx((i) => Math.min(n, i + 1));
+      else if (e.deltaY < 0) setIdx((i) => Math.max(0, i - 1));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
   }, [n]);
 
   const runAnalysis = async () => {
@@ -203,6 +239,11 @@ export function GameReview({ game }: { game: GameData }) {
     }
   };
 
+  const setBoardTheme = (t: BoardTheme) => {
+    setTheme(t);
+    saveBoardTheme(t.id);
+  };
+
   const keypoints = useMemo(() => keypointPlies(g.plies), [g.plies]);
   const current = idx > 0 ? g.plies[idx - 1] : null;
   const bestSan = current ? uciToSan(current.fenBefore, current.best) : undefined;
@@ -214,113 +255,145 @@ export function GameReview({ game }: { game: GameData }) {
     [current],
   );
 
-  const rows = [];
-  for (let i = 0; i < n; i += 2) rows.push({ no: i / 2 + 1, w: g.plies[i], b: g.plies[i + 1] });
-
   return (
     <div className="relative z-10 min-h-dvh">
       <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-[540px] items-center justify-between px-4">
+        <div className="mx-auto flex h-14 max-w-[960px] items-center justify-between px-4 sm:px-6">
           <Link to="/" className="cap transition-colors hover:text-ink">← Report</Link>
-          <a href={g.url} target="_blank" rel="noreferrer" className="cap transition-colors hover:text-ink">
-            Lichess ↗
-          </a>
+          <a href={g.url} target="_blank" rel="noreferrer" className="cap transition-colors hover:text-ink">Lichess ↗</a>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[540px] px-4 pb-24 pt-6">
-        <div className="mb-4">
+      <main className="mx-auto max-w-[960px] px-4 pb-16 pt-6 sm:px-6">
+        <div className="mb-5">
           <div className="cap mb-1.5">
             {g.speed ? `${g.speed} · ` : ""}
-            {g.eco ? `${g.eco} · ` : ""}
+            {g.eco ? (
+              <span title="ECO opening code">{g.eco}</span>
+            ) : null}
+            {g.eco ? " · " : ""}
             {g.opening ?? "Game"}
           </div>
           <h1 className="font-serif text-2xl leading-tight text-ink">
-            {g.white.name}{" "}
-            <span className="text-ink-faint">{g.white.rating ? `${g.white.rating}` : ""}</span>{" "}
+            {g.white.name} <span className="text-ink-faint">{g.white.rating ?? ""}</span>{" "}
             <span className="metric text-lg text-ink-muted">{g.result}</span>{" "}
-            {g.black.name}{" "}
-            <span className="text-ink-faint">{g.black.rating ? `${g.black.rating}` : ""}</span>
+            {g.black.name} <span className="text-ink-faint">{g.black.rating ?? ""}</span>
           </h1>
         </div>
 
-        {g.hasAnalysis ? (
-          <div className="mb-4">
-            <div className="mb-1.5 flex items-center justify-between">
-              <span className="cap">Evaluation</span>
-              <span className="metric text-sm text-ink">{formatEval(current) || "start"}</span>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          {/* BOARD COLUMN */}
+          <div>
+            <div className="flex items-start gap-2">
+              <button
+                type="button"
+                onClick={() => setFlip((f) => !f)}
+                title="Flip board (f)"
+                className="metric mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-control border border-line text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+              >
+                ⇅
+              </button>
+              <div ref={boardRef} className="min-w-0 flex-1 touch-none">
+                <Chessboard
+                  fen={fenAt(g, idx)}
+                  flip={flip}
+                  light={theme.light}
+                  dark={theme.dark}
+                  lastMove={current ? moveSquares(current.uci) : undefined}
+                />
+              </div>
+              {/* keep the board centered between the flip gutter and an equal spacer */}
+              <div className="w-9 shrink-0" aria-hidden />
             </div>
-            <EvalGraph plies={g.plies} current={idx} keypoints={keypoints} onSeek={setIdx} />
-            <p className="cap mt-1.5 normal-case tracking-normal text-ink-faint">
-              Dots mark the sharpest swings. Click the graph or a dot to jump there.
-            </p>
-          </div>
-        ) : (
-          <div className="mb-4 rounded-panel border border-line p-4">
-            {analyzing ? (
-              <div className="flex items-center gap-3 text-sm text-ink-muted">
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-line border-t-accent" />
-                Grading {n} moves with Stockfish. This takes a few seconds.
+
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <NavButton onClick={() => setIdx(0)} disabled={idx === 0}>⏮</NavButton>
+              <NavButton onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}>◀</NavButton>
+              <span className="metric w-16 text-center text-xs text-ink-faint">{idx} / {n}</span>
+              <NavButton onClick={() => setIdx(Math.min(n, idx + 1))} disabled={idx === n}>▶</NavButton>
+              <NavButton onClick={() => setIdx(n)} disabled={idx === n}>⏭</NavButton>
+            </div>
+
+            {!g.hasAnalysis && (
+              <div className="mt-4 rounded-panel border border-line p-3">
+                {analyzing ? (
+                  <div className="flex items-center gap-3 text-sm text-ink-muted">
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-line border-t-accent" />
+                    Grading {n} moves with Stockfish…
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-ink-muted">Not analyzed yet.</span>
+                    <button
+                      type="button"
+                      onClick={runAnalysis}
+                      className="rounded-control bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink transition-transform active:translate-y-px"
+                    >
+                      Analyze
+                    </button>
+                  </div>
+                )}
+                {error && <p className="mt-2 text-sm" style={{ color: "var(--color-loss)" }}>{error}</p>}
               </div>
-            ) : (
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-sm text-ink-muted">Not analyzed yet. Grade it with the engine.</p>
+            )}
+
+            {/* current move / reason — fixed height so nothing shifts */}
+            <div className="mt-4 min-h-[6rem] rounded-panel border border-line p-4">
+              {current ? (
+                <>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="metric text-sm text-ink">
+                      {current.moveNumber}
+                      {current.color === "white" ? "." : "..."} {current.san}
+                    </span>
+                    {current.judgment ? (
+                      <span className="metric text-sm font-semibold" style={{ color: JUDGMENT[current.judgment.name].color }}>
+                        {current.judgment.name} {JUDGMENT[current.judgment.name].glyph}
+                      </span>
+                    ) : (
+                      <span className="metric text-sm text-ink-muted">{formatEval(current)}</span>
+                    )}
+                  </div>
+                  {current.judgment && (
+                    <>
+                      {reason ? (
+                        <p className="mt-1.5 text-sm text-ink">{reason.text}</p>
+                      ) : jComment ? (
+                        <p className="mt-1.5 text-sm text-ink-muted">{jComment}</p>
+                      ) : null}
+                      {bestSan && !reason?.text.includes(bestSan) && !jComment.includes(bestSan) && (
+                        <p className="cap mt-2 normal-case tracking-normal">Best: {bestSan}</p>
+                      )}
+                    </>
+                  )}
+                </>
+              ) : (
+                <span className="text-sm text-ink-faint">
+                  Starting position. Scroll on the board or use arrow keys to step through.
+                </span>
+              )}
+            </div>
+
+            <div className="mt-4 flex items-center gap-2">
+              <span className="cap">Board</span>
+              {BOARD_THEMES.map((t) => (
                 <button
+                  key={t.id}
                   type="button"
-                  onClick={runAnalysis}
-                  className="shrink-0 rounded-control bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink transition-transform active:translate-y-px"
+                  title={t.name}
+                  onClick={() => setBoardTheme(t)}
+                  className={`grid h-6 w-6 overflow-hidden rounded-[4px] border ${theme.id === t.id ? "border-accent" : "border-line"}`}
+                  style={{ gridTemplateColumns: "1fr 1fr" }}
                 >
-                  Analyze
+                  <span style={{ background: t.light }} />
+                  <span style={{ background: t.dark }} />
                 </button>
-              </div>
-            )}
-            {error && <p className="mt-2 text-sm" style={{ color: "var(--color-loss)" }}>{error}</p>}
-          </div>
-        )}
-
-        <Chessboard fen={fenAt(g, idx)} flip={flip} lastMove={current ? moveSquares(current.uci) : undefined} />
-
-        <div className="mt-4 flex items-center justify-between">
-          <div className="flex gap-2">
-            <NavButton onClick={() => setIdx(0)} disabled={idx === 0}>⏮</NavButton>
-            <NavButton onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}>◀</NavButton>
-            <NavButton onClick={() => setIdx(Math.min(n, idx + 1))} disabled={idx === n}>▶</NavButton>
-            <NavButton onClick={() => setIdx(n)} disabled={idx === n}>⏭</NavButton>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="cap">{idx} / {n}</span>
-            <button type="button" onClick={() => setFlip((f) => !f)} className="cap transition-colors hover:text-ink">Flip</button>
-          </div>
-        </div>
-
-        {current?.judgment && (
-          <div className="mt-4 rounded-panel border border-line p-4">
-            <span className="metric text-sm font-semibold" style={{ color: JUDGMENT[current.judgment.name].color }}>
-              {current.judgment.name} {JUDGMENT[current.judgment.name].glyph}
-            </span>
-            {reason ? (
-              <p className="mt-1.5 text-sm text-ink">{reason.text}</p>
-            ) : jComment ? (
-              <p className="mt-1.5 text-sm text-ink-muted">{jComment}</p>
-            ) : null}
-            {bestSan && !reason?.text.includes(bestSan) && !jComment.includes(bestSan) && (
-              <p className="cap mt-2 normal-case tracking-normal">Best: {bestSan}</p>
-            )}
-          </div>
-        )}
-
-        <div className="mt-6">
-          <table className="w-full">
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.no} className="align-baseline">
-                  <td className="metric w-8 py-0.5 pr-1 text-right text-xs text-ink-faint">{r.no}.</td>
-                  <MoveCell ply={r.w} active={idx === r.w?.ply} isKey={!!r.w && keypoints.has(r.w.ply)} onClick={() => r.w && setIdx(r.w.ply)} />
-                  <MoveCell ply={r.b} active={idx === r.b?.ply} isKey={!!r.b && keypoints.has(r.b.ply)} onClick={() => r.b && setIdx(r.b.ply)} />
-                </tr>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </div>
+
+          {/* TIMELINE COLUMN */}
+          <EvalTimeline plies={g.plies} current={idx} keypoints={keypoints} hasAnalysis={g.hasAnalysis} onSeek={setIdx} />
         </div>
       </main>
     </div>

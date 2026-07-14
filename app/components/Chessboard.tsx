@@ -39,6 +39,8 @@ export function Chessboard({
   size,
   flip = false,
   lastMove,
+  light = "var(--color-board-light)",
+  dark = "var(--color-board-dark)",
 }: {
   fen: string;
   /** Fixed pixel size; omit for fluid (fills container width, square). */
@@ -46,6 +48,8 @@ export function Chessboard({
   flip?: boolean;
   /** [from, to] as 0-63 square indices, to highlight the last move. */
   lastMove?: [number, number];
+  light?: string;
+  dark?: string;
 }) {
   let board = parsePlacement(fen);
   if (flip) board = board.map((r) => [...r].reverse()).reverse();
@@ -76,20 +80,14 @@ export function Chessboard({
     >
       {board.map((row, r) =>
         row.map((piece, c) => {
-          const dark = (r + c) % 2 === 1;
+          const isDark = (r + c) % 2 === 1;
           const x = c * SQ;
           const y = r * SQ;
           const white = piece ? piece === piece.toUpperCase() : false;
           const highlighted = hl.has(r * 8 + c);
           return (
             <g key={`${r}-${c}`}>
-              <rect
-                x={x}
-                y={y}
-                width={SQ}
-                height={SQ}
-                fill={dark ? "var(--color-board-dark)" : "var(--color-board-light)"}
-              />
+              <rect x={x} y={y} width={SQ} height={SQ} fill={isDark ? dark : light} />
               {highlighted && (
                 <rect x={x} y={y} width={SQ} height={SQ} fill="var(--color-accent)" opacity="0.28" />
               )}
