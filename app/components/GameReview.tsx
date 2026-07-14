@@ -102,6 +102,7 @@ function EvalTimeline({
   const fromScroll = useRef(false);
   const programmatic = useRef(false);
   const ticking = useRef(false);
+  const wheelTime = useRef(0);
   const pad = Math.max(0, (height - ROW) / 2);
   const H = plies.length * ROW;
   const py = (i: number) => i * ROW + ROW / 2;
@@ -121,6 +122,22 @@ function EvalTimeline({
       el.scrollTop = target;
     }
   }, [current, pad]);
+
+  // Wheel over the reel steps exactly one ply per notch (then snaps to center).
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const now = performance.now();
+      if (now - wheelTime.current < 55) return;
+      wheelTime.current = now;
+      const next = Math.max(1, Math.min(plies.length, current + (e.deltaY > 0 ? 1 : -1)));
+      if (next !== current) onSeek(next);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [current, plies.length, onSeek]);
 
   const onScroll = () => {
     if (ticking.current) return;
@@ -246,6 +263,7 @@ export function GameReview({ game }: { game: GameData }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [boardH, setBoardH] = useState(520);
   const boardRef = useRef<HTMLDivElement>(null);
+  const lastWheel = useRef(0);
 
   const goto = (i: number) => setIdx(Math.max(1, Math.min(n, i)));
 
@@ -275,6 +293,9 @@ export function GameReview({ game }: { game: GameData }) {
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      const now = performance.now();
+      if (now - lastWheel.current < 55) return; // one notch = one ply
+      lastWheel.current = now;
       goto(idx + (e.deltaY > 0 ? 1 : -1));
     };
     el.addEventListener("wheel", onWheel, { passive: false });
