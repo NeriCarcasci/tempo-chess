@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import type { Summary, GameLite, FormatStat, Result } from "../lib/lichess";
 import { pct, playTime, monthYear, relTime, signed } from "../lib/format";
 import { CountUp, RatingLine, ProportionBar, DivergingOpenings } from "./charts";
@@ -224,7 +225,11 @@ function RecentGames({ games }: { games: GameLite[] }) {
       <h2 className="mb-5 font-serif text-2xl text-ink">Recent games</h2>
       <div className="divide-y divide-line">
         {games.map((g) => (
-          <div key={g.id} className="flex items-center gap-3 py-2.5 text-sm">
+          <Link
+            key={g.id}
+            to={`/game/${g.id}`}
+            className="-mx-2 flex items-center gap-3 rounded-[6px] px-2 py-2.5 text-sm transition-colors hover:bg-surface"
+          >
             <ResultChip result={g.result} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-ink">
@@ -252,7 +257,7 @@ function RecentGames({ games }: { games: GameLite[] }) {
               ) : null}
             </div>
             <div className="cap w-14 text-right normal-case tracking-normal">{relTime(g.createdAt)}</div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>
