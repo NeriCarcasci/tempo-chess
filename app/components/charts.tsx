@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import type { OpeningStat } from "../lib/lichess";
+import { pct } from "../lib/format";
 
 export function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -12,62 +14,7 @@ export function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
-/** Single-value arc gauge (0–100). Draws on mount; static under reduced motion. */
-export function Ring({
-  value,
-  size = 132,
-  stroke = 9,
-  color = "var(--color-accent)",
-  children,
-}: {
-  value: number;
-  size?: number;
-  stroke?: number;
-  color?: string;
-  children?: React.ReactNode;
-}) {
-  const reduced = usePrefersReducedMotion();
-  const [drawn, setDrawn] = useState(false);
-  useEffect(() => {
-    if (reduced) {
-      setDrawn(true);
-      return;
-    }
-    const id = requestAnimationFrame(() => setDrawn(true));
-    return () => cancelAnimationFrame(id);
-  }, [reduced]);
-
-  const r = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * r;
-  const v = Math.max(0, Math.min(100, value));
-  const offset = drawn ? circumference * (1 - v / 100) : circumference;
-  const c = size / 2;
-
-  return (
-    <div className="relative grid place-items-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={c} cy={c} r={r} fill="none" stroke="var(--color-surface-2)" strokeWidth={stroke} />
-        <circle
-          cx={c}
-          cy={c}
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          style={{
-            transition: reduced ? undefined : "stroke-dashoffset 950ms cubic-bezier(0.16,1,0.3,1)",
-          }}
-        />
-      </svg>
-      <div className="absolute inset-0 grid place-items-center text-center">{children}</div>
-    </div>
-  );
-}
-
-/** Eased count-up. Renders final value immediately under reduced motion. */
+/** Eased count-up. Final value immediately under reduced motion. */
 export function CountUp({
   value,
   decimals = 0,
@@ -81,13 +28,11 @@ export function CountUp({
 }) {
   const reduced = usePrefersReducedMotion();
   const [n, setN] = useState(reduced ? value : 0);
-  const started = useRef(false);
   useEffect(() => {
     if (reduced) {
       setN(value);
       return;
     }
-    started.current = true;
     let raf = 0;
     const t0 = performance.now();
     const tick = (t: number) => {
@@ -106,69 +51,185 @@ export function CountUp({
   );
 }
 
-/** Compact rating trend line with a soft area fill. Scales to its container. */
-export function Sparkline({
+/** Rating history: a proper time-series line with a crosshair + tooltip on hover. */
+export function RatingLine({
   data,
-  height = 56,
+  height = 150,
   color = "var(--color-accent)",
 }: {
   data: number[];
   height?: number;
   color?: string;
 }) {
-  const id = useRef(`sk-${Math.random().toString(36).slice(2, 8)}`);
+  const [hover, setHover] = useState<number | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const W = 640;
+  const pad = { t: 16, r: 10, b: 14, l: 10 };
   if (data.length < 2) return null;
-  const W = 240;
+
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
-  const pts = data.map((d, i) => {
-    const x = (i / (data.length - 1)) * W;
-    const y = height - ((d - min) / range) * (height - 8) - 4;
-    return [x, y] as const;
-  });
-  const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  const [lx, ly] = pts[pts.length - 1];
+  const iw = W - pad.l - pad.r;
+  const ih = height - pad.t - pad.b;
+  const X = (i: number) => pad.l + (i / (data.length - 1)) * iw;
+  const Y = (v: number) => pad.t + (1 - (v - min) / range) * ih;
+  const line = data.map((d, i) => `${X(i).toFixed(1)},${Y(d).toFixed(1)}`).join(" ");
+  const area = `${line} ${X(data.length - 1).toFixed(1)},${(pad.t + ih).toFixed(1)} ${X(0).toFixed(1)},${(pad.t + ih).toFixed(1)}`;
+
+  function onMove(e: React.MouseEvent) {
+    const el = wrapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * W;
+    let i = Math.round(((px - pad.l) / iw) * (data.length - 1));
+    i = Math.max(0, Math.min(data.length - 1, i));
+    setHover(i);
+  }
+
+  const hLeft = hover != null ? (X(hover) / W) * 100 : 0;
+  const hTop = hover != null ? Y(data[hover]) : 0;
 
   return (
-    <svg
-      width="100%"
-      height={height}
-      viewBox={`0 0 ${W} ${height}`}
-      preserveAspectRatio="none"
-      className="overflow-visible"
+    <div
+      ref={wrapRef}
+      className="relative"
+      style={{ height }}
+      onMouseMove={onMove}
+      onMouseLeave={() => setHover(null)}
     >
-      <defs>
-        <linearGradient id={id.current} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor={color} stopOpacity="0.22" />
-          <stop offset="1" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polygon points={`${line} ${W},${height} 0,${height}`} fill={`url(#${id.current})`} />
-      <polyline
-        points={line}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
-      <circle cx={lx} cy={ly} r="2.6" fill={color} />
-    </svg>
+      <svg
+        width="100%"
+        height={height}
+        viewBox={`0 0 ${W} ${height}`}
+        preserveAspectRatio="none"
+        className="block"
+      >
+        <defs>
+          <linearGradient id="ratingfill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor={color} stopOpacity="0.15" />
+            <stop offset="1" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polygon points={area} fill="url(#ratingfill)" />
+        <polyline
+          points={line}
+          fill="none"
+          stroke={color}
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      {hover != null && (
+        <>
+          <div
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-line-strong"
+            style={{ left: `${hLeft}%` }}
+          />
+          <div
+            className="pointer-events-none absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2"
+            style={{ left: `${hLeft}%`, top: hTop, background: color, "--tw-ring-color": "var(--color-bg)" } as React.CSSProperties}
+          />
+          <div
+            className="metric pointer-events-none absolute -translate-x-1/2 -translate-y-[140%] rounded-control border border-line bg-surface-2 px-1.5 py-0.5 text-xs text-ink"
+            style={{ left: `${hLeft}%`, top: hTop }}
+          >
+            {data[hover]}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
-/** Win / draw / loss as one proportional bar. */
-export function RecordBar({ win, draw, loss }: { win: number; draw: number; loss: number }) {
+/** Win/draw/loss as one proportional bar with 2px surface gaps between fills. */
+export function ProportionBar({
+  win,
+  draw,
+  loss,
+  height = 8,
+}: {
+  win: number;
+  draw: number;
+  loss: number;
+  height?: number;
+}) {
   const total = win + draw + loss || 1;
   const seg = (n: number, color: string) =>
-    n > 0 ? <div style={{ width: `${(n / total) * 100}%`, background: color }} /> : null;
+    n > 0 ? (
+      <div
+        style={{ flexBasis: `${(n / total) * 100}%`, background: color }}
+        className="rounded-[2px]"
+      />
+    ) : null;
   return (
-    <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-surface-2">
-      {seg(win, "var(--color-accent)")}
-      {seg(draw, "var(--color-info)")}
-      {seg(loss, "var(--color-blunder)")}
+    <div className="flex w-full gap-[2px]" style={{ height }}>
+      {seg(win, "var(--color-win)")}
+      {seg(draw, "var(--color-draw)")}
+      {seg(loss, "var(--color-loss)")}
+    </div>
+  );
+}
+
+/**
+ * Openings as a diverging chart around the 50% break-even line: bars to the
+ * right (win) are strengths, to the left (loss) are weak lines. One view shows
+ * both. Win/loss are the validated diverging poles; the center is neutral.
+ */
+export function DivergingOpenings({ openings }: { openings: OpeningStat[] }) {
+  const rows = [...openings].sort((a, b) => b.winRate - a.winRate);
+  const TRACK = 148; // px; center at TRACK/2
+  const half = TRACK / 2;
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="cap" style={{ color: "var(--color-loss)" }}>
+          weaker
+        </span>
+        <span className="cap">break-even 50%</span>
+        <span className="cap" style={{ color: "var(--color-win)" }}>
+          stronger
+        </span>
+      </div>
+      <div className="divide-y divide-line">
+        {rows.map((o) => {
+          const dev = o.winRate - 0.5; // [-0.5, 0.5]
+          const len = Math.abs(dev) * TRACK; // px, max = half
+          const win = dev >= 0;
+          return (
+            <div key={o.name} className="flex items-center gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm text-ink" title={o.name}>
+                  {o.name}
+                </div>
+                <div className="cap mt-0.5">
+                  {o.eco ? `${o.eco} · ` : ""}
+                  {o.games} games
+                </div>
+              </div>
+              <div className="relative shrink-0" style={{ width: TRACK, height: 18 }}>
+                <div className="absolute top-0 bottom-0 w-px bg-line" style={{ left: half }} />
+                <div
+                  className="absolute top-1/2 h-2.5 -translate-y-1/2 rounded-[2px]"
+                  style={{
+                    left: win ? half : half - len,
+                    width: len,
+                    background: win ? "var(--color-win)" : "var(--color-loss)",
+                  }}
+                />
+              </div>
+              <div
+                className="metric w-9 text-right text-sm"
+                style={{ color: win ? "var(--color-win)" : "var(--color-loss)" }}
+              >
+                {pct(o.winRate)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

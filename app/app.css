@@ -1,32 +1,42 @@
 @import "tailwindcss";
 
 /* ------------------------------------------------------------------ */
-/* Tempo Chess design tokens (see DESIGN.md). Dark theme, locked.      */
+/* Tempo Chess — "The Analysis Desk". Warm ink, ivory type, brass       */
+/* accent, validated diverging data colors. Dark, editorial, chess-native.*/
 /* ------------------------------------------------------------------ */
 @theme {
+  --font-serif: "Newsreader Variable", Georgia, "Times New Roman", serif;
   --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular",
     monospace;
 
-  --color-bg: oklch(0.165 0.006 264);
-  --color-surface: oklch(0.205 0.008 264);
-  --color-surface-2: oklch(0.245 0.009 264);
-  --color-line: oklch(0.3 0.01 264);
-  --color-line-strong: oklch(0.4 0.012 264);
+  /* warm near-black ink ramp (wood-in-shadow, not cool charcoal) */
+  --color-bg: oklch(0.16 0.008 60);
+  --color-surface: oklch(0.202 0.01 60);
+  --color-surface-2: oklch(0.245 0.011 62);
+  --color-line: oklch(0.31 0.01 60);
+  --color-line-strong: oklch(0.42 0.012 60);
 
-  --color-ink: oklch(0.965 0.003 264);
-  --color-ink-muted: oklch(0.74 0.012 264);
-  --color-ink-faint: oklch(0.6 0.012 264);
+  /* bone / ivory type (chess pieces, a scoresheet) */
+  --color-ink: oklch(0.93 0.014 82);
+  --color-ink-muted: oklch(0.73 0.014 74);
+  --color-ink-faint: oklch(0.57 0.012 66);
 
-  --color-accent: oklch(0.82 0.17 152);
-  --color-accent-ink: oklch(0.22 0.04 152);
-  --color-inaccuracy: oklch(0.84 0.14 92);
-  --color-mistake: oklch(0.75 0.16 55);
-  --color-blunder: oklch(0.64 0.2 25);
-  --color-info: oklch(0.72 0.13 236);
+  /* brass — the interactive accent (the chess clock; "tempo") */
+  --color-accent: oklch(0.72 0.11 78);
+  --color-accent-ink: oklch(0.23 0.04 74);
 
-  --radius-panel: 14px;
-  --radius-control: 9px;
+  /* validated diverging data colors (win<->loss, draw = neutral midpoint) */
+  --color-win: oklch(0.6 0.12 162);
+  --color-loss: oklch(0.6 0.15 27);
+  --color-draw: oklch(0.66 0.014 70);
+
+  /* board (warm wood) */
+  --color-board-light: oklch(0.75 0.045 74);
+  --color-board-dark: oklch(0.46 0.045 58);
+
+  --radius-panel: 9px;
+  --radius-control: 6px;
 }
 
 @layer base {
@@ -40,34 +50,41 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
+  /* a single warm lamp over the desk */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: radial-gradient(
+      130% 90% at 50% -20%,
+      color-mix(in oklch, var(--color-accent) 9%, transparent),
+      transparent 55%
+    );
+  }
   ::selection {
-    background: color-mix(in oklch, var(--color-accent) 32%, transparent);
+    background: color-mix(in oklch, var(--color-accent) 30%, transparent);
     color: var(--color-ink);
   }
-  /* tabular figures everywhere numbers matter */
   .font-mono,
   code,
   kbd {
     font-variant-numeric: tabular-nums;
   }
-  /* quiet scrollbar */
   * {
     scrollbar-color: var(--color-line-strong) transparent;
   }
 }
 
 @layer components {
-  .panel {
-    background: var(--color-surface);
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-panel);
-  }
-  .label {
+  /* mono micro-label — reads as a scoresheet caption, used sparingly */
+  .cap {
+    font-family: var(--font-mono);
     font-size: 0.6875rem;
     line-height: 1;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.02em;
     text-transform: uppercase;
-    font-weight: 600;
     color: var(--color-ink-faint);
   }
   .metric {
@@ -75,24 +92,24 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
   }
+  .rule {
+    border-color: var(--color-line);
+  }
 }
 
-/* First-paint reveal — a single quiet entrance, not choreography. */
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
     transform: none;
   }
 }
-/* Content is visible by default; the reveal only *enhances* when motion is
-   allowed. Never gate visibility on the animation firing (headless/hidden-tab
-   renders would ship the section blank otherwise). */
+/* reveal only enhances an already-visible default (never gates visibility) */
 @media (prefers-reduced-motion: no-preference) {
   .rise {
-    animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 }

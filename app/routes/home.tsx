@@ -6,7 +6,7 @@ const DEMO_USER = "ncarcasc";
 
 export function meta() {
   return [
-    { title: "Tempo Chess — ncarcasc" },
+    { title: "Tempo Chess · ncarcasc" },
     {
       name: "description",
       content:

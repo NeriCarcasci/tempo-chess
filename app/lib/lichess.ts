@@ -2,6 +2,8 @@
 // through the Cloud Run API (which persists to Postgres/GCS); Lichess allows
 // CORS, so for a live demo the SPA can read the public endpoints directly.
 
+import { Chess } from "chess.js";
+
 export type Speed = "bullet" | "blitz" | "rapid" | "classical";
 export type Result = "win" | "loss" | "draw";
 
@@ -38,6 +40,7 @@ export interface GameLite {
   eco?: string;
   opening?: string;
   status: string;
+  moves?: string;
   accuracy?: number;
   acpl?: number;
   inaccuracy?: number;
@@ -58,6 +61,7 @@ export async function fetchGames(username: string, max = 100): Promise<GameLite[
     max: String(max),
     opening: "true",
     accuracy: "true",
+    moves: "true",
     sort: "dateDesc",
   });
   const res = await fetch(
@@ -97,6 +101,7 @@ export async function fetchGames(username: string, max = 100): Promise<GameLite[
       eco: g.opening?.eco,
       opening: g.opening?.name,
       status: g.status,
+      moves: g.moves,
       accuracy: an?.accuracy,
       acpl: an?.acpl,
       inaccuracy: an?.inaccuracy,
@@ -163,6 +168,18 @@ export interface Summary {
   toughOpenings: OpeningStat[];
   byColor: { white: ColorStat; black: ColorStat };
   recent: GameLite[];
+  board: RecentPosition | null;
+}
+
+export interface RecentPosition {
+  fen: string;
+  ply: number;
+  moveNumber: number;
+  opponent: string;
+  color: "white" | "black";
+  result: Result;
+  opening?: string;
+  url?: string;
 }
 
 const SPEED_LABELS: Record<Speed, string> = {
@@ -177,6 +194,35 @@ function colorStat(games: GameLite[]): ColorStat {
   for (const g of games) s[g.result]++;
   s.winRate = s.games ? s.win / s.games : 0;
   return s;
+}
+
+// A representative middlegame snapshot from the most recent game with moves —
+// the page's chess-identity anchor (later: the actual position you blundered in).
+function recentPosition(games: GameLite[]): RecentPosition | null {
+  const g = games.find((x) => x.moves && x.moves.trim().length > 0);
+  if (!g || !g.moves) return null;
+  const sans = g.moves.trim().split(/\s+/);
+  const target = Math.min(sans.length, Math.max(16, Math.floor(sans.length * 0.6)));
+  const chess = new Chess();
+  let played = 0;
+  for (let i = 0; i < target; i++) {
+    try {
+      chess.move(sans[i]);
+      played++;
+    } catch {
+      break;
+    }
+  }
+  return {
+    fen: chess.fen(),
+    ply: played,
+    moveNumber: Math.max(1, Math.ceil(played / 2)),
+    opponent: g.opponent,
+    color: g.color,
+    result: g.result,
+    opening: g.opening,
+    url: g.url,
+  };
 }
 
 export function aggregate(profile: Profile, games: GameLite[]): Summary {
@@ -284,5 +330,6 @@ export function aggregate(profile: Profile, games: GameLite[]): Summary {
       black: colorStat(games.filter((g) => g.color === "black")),
     },
     recent: games.slice(0, 12),
+    board: recentPosition(games),
   };
 }

@@ -1,88 +1,47 @@
-import type {
-  Summary,
-  GameLite,
-  FormatStat,
-  OpeningStat,
-  Result,
-} from "../lib/lichess";
+import type { Summary, GameLite, FormatStat, Result } from "../lib/lichess";
 import { pct, playTime, monthYear, relTime, signed } from "../lib/format";
-import { Ring, CountUp, Sparkline, RecordBar } from "./charts";
+import { CountUp, RatingLine, ProportionBar, DivergingOpenings } from "./charts";
+import { Chessboard } from "./Chessboard";
 
-const RESULT_STYLE: Record<Result, { ink: string; label: string }> = {
-  win: { ink: "var(--color-accent)", label: "W" },
-  loss: { ink: "var(--color-blunder)", label: "L" },
-  draw: { ink: "var(--color-info)", label: "D" },
+const RESULT: Record<Result, { color: string; label: string }> = {
+  win: { color: "var(--color-win)", label: "W" },
+  loss: { color: "var(--color-loss)", label: "L" },
+  draw: { color: "var(--color-draw)", label: "D" },
 };
 
+const family = (name: string) => name.split(":")[0].trim();
+
 function ResultChip({ result }: { result: Result }) {
-  const r = RESULT_STYLE[result];
+  const r = RESULT[result];
   return (
     <span
-      className="metric grid h-6 w-6 place-items-center rounded-control text-xs font-semibold"
-      style={{ color: r.ink, background: `color-mix(in oklch, ${r.ink} 16%, transparent)` }}
+      className="metric grid h-6 w-6 place-items-center rounded-[5px] text-xs font-semibold"
+      style={{ color: r.color, background: `color-mix(in oklch, ${r.color} 15%, transparent)` }}
     >
       {r.label}
     </span>
   );
 }
 
-function Delta({ value }: { value: number }) {
-  if (!value) return <span className="text-ink-faint">–</span>;
-  const up = value > 0;
-  return (
-    <span className="metric text-xs" style={{ color: up ? "var(--color-accent)" : "var(--color-blunder)" }}>
-      {up ? "▲" : "▼"} {signed(value)}
-    </span>
-  );
-}
-
-function Panel({
-  title,
-  note,
-  children,
-  className = "",
-}: {
-  title?: string;
-  note?: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={`panel p-5 ${className}`}>
-      {title && (
-        <header className="mb-4 flex items-baseline justify-between gap-3">
-          <h2 className="text-sm font-semibold text-ink">{title}</h2>
-          {note && <span className="label">{note}</span>}
-        </header>
-      )}
-      {children}
-    </section>
-  );
-}
-
-function shortOpening(name: string): string {
-  return name.split(":")[0].trim();
-}
-
-// ---------------------------------------------------------------------------
-
 function TopBar({ username }: { username: string }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-5 sm:px-8">
+    <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
+      <div className="mx-auto flex h-14 max-w-[1160px] items-center justify-between px-6 sm:px-10">
         <div className="flex items-center gap-2.5">
-          <span className="grid h-6 w-6 place-items-center rounded-[7px] bg-accent">
-            <span className="h-2.5 w-2.5 rounded-[2px] bg-accent-ink" />
-          </span>
-          <span className="text-[15px] font-semibold tracking-tight text-ink">
-            Tempo<span className="text-ink-faint">Chess</span>
+          <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="10" cy="10" r="8.5" fill="none" stroke="var(--color-accent)" strokeWidth="1.5" />
+            <line x1="10" y1="10" x2="10" y2="4.5" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" />
+            <line x1="10" y1="10" x2="13.5" y2="11.5" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <span className="font-serif text-lg tracking-tight text-ink">
+            Tempo <span className="italic text-ink-faint">Chess</span>
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 rounded-control border border-line px-2.5 py-1.5">
+          <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            <span className="text-xs text-ink-muted">
-              Lichess <span className="text-ink">{username}</span>
+            <span className="cap">
+              Lichess · <span className="text-ink-muted">{username}</span>
             </span>
           </div>
           <button
@@ -97,186 +56,164 @@ function TopBar({ username }: { username: string }) {
   );
 }
 
-function ProfileHeader({ s }: { s: Summary }) {
+function Masthead({ s }: { s: Summary }) {
+  const best = s.bestFormat;
+  const worst = s.toughOpenings[0];
+  const weaker = s.byColor.black.winRate <= s.byColor.white.winRate ? "Black" : "White";
+  const verdict =
+    `${Math.round(s.winRate * 100)}% across ${s.record.all} games.` +
+    (best ? ` Strongest at ${best.label} ${best.rating};` : "") +
+    (worst ? ` the ${family(worst.name)} and playing ${weaker} are where it slips.` : "");
+
   return (
-    <div className="rise flex flex-wrap items-end justify-between gap-4 pt-8 pb-6">
-      <div className="flex items-center gap-4">
-        <div className="grid h-14 w-14 place-items-center rounded-full bg-surface-2 text-lg font-semibold text-ink-muted ring-1 ring-line">
-          {s.username.slice(0, 2)}
+    <header className="rise grid gap-10 border-b border-line py-12 lg:grid-cols-[1fr_16rem]">
+      <div className="max-w-2xl">
+        <div className="cap mb-4">Player report</div>
+        <h1 className="font-serif text-5xl leading-[0.95] tracking-tight text-ink sm:text-6xl">
+          {s.username}
+        </h1>
+        <p className="mt-5 font-serif text-xl italic leading-snug text-ink-muted">
+          {verdict}
+        </p>
+        <div className="cap mt-5">
+          {s.location ? `${s.location} · ` : ""}member since {monthYear(s.memberSince)} ·{" "}
+          {playTime(s.playTimeSec)} at the board
+        </div>
+      </div>
+
+      <aside className="flex flex-col justify-end gap-5 lg:border-l lg:border-line lg:pl-8">
+        <div>
+          <div className="cap mb-1">Win rate</div>
+          <div className="metric text-4xl text-ink">
+            <CountUp value={Math.round(s.winRate * 100)} suffix="%" />
+          </div>
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">{s.username}</h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            {s.location ? `${s.location} · ` : ""}Member since {monthYear(s.memberSince)} ·{" "}
-            {playTime(s.playTimeSec)} played
-          </p>
+          <div className="cap mb-2">Record · {s.record.all} games</div>
+          <ProportionBar win={s.record.win} draw={s.record.draw} loss={s.record.loss} height={10} />
+          <div className="metric mt-2 flex justify-between text-xs">
+            <span style={{ color: "var(--color-win)" }}>{s.record.win} W</span>
+            <span style={{ color: "var(--color-draw)" }}>{s.record.draw} D</span>
+            <span style={{ color: "var(--color-loss)" }}>{s.record.loss} L</span>
+          </div>
         </div>
-      </div>
-      <div className="text-right">
-        <div className="label mb-1">Lifetime record</div>
-        <div className="metric text-lg text-ink">
-          <span className="text-accent">{s.record.win}</span>
-          <span className="text-ink-faint"> · </span>
-          <span className="text-blunder">{s.record.loss}</span>
-          <span className="text-ink-faint"> · </span>
-          <span className="text-info">{s.record.draw}</span>
-        </div>
-      </div>
-    </div>
+      </aside>
+    </header>
   );
 }
 
-function StatTile({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: React.ReactNode;
-  sub?: React.ReactNode;
-}) {
+function FormatInline({ f }: { f: FormatStat }) {
   return (
-    <div>
-      <div className="label mb-2">{label}</div>
-      <div className="metric text-2xl leading-none text-ink">{value}</div>
-      {sub && <div className="mt-1.5 text-xs text-ink-muted">{sub}</div>}
-    </div>
-  );
-}
-
-function Vitals({ s }: { s: Summary }) {
-  const winPctText = Math.round(s.winRate * 100);
-  const best = s.bestFormat;
-  const a = s.analyzed;
-  return (
-    <div className="rise panel grid gap-6 p-6 sm:grid-cols-[auto_1fr] sm:items-center" style={{ animationDelay: "60ms" }}>
-      <div className="flex items-center gap-5 sm:pr-6">
-        <Ring value={s.winRate * 100}>
-          <div className="metric text-3xl font-semibold text-ink">
-            <CountUp value={winPctText} suffix="%" />
-          </div>
-          <div className="label mt-1">Win rate</div>
-        </Ring>
-        <div className="min-w-[8rem]">
-          <div className="mb-2 text-xs text-ink-muted">Across {s.record.all} games</div>
-          <RecordBar win={s.record.win} draw={s.record.draw} loss={s.record.loss} />
-          <div className="mt-2 flex justify-between text-xs text-ink-faint">
-            <span className="text-accent">{s.record.win}W</span>
-            <span className="text-info">{s.record.draw}D</span>
-            <span className="text-blunder">{s.record.loss}L</span>
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-6 border-line sm:grid-cols-3 sm:border-l sm:pl-6">
-        {best && (
-          <StatTile
-            label={`Strongest · ${best.label}`}
-            value={<CountUp value={best.rating} />}
-            sub={`${best.games} games`}
-          />
-        )}
-        <StatTile label="Games played" value={<CountUp value={s.record.all} />} sub={`${s.record.rated} rated`} />
-        <StatTile label="Time played" value={playTime(s.playTimeSec)} sub="on the clock" />
-        {a.count > 0 ? (
-          <>
-            {a.avgAccuracy !== undefined && (
-              <StatTile
-                label="Accuracy"
-                value={<CountUp value={a.avgAccuracy} decimals={1} suffix="%" />}
-                sub={`${a.count} analyzed games`}
-              />
-            )}
-            <StatTile
-              label="Blunders / game"
-              value={<CountUp value={a.blundersPerGame} decimals={1} />}
-              sub={`${a.blunders} in ${a.count} games`}
-            />
-          </>
-        ) : (
-          <div className="col-span-2 sm:col-span-1">
-            <div className="label mb-2">Blunders</div>
-            <div className="text-sm text-ink-muted">
-              No engine-analyzed games in this window.
-            </div>
-            <div className="mt-1 text-xs text-accent">Run analysis to unlock →</div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function FormatCard({ f }: { f: FormatStat }) {
-  return (
-    <div>
-      <div className="label mb-2">{f.label}</div>
-      <div className="metric text-xl text-ink">
+    <div className="flex items-baseline gap-2">
+      <span className="cap">{f.label}</span>
+      <span className="metric text-sm text-ink">
         {f.rating}
-        {f.prov && <span className="text-ink-faint">?</span>}
-      </div>
-      <div className="mt-1 flex items-center gap-2 text-xs text-ink-muted">
-        <span>{f.games} games</span>
-        <Delta value={f.prog} />
-      </div>
+        {f.prov ? <span className="text-ink-faint">?</span> : null}
+      </span>
+      {f.prog !== 0 && (
+        <span
+          className="metric text-xs"
+          style={{ color: f.prog > 0 ? "var(--color-win)" : "var(--color-loss)" }}
+        >
+          {f.prog > 0 ? "▲" : "▼"}
+          {Math.abs(f.prog)}
+        </span>
+      )}
     </div>
   );
 }
 
-function Ratings({ s }: { s: Summary }) {
+function BoardAndTrend({ s }: { s: Summary }) {
+  const b = s.board;
   const trend = s.trend.ratings;
   const change = trend.length >= 2 ? trend[trend.length - 1] - trend[0] : 0;
+
   return (
-    <Panel title="Ratings" note={`trend · ${s.trend.label}`} className="rise mt-6" >
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
-        {s.formats.map((f) => (
-          <FormatCard key={f.key} f={f} />
-        ))}
-      </div>
-      {trend.length >= 2 && (
-        <div className="mt-5 flex items-end gap-4 border-t border-line pt-4">
-          <div className="flex-1">
-            <Sparkline data={trend} />
+    <section className="rise grid gap-10 border-b border-line py-12 lg:grid-cols-[18rem_1fr]">
+      <div>
+        <div className="cap mb-3">From your last game</div>
+        {b ? (
+          <>
+            <Chessboard fen={b.fen} flip={b.color === "black"} size={288} />
+            <p className="mt-3 max-w-[288px] text-sm leading-relaxed text-ink-muted">
+              vs {b.opponent} · move {b.moveNumber} · a {b.result}.{" "}
+              <span className="text-ink-faint">
+                Analysis will pin the move your plan broke down.
+              </span>
+            </p>
+          </>
+        ) : (
+          <div className="grid h-72 w-72 place-items-center rounded-panel border border-line text-sm text-ink-faint">
+            No recent game to show
           </div>
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-col">
+        <div className="mb-4 flex items-baseline justify-between gap-4">
+          <h2 className="font-serif text-2xl text-ink">Rating</h2>
           <div className="text-right">
-            <div className="metric text-lg text-ink">{trend[trend.length - 1]}</div>
-            <div className="text-xs" style={{ color: change >= 0 ? "var(--color-accent)" : "var(--color-blunder)" }}>
-              {signed(change)} over {trend.length}
-            </div>
+            <span className="metric text-2xl text-ink">{trend[trend.length - 1]}</span>{" "}
+            <span
+              className="metric text-xs"
+              style={{ color: change >= 0 ? "var(--color-win)" : "var(--color-loss)" }}
+            >
+              {signed(change)} · {s.trend.label}
+            </span>
           </div>
         </div>
-      )}
-    </Panel>
+        <RatingLine data={trend} height={168} />
+        <div className="mt-5 flex flex-wrap gap-x-8 gap-y-3 border-t border-line pt-4">
+          {s.formats.map((f) => (
+            <FormatInline key={f.key} f={f} />
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
-function OpeningRow({ o, tough }: { o: OpeningStat; tough?: boolean }) {
+function Openings({ s }: { s: Summary }) {
   return (
-    <div className="flex items-center gap-3 py-2.5">
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm text-ink" title={o.name}>
-          {o.name}
+    <section className="rise border-b border-line py-12">
+      <div className="mb-8 flex items-baseline justify-between">
+        <h2 className="font-serif text-2xl text-ink">Openings</h2>
+        <span className="cap">last 100 games</span>
+      </div>
+      <div className="grid gap-12 lg:grid-cols-[1fr_18rem]">
+        <DivergingOpenings openings={s.openings} />
+        <div className="lg:border-l lg:border-line lg:pl-10">
+          <div className="cap mb-3">Drill these first</div>
+          <p className="mb-5 text-sm leading-relaxed text-ink-muted">
+            Your worst-scoring lines this window. These are the repertoire holes to
+            patch, in order.
+          </p>
+          <ol className="space-y-4">
+            {s.toughOpenings.slice(0, 3).map((o, i) => (
+              <li key={o.name} className="flex gap-3">
+                <span className="font-serif text-lg italic text-ink-faint">{i + 1}</span>
+                <div className="min-w-0">
+                  <div className="truncate text-sm text-ink" title={o.name}>
+                    {o.name}
+                  </div>
+                  <div className="cap mt-1">
+                    <span style={{ color: "var(--color-loss)" }}>{pct(o.winRate)}</span> ·{" "}
+                    {o.games} games
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
-        <div className="text-xs text-ink-faint">
-          {o.eco ? `${o.eco} · ` : ""}
-          {o.games} games
-        </div>
       </div>
-      <div className="hidden w-24 sm:block">
-        <RecordBar win={o.win} draw={o.draw} loss={o.loss} />
-      </div>
-      <div
-        className="metric w-11 text-right text-sm"
-        style={{ color: tough ? "var(--color-blunder)" : "var(--color-ink)" }}
-      >
-        {pct(o.winRate)}
-      </div>
-    </div>
+    </section>
   );
 }
 
 function RecentGames({ games }: { games: GameLite[] }) {
   return (
-    <Panel title="Recent games" note="last 12">
+    <div>
+      <h2 className="mb-5 font-serif text-2xl text-ink">Recent games</h2>
       <div className="divide-y divide-line">
         {games.map((g) => (
           <div key={g.id} className="flex items-center gap-3 py-2.5 text-sm">
@@ -288,131 +225,105 @@ function RecentGames({ games }: { games: GameLite[] }) {
                   <span className="text-ink-faint"> ({g.opponentRating})</span>
                 ) : null}
               </div>
-              <div className="truncate text-xs text-ink-faint">
-                {g.color === "white" ? "White" : "Black"}
-                {g.opening ? ` · ${shortOpening(g.opening)}` : ""}
+              <div className="cap mt-0.5 truncate">
+                {g.color} {g.opening ? `· ${family(g.opening)}` : ""}
               </div>
             </div>
             {g.accuracy !== undefined ? (
-              <div className="metric hidden w-14 text-right text-xs text-ink-muted sm:block">
+              <div className="metric hidden w-12 text-right text-xs text-ink-muted sm:block">
                 {g.accuracy.toFixed(0)}%
               </div>
             ) : (
-              <div className="hidden w-14 sm:block" />
+              <div className="hidden w-12 sm:block" />
             )}
-            <div className="metric w-16 text-right text-xs text-ink-muted">
+            <div className="metric w-14 text-right text-xs">
               {g.ratingDiff !== undefined ? (
-                <span style={{ color: g.ratingDiff >= 0 ? "var(--color-accent)" : "var(--color-blunder)" }}>
+                <span style={{ color: g.ratingDiff >= 0 ? "var(--color-win)" : "var(--color-loss)" }}>
                   {signed(g.ratingDiff)}
                 </span>
               ) : null}
             </div>
-            <div className="w-14 text-right text-xs text-ink-faint">{relTime(g.createdAt)}</div>
+            <div className="cap w-14 text-right normal-case tracking-normal">{relTime(g.createdAt)}</div>
           </div>
         ))}
       </div>
-    </Panel>
+    </div>
   );
 }
 
-function ColorSplit({ s }: { s: Summary }) {
-  const rows: [string, typeof s.byColor.white][] = [
-    ["As White", s.byColor.white],
-    ["As Black", s.byColor.black],
-  ];
+function EngineRead({ s }: { s: Summary }) {
+  const a = s.analyzed;
   return (
-    <Panel title="By color">
-      <div className="space-y-4">
-        {rows.map(([label, c]) => (
-          <div key={label}>
-            <div className="mb-1.5 flex items-baseline justify-between">
-              <span className="text-sm text-ink">{label}</span>
-              <span className="metric text-sm text-ink-muted">{pct(c.winRate)}</span>
+    <div>
+      <div className="cap mb-4">Engine read · {a.count} analyzed games</div>
+      {a.count > 0 ? (
+        <div className="flex gap-8">
+          {a.avgAccuracy !== undefined && (
+            <div>
+              <div className="metric text-3xl text-ink">
+                <CountUp value={a.avgAccuracy} decimals={1} suffix="%" />
+              </div>
+              <div className="cap mt-1">Accuracy</div>
             </div>
-            <RecordBar win={c.win} draw={c.draw} loss={c.loss} />
-            <div className="mt-1 text-xs text-ink-faint">
-              {c.win}W · {c.draw}D · {c.loss}L over {c.games}
+          )}
+          <div>
+            <div className="metric text-3xl" style={{ color: "var(--color-loss)" }}>
+              <CountUp value={a.blundersPerGame} decimals={1} />
             </div>
+            <div className="cap mt-1">Blunders / game</div>
           </div>
-        ))}
-      </div>
-    </Panel>
+        </div>
+      ) : (
+        <p className="text-sm text-ink-muted">
+          No engine-analyzed games yet. Run analysis to see accuracy and blunder rate.
+        </p>
+      )}
+    </div>
   );
 }
 
-function ToughLines({ openings }: { openings: OpeningStat[] }) {
-  if (openings.length === 0) return null;
-  return (
-    <Panel title="Where you struggle" note="weak lines">
-      <p className="mb-3 text-xs text-ink-muted">
-        Openings with your worst results this window. Prime candidates to drill.
-      </p>
-      <div className="divide-y divide-line">
-        {openings.map((o) => (
-          <OpeningRow key={o.name} o={o} tough />
-        ))}
-      </div>
-    </Panel>
-  );
-}
-
-function NextUp({ s }: { s: Summary }) {
+function Focus({ s }: { s: Summary }) {
   const worst = s.toughOpenings[0];
-  const weakerColor =
-    s.byColor.black.winRate <= s.byColor.white.winRate ? s.byColor.black : s.byColor.white;
-  const weakerLabel = weakerColor === s.byColor.black ? "Black" : "White";
+  const weaker = s.byColor.black.winRate <= s.byColor.white.winRate ? s.byColor.black : s.byColor.white;
+  const weakerLabel = weaker === s.byColor.black ? "Black" : "White";
   return (
-    <section className="panel p-5" style={{ background: "color-mix(in oklch, var(--color-accent) 8%, var(--color-surface))" }}>
-      <div className="label mb-2" style={{ color: "var(--color-accent)" }}>
-        Focus
+    <div
+      className="rounded-panel p-6"
+      style={{ background: "color-mix(in oklch, var(--color-accent) 9%, var(--color-surface))" }}
+    >
+      <div className="cap mb-3" style={{ color: "var(--color-accent)" }}>
+        Start here
       </div>
-      <p className="text-sm leading-relaxed text-ink">
-        You score {pct(weakerColor.winRate)} as {weakerLabel}
-        {worst ? (
-          <>
-            , and just {pct(worst.winRate)} in the{" "}
-            <span className="text-ink">{shortOpening(worst.name)}</span>.
-          </>
-        ) : (
-          "."
-        )}{" "}
-        Turn those positions into puzzles and drill the line.
+      <p className="font-serif text-lg leading-snug text-ink">
+        You score {pct(weaker.winRate)} as {weakerLabel}
+        {worst ? `, and ${pct(worst.winRate)} in the ${family(worst.name)}` : ""}. Turn those
+        positions into puzzles and drill the line.
       </p>
       <button
         type="button"
-        className="mt-4 w-full rounded-control bg-accent px-3 py-2 text-sm font-semibold text-accent-ink transition-transform active:translate-y-px"
+        className="mt-5 w-full rounded-control bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink transition-transform active:translate-y-px"
       >
         Build puzzles from my mistakes
       </button>
-    </section>
+    </div>
   );
 }
 
 export function Dashboard({ summary }: { summary: Summary }) {
   return (
-    <div className="min-h-dvh">
+    <div className="relative z-10 min-h-dvh">
       <TopBar username={summary.username} />
-      <main className="mx-auto max-w-[1200px] px-5 pb-24 sm:px-8">
-        <ProfileHeader s={summary} />
-        <Vitals s={summary} />
-        <Ratings s={summary} />
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <Panel title="Most played openings" note="last 100">
-            <div className="divide-y divide-line">
-              {summary.openings.map((o) => (
-                <OpeningRow key={o.name} o={o} />
-              ))}
-            </div>
-          </Panel>
-          <ToughLines openings={summary.toughOpenings} />
-        </div>
-        <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
+      <main className="mx-auto max-w-[1160px] px-6 pb-28 sm:px-10">
+        <Masthead s={summary} />
+        <BoardAndTrend s={summary} />
+        <Openings s={summary} />
+        <section className="rise grid gap-12 py-12 lg:grid-cols-[1fr_18rem]">
           <RecentGames games={summary.recent} />
-          <div className="space-y-6">
-            <NextUp s={summary} />
-            <ColorSplit s={summary} />
+          <div className="flex flex-col gap-8 lg:border-l lg:border-line lg:pl-10">
+            <EngineRead s={summary} />
+            <Focus s={summary} />
           </div>
-        </div>
+        </section>
       </main>
     </div>
   );

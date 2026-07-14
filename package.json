@@ -11,6 +11,7 @@
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/manrope": "^5.2.8",
+    "@fontsource-variable/newsreader": "^5.2.10",
     "@react-router/node": "8.0.0",
     "@react-router/serve": "8.0.0",
     "@supabase/supabase-js": "^2.110.5",
