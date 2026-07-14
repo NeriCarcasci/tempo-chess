@@ -1,18 +1,4 @@
-const GLYPH: Record<string, string> = {
-  k: "♚",
-  q: "♛",
-  r: "♜",
-  b: "♝",
-  n: "♞",
-  p: "♟",
-};
-
-// Piece colors are board-intrinsic (not theme tokens). A contrasting outline
-// (paint-order stroke) keeps both colors legible on either square.
-const WHITE_FILL = "#efe7d2";
-const WHITE_STROKE = "#26201a";
-const BLACK_FILL = "#1b1813";
-const BLACK_STROKE = "#d8cdb4";
+import { PIECE_SETS, type PieceSet } from "../lib/pieceSets";
 
 const S = 512; // internal viewBox units
 const SQ = S / 8;
@@ -41,6 +27,7 @@ export function Chessboard({
   lastMove,
   light = "var(--color-board-light)",
   dark = "var(--color-board-dark)",
+  pieceSet,
 }: {
   fen: string;
   /** Fixed pixel size; omit for fluid (fills container width, square). */
@@ -50,7 +37,9 @@ export function Chessboard({
   lastMove?: [number, number];
   light?: string;
   dark?: string;
+  pieceSet?: PieceSet;
 }) {
+  const set = pieceSet ?? PIECE_SETS[0];
   let board = parsePlacement(fen);
   if (flip) board = board.map((r) => [...r].reverse()).reverse();
 
@@ -101,12 +90,12 @@ export function Chessboard({
                   style={{
                     fontFamily: 'Georgia, "Times New Roman", serif',
                     paintOrder: "stroke",
-                    stroke: white ? WHITE_STROKE : BLACK_STROKE,
-                    strokeWidth: SQ * 0.022,
-                    fill: white ? WHITE_FILL : BLACK_FILL,
+                    stroke: white ? set.whiteStroke : set.blackStroke,
+                    strokeWidth: SQ * (white ? set.whiteStrokeW : set.blackStrokeW),
+                    fill: white ? set.whiteFill : set.blackFill,
                   }}
                 >
-                  {GLYPH[piece.toLowerCase()]}
+                  {(white ? set.whiteGlyphs : set.blackGlyphs)[piece.toLowerCase()]}
                 </text>
               )}
             </g>

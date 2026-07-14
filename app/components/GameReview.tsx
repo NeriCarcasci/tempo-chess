@@ -6,6 +6,7 @@ import { fenAt } from "../lib/game";
 import { analyzeGameLocally } from "../lib/analyze";
 import { explainMove } from "../lib/motifs";
 import { BOARD_THEMES, loadBoardTheme, saveBoardTheme, type BoardTheme } from "../lib/boardThemes";
+import { PIECE_SETS, loadPieceSet, savePieceSet, type PieceSet } from "../lib/pieceSets";
 import { Chessboard } from "./Chessboard";
 
 const JUDGMENT: Record<Judgment, { glyph: string; color: string }> = {
@@ -241,6 +242,7 @@ export function GameReview({ game }: { game: GameData }) {
   const [idx, setIdx] = useState(n);
   const [flip, setFlip] = useState(false);
   const [theme, setTheme] = useState<BoardTheme>(() => loadBoardTheme());
+  const [pieceSet, setPieceSet] = useState<PieceSet>(() => loadPieceSet());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [boardH, setBoardH] = useState(520);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -342,6 +344,27 @@ export function GameReview({ game }: { game: GameData }) {
                         </button>
                       ))}
                     </div>
+                    <div className="cap mb-3 mt-4">Pieces</div>
+                    <div className="space-y-1">
+                      {PIECE_SETS.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setPieceSet(s);
+                            savePieceSet(s.id);
+                          }}
+                          className={`flex w-full items-center gap-3 rounded-control px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface-2 ${pieceSet.id === s.id ? "text-ink" : "text-ink-muted"}`}
+                        >
+                          <span className="w-8 text-center text-base leading-none" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+                            <span style={{ color: s.whiteFill }}>{s.whiteGlyphs.n}</span>
+                            <span style={{ color: s.blackFill }}>{s.blackGlyphs.n}</span>
+                          </span>
+                          {s.name}
+                          {pieceSet.id === s.id && <span className="ml-auto text-accent">✓</span>}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </>
               )}
@@ -417,6 +440,7 @@ export function GameReview({ game }: { game: GameData }) {
                   flip={flip}
                   light={theme.light}
                   dark={theme.dark}
+                  pieceSet={pieceSet}
                   lastMove={current ? moveSquares(current.uci) : undefined}
                 />
               </div>
