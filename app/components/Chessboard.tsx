@@ -14,6 +14,9 @@ const WHITE_STROKE = "#26201a";
 const BLACK_FILL = "#1b1813";
 const BLACK_STROKE = "#d8cdb4";
 
+const S = 512; // internal viewBox units
+const SQ = S / 8;
+
 function parsePlacement(fen: string): (string | null)[][] {
   return fen
     .split(" ")[0]
@@ -33,54 +36,75 @@ function parsePlacement(fen: string): (string | null)[][] {
 
 export function Chessboard({
   fen,
-  size = 288,
+  size,
   flip = false,
+  lastMove,
 }: {
   fen: string;
+  /** Fixed pixel size; omit for fluid (fills container width, square). */
   size?: number;
   flip?: boolean;
+  /** [from, to] as 0-63 square indices, to highlight the last move. */
+  lastMove?: [number, number];
 }) {
   let board = parsePlacement(fen);
   if (flip) board = board.map((r) => [...r].reverse()).reverse();
-  const sq = size / 8;
+
+  const style: React.CSSProperties = size
+    ? { width: size, height: size }
+    : { width: "100%", height: "auto", aspectRatio: "1 / 1" };
+
+  // last-move squares, adjusted for flip
+  const hl = new Set<number>();
+  if (lastMove) {
+    for (const sq of lastMove) {
+      const r = 7 - Math.floor(sq / 8);
+      const c = sq % 8;
+      const rr = flip ? 7 - r : r;
+      const cc = flip ? 7 - c : c;
+      hl.add(rr * 8 + cc);
+    }
+  }
 
   return (
     <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
+      viewBox={`0 0 ${S} ${S}`}
+      style={style}
       className="block rounded-[6px]"
       role="img"
-      aria-label="Chess position from a recent game"
-      style={{ boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.35)" }}
+      aria-label="Chess position"
     >
       {board.map((row, r) =>
         row.map((piece, c) => {
           const dark = (r + c) % 2 === 1;
-          const x = c * sq;
-          const y = r * sq;
+          const x = c * SQ;
+          const y = r * SQ;
           const white = piece ? piece === piece.toUpperCase() : false;
+          const highlighted = hl.has(r * 8 + c);
           return (
             <g key={`${r}-${c}`}>
               <rect
                 x={x}
                 y={y}
-                width={sq}
-                height={sq}
+                width={SQ}
+                height={SQ}
                 fill={dark ? "var(--color-board-dark)" : "var(--color-board-light)"}
               />
+              {highlighted && (
+                <rect x={x} y={y} width={SQ} height={SQ} fill="var(--color-accent)" opacity="0.28" />
+              )}
               {piece && (
                 <text
-                  x={x + sq / 2}
-                  y={y + sq / 2 + sq * 0.02}
+                  x={x + SQ / 2}
+                  y={y + SQ / 2 + SQ * 0.02}
                   textAnchor="middle"
                   dominantBaseline="central"
-                  fontSize={sq * 0.76}
+                  fontSize={SQ * 0.76}
                   style={{
                     fontFamily: 'Georgia, "Times New Roman", serif',
                     paintOrder: "stroke",
                     stroke: white ? WHITE_STROKE : BLACK_STROKE,
-                    strokeWidth: sq * 0.022,
+                    strokeWidth: SQ * 0.022,
                     fill: white ? WHITE_FILL : BLACK_FILL,
                   }}
                 >
