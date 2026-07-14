@@ -62,14 +62,14 @@ function keypointPlies(plies: Ply[]): Set<number> {
 }
 
 // ---------------------------------------------------------------------------
-// The vertical eval spine. One row per ply, scroll-to-select (the centered ply
-// is the active one). Containment gridlines show the size of the advantage.
+// Vertical eval spine. One row per ply, scroll-to-select. Sized to the board.
 // ---------------------------------------------------------------------------
-const ROW = 34;
-const SPINE = 120;
+const ROW = 48; // taller = slower, more precise scrolling
+const SPINE = 140;
 const MAXCP = 800;
 const CX = SPINE / 2;
-const px = (cp: number) => CX + (Math.max(-MAXCP, Math.min(MAXCP, cp)) / MAXCP) * (CX - 7);
+const px = (cp: number) => CX + (Math.max(-MAXCP, Math.min(MAXCP, cp)) / MAXCP) * (CX - 30);
+const FADE = "linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%)";
 
 function MoveText({ p, active }: { p: Ply; active: boolean }) {
   const j = p.judgment ? JUDGMENT[p.judgment.name] : null;
@@ -87,19 +87,21 @@ function EvalTimeline({
   current,
   keypoints,
   hasAnalysis,
+  height,
   onSeek,
 }: {
   plies: Ply[];
   current: number;
   keypoints: Set<number>;
   hasAnalysis: boolean;
+  height: number;
   onSeek: (i: number) => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const fromScroll = useRef(false);
   const programmatic = useRef(false);
   const ticking = useRef(false);
-  const [pad, setPad] = useState(300);
+  const pad = Math.max(0, (height - ROW) / 2);
   const H = plies.length * ROW;
   const py = (i: number) => i * ROW + ROW / 2;
   const clampCp = (p: Ply) => (p.mate !== undefined ? (p.mate > 0 ? MAXCP : -MAXCP) : (p.evalCp ?? 0));
@@ -107,18 +109,7 @@ function EvalTimeline({
 
   useEffect(() => {
     const el = scroller.current;
-    if (!el) return;
-    const measure = () => setPad(Math.max(0, (el.clientHeight - ROW) / 2));
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, []);
-
-  useEffect(() => {
-    const el = scroller.current;
     if (!el || current < 1) return;
-    // Only snap-to-center when the change came from outside (nav/click/keys),
-    // not when the user is scrolling the reel themselves.
     if (fromScroll.current) {
       fromScroll.current = false;
       return;
@@ -149,22 +140,23 @@ function EvalTimeline({
     });
   };
 
-  const cols = `2rem 1fr ${SPINE}px 1fr`;
+  const cols = `1.75rem 1fr ${SPINE}px 1fr`;
 
   return (
-    <div>
-      <div className="mb-2 grid items-center" style={{ gridTemplateColumns: cols }}>
+    <div style={{ height }} className="flex flex-col">
+      <div className="mb-1 grid shrink-0 items-center" style={{ gridTemplateColumns: cols }}>
         <span />
-        <span className="pr-2 text-right text-lg leading-none" style={{ color: "var(--color-ink)" }} title="White">
-          ♟
-        </span>
+        <span className="text-center text-lg leading-none" style={{ color: "var(--color-ink)" }} title="White">♟</span>
         <span className="cap text-center">eval</span>
-        <span className="pl-2 text-lg leading-none" style={{ color: "var(--color-ink-faint)" }} title="Black">
-          ♟
-        </span>
+        <span className="text-center text-lg leading-none" style={{ color: "var(--color-ink-faint)" }} title="Black">♟</span>
       </div>
 
-      <div ref={scroller} onScroll={onScroll} className="relative h-[76vh] overflow-y-auto">
+      <div
+        ref={scroller}
+        onScroll={onScroll}
+        className="relative min-h-0 flex-1 overflow-y-auto"
+        style={{ maskImage: FADE, WebkitMaskImage: FADE }}
+      >
         <div className="relative" style={{ height: pad * 2 + H }}>
           <svg
             className="pointer-events-none absolute left-1/2 -translate-x-1/2"
@@ -173,11 +165,10 @@ function EvalTimeline({
             height={H}
             viewBox={`0 0 ${SPINE} ${H}`}
           >
-            {[100, 300, 500].map((cp) =>
-              [px(cp), px(-cp)].map((x, k) => (
-                <line key={`${cp}-${k}`} x1={x} y1={0} x2={x} y2={H} stroke="var(--color-line)" strokeWidth="1" opacity={cp >= 500 ? 0.55 : 0.28} />
-              )),
-            )}
+            {/* one subtle "up a piece" reference on each side, plus the center */}
+            {[px(300), px(-300)].map((x, k) => (
+              <line key={k} x1={x} y1={0} x2={x} y2={H} stroke="var(--color-line)" strokeWidth="1" opacity="0.4" />
+            ))}
             <line x1={CX} y1={0} x2={CX} y2={H} stroke="var(--color-line-strong)" strokeWidth="1" />
             {hasAnalysis && plies.length > 1 && (
               <>
@@ -202,7 +193,7 @@ function EvalTimeline({
                 style={{ top: pad + i * ROW, height: ROW, gridTemplateColumns: cols }}
               >
                 <span className="metric pr-1 text-right text-xs text-ink-faint">{white ? `${p.moveNumber}.` : ""}</span>
-                <span className={`flex items-baseline justify-end gap-1.5 rounded-l-[5px] px-2 ${active && white ? "bg-surface-2" : ""}`}>
+                <span className="flex items-baseline justify-center gap-1.5">
                   {white && (
                     <>
                       <MoveText p={p} active={active} />
@@ -211,7 +202,7 @@ function EvalTimeline({
                   )}
                 </span>
                 <span />
-                <span className={`flex items-baseline justify-start gap-1.5 rounded-r-[5px] px-2 ${active && !white ? "bg-surface-2" : ""}`}>
+                <span className="flex items-baseline justify-center gap-1.5">
                   {!white && (
                     <>
                       {active && hasAnalysis && <span className="metric text-xs text-ink-faint">{formatEval(p)}</span>}
@@ -251,9 +242,19 @@ export function GameReview({ game }: { game: GameData }) {
   const [flip, setFlip] = useState(false);
   const [theme, setTheme] = useState<BoardTheme>(() => loadBoardTheme());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [boardH, setBoardH] = useState(520);
   const boardRef = useRef<HTMLDivElement>(null);
 
   const goto = (i: number) => setIdx(Math.max(1, Math.min(n, i)));
+
+  // keep the eval component the same size as the board
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBoardH(el.offsetWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -306,60 +307,15 @@ export function GameReview({ game }: { game: GameData }) {
       <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-[1280px] items-center justify-between px-4 sm:px-6">
           <Link to="/" className="cap transition-colors hover:text-ink">← Report</Link>
-          <a href={g.url} target="_blank" rel="noreferrer" className="cap transition-colors hover:text-ink">Lichess ↗</a>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-[1280px] px-4 pb-10 pt-5 sm:px-6">
-        <div className="mb-4">
-          <div className="cap mb-1.5">
-            {g.speed ? `${g.speed} · ` : ""}
-            {g.eco ? <span title="ECO opening code">{g.eco}</span> : null}
-            {g.eco ? " · " : ""}
-            {g.opening ?? "Game"}
-          </div>
-          <h1 className="font-serif text-2xl leading-tight text-ink">
-            {g.white.name} <span className="text-ink-faint">{g.white.rating ?? ""}</span>{" "}
-            <span className="metric text-lg text-ink-muted">{g.result}</span>{" "}
-            {g.black.name} <span className="text-ink-faint">{g.black.rating ?? ""}</span>
-          </h1>
-        </div>
-
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)_minmax(0,360px)]">
-          {/* EXPLANATION (left, opposite the timeline) */}
-          <aside className="order-2 lg:order-1">
-            {current?.judgment ? (
-              <div className="rounded-panel border border-line p-5" style={{ borderColor: `color-mix(in oklch, ${JUDGMENT[current.judgment.name].color} 40%, var(--color-line))` }}>
-                <div className="metric text-sm font-semibold" style={{ color: JUDGMENT[current.judgment.name].color }}>
-                  {current.judgment.name} {JUDGMENT[current.judgment.name].glyph}
-                </div>
-                {reason ? (
-                  <p className="mt-2 font-serif text-lg leading-snug text-ink">{reason.text}</p>
-                ) : jComment ? (
-                  <p className="mt-2 text-sm text-ink-muted">{jComment}</p>
-                ) : null}
-                {bestSan && !reason?.text.includes(bestSan) && !jComment.includes(bestSan) && (
-                  <p className="cap mt-3 normal-case tracking-normal">Best line: {bestSan}</p>
-                )}
-              </div>
-            ) : !g.hasAnalysis ? (
-              <p className="text-sm text-ink-faint">Analyze the game to see move quality and reasons.</p>
-            ) : (
-              <p className="text-sm text-ink-faint">
-                Nothing wrong with this move.{formatEval(current) ? ` Evaluation ${formatEval(current)}.` : ""}
-              </p>
-            )}
-          </aside>
-
-          {/* BOARD (center) */}
-          <div className="order-1 lg:order-2">
-            <div className="relative mb-2 flex justify-end">
+          <div className="flex items-center gap-4">
+            <div className="relative">
               <button
                 type="button"
                 onClick={() => setSettingsOpen((o) => !o)}
-                className="cap flex items-center gap-1.5 rounded-control border border-line px-2.5 py-1.5 text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+                title="Settings"
+                className="cap grid h-8 w-8 place-items-center rounded-control text-ink-muted transition-colors hover:bg-surface hover:text-ink"
               >
-                ⚙ Board
+                ⚙
               </button>
               {settingsOpen && (
                 <>
@@ -390,7 +346,62 @@ export function GameReview({ game }: { game: GameData }) {
                 </>
               )}
             </div>
+            <a href={g.url} target="_blank" rel="noreferrer" className="cap transition-colors hover:text-ink">Lichess ↗</a>
+          </div>
+        </div>
+      </header>
 
+      <main className="mx-auto max-w-[1280px] px-4 pb-10 pt-5 sm:px-6">
+        <div className="mb-4">
+          <div className="cap mb-1.5">
+            {g.speed ? `${g.speed} · ` : ""}
+            {g.eco ? <span title="ECO opening code">{g.eco}</span> : null}
+            {g.eco ? " · " : ""}
+            {g.opening ?? "Game"}
+          </div>
+          <h1 className="font-serif text-2xl leading-tight text-ink">
+            {g.white.name} <span className="text-ink-faint">{g.white.rating ?? ""}</span>{" "}
+            <span className="metric text-lg text-ink-muted">{g.result}</span>{" "}
+            {g.black.name} <span className="text-ink-faint">{g.black.rating ?? ""}</span>
+          </h1>
+        </div>
+
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)_minmax(0,360px)]">
+          {/* EXPLANATION (left, vertically centered on the board) */}
+          <aside
+            className="order-2 flex items-center lg:order-1 lg:min-h-[var(--bh)]"
+            style={{ ["--bh" as string]: `${boardH}px` }}
+          >
+            <div className="w-full">
+              {current?.judgment ? (
+                <div
+                  className="rounded-panel border p-5"
+                  style={{ borderColor: `color-mix(in oklch, ${JUDGMENT[current.judgment.name].color} 40%, var(--color-line))` }}
+                >
+                  <div className="metric text-sm font-semibold" style={{ color: JUDGMENT[current.judgment.name].color }}>
+                    {current.judgment.name} {JUDGMENT[current.judgment.name].glyph}
+                  </div>
+                  {reason ? (
+                    <p className="mt-2 font-serif text-lg leading-snug text-ink">{reason.text}</p>
+                  ) : jComment ? (
+                    <p className="mt-2 text-sm text-ink-muted">{jComment}</p>
+                  ) : null}
+                  {bestSan && !reason?.text.includes(bestSan) && !jComment.includes(bestSan) && (
+                    <p className="cap mt-3 normal-case tracking-normal">Best line: {bestSan}</p>
+                  )}
+                </div>
+              ) : !g.hasAnalysis ? (
+                <p className="text-sm text-ink-faint">Analyze the game to see move quality and reasons.</p>
+              ) : (
+                <p className="text-sm text-ink-faint">
+                  Nothing wrong with this move.{formatEval(current) ? ` Evaluation ${formatEval(current)}.` : ""}
+                </p>
+              )}
+            </div>
+          </aside>
+
+          {/* BOARD (center) */}
+          <div className="order-1 lg:order-2">
             <div className="flex items-start gap-2">
               <button
                 type="button"
@@ -443,7 +454,7 @@ export function GameReview({ game }: { game: GameData }) {
 
           {/* TIMELINE (right) */}
           <div className="order-3">
-            <EvalTimeline plies={g.plies} current={idx} keypoints={keypoints} hasAnalysis={g.hasAnalysis} onSeek={goto} />
+            <EvalTimeline plies={g.plies} current={idx} keypoints={keypoints} hasAnalysis={g.hasAnalysis} height={boardH} onSeek={goto} />
           </div>
         </div>
       </main>
