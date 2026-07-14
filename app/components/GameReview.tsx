@@ -4,6 +4,7 @@ import { Chess } from "chess.js";
 import type { GameData, Ply, Judgment } from "../lib/game";
 import { fenAt } from "../lib/game";
 import { analyzeGameLocally } from "../lib/analyze";
+import { explainMove } from "../lib/motifs";
 import { Chessboard } from "./Chessboard";
 
 const JUDGMENT: Record<Judgment, { glyph: string; color: string }> = {
@@ -208,6 +209,10 @@ export function GameReview({ game }: { game: GameData }) {
   const jComment = current?.judgment
     ? current.judgment.comment.replace(/^(Blunder|Mistake|Inaccuracy)[.:]?\s*/i, "")
     : "";
+  const reason = useMemo(
+    () => (current?.judgment ? explainMove(current.fenBefore, current.uci, current.best) : null),
+    [current],
+  );
 
   const rows = [];
   for (let i = 0; i < n; i += 2) rows.push({ no: i / 2 + 1, w: g.plies[i], b: g.plies[i + 1] });
@@ -293,8 +298,12 @@ export function GameReview({ game }: { game: GameData }) {
             <span className="metric text-sm font-semibold" style={{ color: JUDGMENT[current.judgment.name].color }}>
               {current.judgment.name} {JUDGMENT[current.judgment.name].glyph}
             </span>
-            {jComment && <p className="mt-1.5 text-sm text-ink-muted">{jComment}</p>}
-            {bestSan && !jComment.includes(bestSan) && (
+            {reason ? (
+              <p className="mt-1.5 text-sm text-ink">{reason.text}</p>
+            ) : jComment ? (
+              <p className="mt-1.5 text-sm text-ink-muted">{jComment}</p>
+            ) : null}
+            {bestSan && !reason?.text.includes(bestSan) && !jComment.includes(bestSan) && (
               <p className="cap mt-2 normal-case tracking-normal">Best: {bestSan}</p>
             )}
           </div>
