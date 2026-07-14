@@ -9,6 +9,9 @@ RUN npm run build
 FROM node:24-alpine AS production
 WORKDIR /app
 ENV NODE_ENV=production
+# Stockfish for the analysis engine (Alpine community package).
+RUN apk add --no-cache stockfish
+ENV STOCKFISH_PATH=stockfish
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 COPY --from=build /app/dist ./dist

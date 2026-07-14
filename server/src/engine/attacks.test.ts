@@ -13,7 +13,7 @@ function check(
   expected: number,
 ) {
   const board = parseFen(fen).unwrap().board;
-  const got = see(board, parseSquare(to), parseSquare(from));
+  const got = see(board, parseSquare(to)!, parseSquare(from)!);
   const ok = got === expected;
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}: see=${got} (expected ${expected})`);
   ok ? passed++ : failed++;

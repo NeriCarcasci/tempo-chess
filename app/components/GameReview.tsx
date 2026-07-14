@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { Chess } from "chess.js";
 import type { GameData, Ply, Judgment } from "../lib/game";
 import { fenAt } from "../lib/game";
+import { analyzeGameLocally } from "../lib/analyze";
 import { Chessboard } from "./Chessboard";
 
 const JUDGMENT: Record<Judgment, { glyph: string; color: string }> = {
@@ -168,7 +169,12 @@ function MoveCell({ ply, active, isKey, onClick }: { ply?: Ply; active: boolean;
 }
 
 export function GameReview({ game }: { game: GameData }) {
-  const n = game.plies.length;
+  const [analyzed, setAnalyzed] = useState<GameData | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const g = analyzed ?? game;
+
+  const n = g.plies.length;
   const [idx, setIdx] = useState(n);
   const [flip, setFlip] = useState(false);
 
@@ -184,22 +190,34 @@ export function GameReview({ game }: { game: GameData }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [n]);
 
-  const keypoints = useMemo(() => keypointPlies(game.plies), [game.plies]);
-  const current = idx > 0 ? game.plies[idx - 1] : null;
+  const runAnalysis = async () => {
+    setAnalyzing(true);
+    setError(null);
+    try {
+      setAnalyzed(await analyzeGameLocally(game));
+    } catch (e) {
+      setError(`${(e as Error).message}. Is the local engine running on :8090?`);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const keypoints = useMemo(() => keypointPlies(g.plies), [g.plies]);
+  const current = idx > 0 ? g.plies[idx - 1] : null;
   const bestSan = current ? uciToSan(current.fenBefore, current.best) : undefined;
   const jComment = current?.judgment
     ? current.judgment.comment.replace(/^(Blunder|Mistake|Inaccuracy)[.:]?\s*/i, "")
     : "";
 
   const rows = [];
-  for (let i = 0; i < n; i += 2) rows.push({ no: i / 2 + 1, w: game.plies[i], b: game.plies[i + 1] });
+  for (let i = 0; i < n; i += 2) rows.push({ no: i / 2 + 1, w: g.plies[i], b: g.plies[i + 1] });
 
   return (
     <div className="relative z-10 min-h-dvh">
       <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-[540px] items-center justify-between px-4">
           <Link to="/" className="cap transition-colors hover:text-ink">← Report</Link>
-          <a href={game.url} target="_blank" rel="noreferrer" className="cap transition-colors hover:text-ink">
+          <a href={g.url} target="_blank" rel="noreferrer" className="cap transition-colors hover:text-ink">
             Lichess ↗
           </a>
         </div>
@@ -208,37 +226,54 @@ export function GameReview({ game }: { game: GameData }) {
       <main className="mx-auto max-w-[540px] px-4 pb-24 pt-6">
         <div className="mb-4">
           <div className="cap mb-1.5">
-            {game.speed ? `${game.speed} · ` : ""}
-            {game.eco ? `${game.eco} · ` : ""}
-            {game.opening ?? "Game"}
+            {g.speed ? `${g.speed} · ` : ""}
+            {g.eco ? `${g.eco} · ` : ""}
+            {g.opening ?? "Game"}
           </div>
           <h1 className="font-serif text-2xl leading-tight text-ink">
-            {game.white.name}{" "}
-            <span className="text-ink-faint">{game.white.rating ? `${game.white.rating}` : ""}</span>{" "}
-            <span className="metric text-lg text-ink-muted">{game.result}</span>{" "}
-            {game.black.name}{" "}
-            <span className="text-ink-faint">{game.black.rating ? `${game.black.rating}` : ""}</span>
+            {g.white.name}{" "}
+            <span className="text-ink-faint">{g.white.rating ? `${g.white.rating}` : ""}</span>{" "}
+            <span className="metric text-lg text-ink-muted">{g.result}</span>{" "}
+            {g.black.name}{" "}
+            <span className="text-ink-faint">{g.black.rating ? `${g.black.rating}` : ""}</span>
           </h1>
         </div>
 
-        {game.hasAnalysis ? (
+        {g.hasAnalysis ? (
           <div className="mb-4">
             <div className="mb-1.5 flex items-center justify-between">
               <span className="cap">Evaluation</span>
               <span className="metric text-sm text-ink">{formatEval(current) || "start"}</span>
             </div>
-            <EvalGraph plies={game.plies} current={idx} keypoints={keypoints} onSeek={setIdx} />
+            <EvalGraph plies={g.plies} current={idx} keypoints={keypoints} onSeek={setIdx} />
             <p className="cap mt-1.5 normal-case tracking-normal text-ink-faint">
               Dots mark the sharpest swings. Click the graph or a dot to jump there.
             </p>
           </div>
         ) : (
-          <div className="mb-4 rounded-panel border border-line p-4 text-sm text-ink-muted">
-            This game has no analysis. The local engine grades it in the next step.
+          <div className="mb-4 rounded-panel border border-line p-4">
+            {analyzing ? (
+              <div className="flex items-center gap-3 text-sm text-ink-muted">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-line border-t-accent" />
+                Grading {n} moves with Stockfish. This takes a few seconds.
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm text-ink-muted">Not analyzed yet. Grade it with the engine.</p>
+                <button
+                  type="button"
+                  onClick={runAnalysis}
+                  className="shrink-0 rounded-control bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink transition-transform active:translate-y-px"
+                >
+                  Analyze
+                </button>
+              </div>
+            )}
+            {error && <p className="mt-2 text-sm" style={{ color: "var(--color-loss)" }}>{error}</p>}
           </div>
         )}
 
-        <Chessboard fen={fenAt(game, idx)} flip={flip} lastMove={current ? moveSquares(current.uci) : undefined} />
+        <Chessboard fen={fenAt(g, idx)} flip={flip} lastMove={current ? moveSquares(current.uci) : undefined} />
 
         <div className="mt-4 flex items-center justify-between">
           <div className="flex gap-2">
