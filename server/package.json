@@ -1,0 +1,30 @@
+{
+  "name": "@tempo/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.21.0",
+    "@hono/node-server": "^2.0.8",
+    "@supabase/supabase-js": "^2.110.5",
+    "chess.js": "^1.4.0",
+    "chessops": "^0.15.1",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.30",
+    "postgres": "^3.4.9",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
+  }
+}
