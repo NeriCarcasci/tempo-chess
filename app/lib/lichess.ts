@@ -3,6 +3,7 @@
 // CORS, so for a live demo the SPA can read the public endpoints directly.
 
 import { Chess } from "chess.js";
+import { wilson, shrink, confidence } from "./stats.js";
 
 export type Speed = "bullet" | "blitz" | "rapid" | "classical";
 export type Result = "win" | "loss" | "draw";
@@ -133,6 +134,12 @@ export interface OpeningStat {
   loss: number;
   draw: number;
   winRate: number;
+  /** Empirical-Bayes estimate: raw rate shrunk toward the player's baseline. */
+  adjWinRate: number;
+  /** Wilson 95% interval on the raw win rate. */
+  ciLo: number;
+  ciHi: number;
+  conf: "low" | "medium" | "high";
 }
 
 export interface ColorStat {
@@ -151,6 +158,7 @@ export interface Summary {
   playTimeSec: number;
   record: { win: number; loss: number; draw: number; all: number; rated: number };
   winRate: number;
+  winRateCI: { lo: number; hi: number };
   formats: FormatStat[];
   bestFormat?: FormatStat;
   analyzed: {
@@ -283,27 +291,46 @@ export function aggregate(profile: Profile, games: GameLite[]): Summary {
     .map((g) => g.userRating);
 
   // Openings across the fetched sample.
-  const byOpening = new Map<string, OpeningStat>();
+  type OpeningAcc = {
+    eco?: string;
+    name: string;
+    games: number;
+    win: number;
+    loss: number;
+    draw: number;
+  };
+  const byOpening = new Map<string, OpeningAcc>();
   for (const g of games) {
     const name = g.opening ?? "Unknown opening";
     const o =
       byOpening.get(name) ??
-      { eco: g.eco, name, games: 0, win: 0, loss: 0, draw: 0, winRate: 0 };
+      { eco: g.eco, name, games: 0, win: 0, loss: 0, draw: 0 };
     o.games++;
     o[g.result]++;
     byOpening.set(name, o);
   }
-  const allOpenings = [...byOpening.values()].map((o) => ({
-    ...o,
-    winRate: o.games ? o.win / o.games : 0,
-  }));
+  // Prior for shrinkage = the player's overall win rate over this sample.
+  const sampleWins = games.filter((g) => g.result === "win").length;
+  const priorMean = games.length ? sampleWins / games.length : 0.5;
+  const allOpenings: OpeningStat[] = [...byOpening.values()].map((o) => {
+    const ci = wilson(o.win, o.games);
+    return {
+      ...o,
+      winRate: o.games ? o.win / o.games : 0,
+      adjWinRate: shrink(o.win, o.games, priorMean),
+      ciLo: ci.lo,
+      ciHi: ci.hi,
+      conf: confidence(o.games),
+    };
+  });
   const openings = [...allOpenings]
     .sort((a, b) => b.games - a.games)
     .slice(0, 6);
+  // Rank weak lines by the adjusted (shrunk) rate, not the raw one.
   const toughOpenings = [...allOpenings]
     .filter((o) => o.games >= 3)
-    .sort((a, b) => a.winRate - b.winRate)
-    .slice(0, 4);
+    .sort((a, b) => a.adjWinRate - b.adjWinRate)
+    .slice(0, 5);
 
   return {
     username: profile.username,
@@ -319,6 +346,10 @@ export function aggregate(profile: Profile, games: GameLite[]): Summary {
       rated: profile.count.rated,
     },
     winRate: profile.count.all ? profile.count.win / profile.count.all : 0,
+    winRateCI: (() => {
+      const c = wilson(profile.count.win, profile.count.all);
+      return { lo: c.lo, hi: c.hi };
+    })(),
     formats,
     bestFormat,
     analyzed,

@@ -87,6 +87,9 @@ function Masthead({ s }: { s: Summary }) {
           <div className="metric text-4xl text-ink">
             <CountUp value={Math.round(s.winRate * 100)} suffix="%" />
           </div>
+          <div className="mt-1 text-xs text-ink-faint">
+            95% CI {Math.round(s.winRateCI.lo * 100)}-{Math.round(s.winRateCI.hi * 100)}%
+          </div>
         </div>
         <div>
           <div className="cap mb-2">Record · {s.record.all} games</div>
@@ -197,8 +200,13 @@ function Openings({ s }: { s: Summary }) {
                     {o.name}
                   </div>
                   <div className="cap mt-1">
-                    <span style={{ color: "var(--color-loss)" }}>{pct(o.winRate)}</span> ·{" "}
-                    {o.games} games
+                    <span style={{ color: "var(--color-loss)" }}>{pct(o.adjWinRate)}</span>{" "}
+                    adjusted · {o.games} games
+                  </div>
+                  <div className="mt-1 text-xs text-ink-faint">
+                    raw {pct(o.winRate)} · 95% CI {Math.round(o.ciLo * 100)}-
+                    {Math.round(o.ciHi * 100)}%
+                    {o.conf === "low" ? " · small sample" : ""}
                   </div>
                 </div>
               </li>

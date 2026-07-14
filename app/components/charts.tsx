@@ -179,38 +179,49 @@ export function ProportionBar({
  * both. Win/loss are the validated diverging poles; the center is neutral.
  */
 export function DivergingOpenings({ openings }: { openings: OpeningStat[] }) {
-  const rows = [...openings].sort((a, b) => b.winRate - a.winRate);
+  const rows = [...openings].sort((a, b) => b.adjWinRate - a.adjWinRate);
   const TRACK = 148; // px; center at TRACK/2
   const half = TRACK / 2;
+  const posOf = (rate: number) => half + (rate - 0.5) * TRACK;
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
         <span className="cap" style={{ color: "var(--color-loss)" }}>
           weaker
         </span>
-        <span className="cap">break-even 50%</span>
+        <span className="cap">even</span>
         <span className="cap" style={{ color: "var(--color-win)" }}>
           stronger
         </span>
       </div>
       <div className="divide-y divide-line">
         {rows.map((o) => {
-          const dev = o.winRate - 0.5; // [-0.5, 0.5]
-          const len = Math.abs(dev) * TRACK; // px, max = half
+          const dev = o.adjWinRate - 0.5; // adjusted, de-noised
+          const len = Math.abs(dev) * TRACK;
           const win = dev >= 0;
+          const rawX = posOf(o.winRate);
+          const low = o.conf === "low";
           return (
-            <div key={o.name} className="flex items-center gap-3 py-2">
+            <div
+              key={o.name}
+              className={`flex items-center gap-3 py-2 ${low ? "opacity-70" : ""}`}
+            >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm text-ink" title={o.name}>
                   {o.name}
                 </div>
                 <div className="cap mt-0.5">
                   {o.eco ? `${o.eco} · ` : ""}
-                  {o.games} games
+                  {o.games}g · {pct(o.winRate)} raw
                 </div>
               </div>
               <div className="relative shrink-0" style={{ width: TRACK, height: 18 }}>
                 <div className="absolute top-0 bottom-0 w-px bg-line" style={{ left: half }} />
+                <div
+                  className="absolute top-1/2 h-3 w-px -translate-y-1/2 bg-line-strong"
+                  style={{ left: rawX }}
+                  title={`raw ${pct(o.winRate)}`}
+                />
                 <div
                   className="absolute top-1/2 h-2.5 -translate-y-1/2 rounded-[2px]"
                   style={{
@@ -224,12 +235,16 @@ export function DivergingOpenings({ openings }: { openings: OpeningStat[] }) {
                 className="metric w-9 text-right text-sm"
                 style={{ color: win ? "var(--color-win)" : "var(--color-loss)" }}
               >
-                {pct(o.winRate)}
+                {pct(o.adjWinRate)}
               </div>
             </div>
           );
         })}
       </div>
+      <p className="mt-3 text-xs leading-relaxed text-ink-faint">
+        Bars show win rate adjusted for sample size; the tick marks the raw rate.
+        A line needs games, not luck, to move off your baseline.
+      </p>
     </div>
   );
 }
