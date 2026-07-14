@@ -16,6 +16,20 @@ const cases = [
     expect: "missed_material",
   },
   {
+    label: "Ke2 misses back-rank mate Ra8#",
+    fen: "6k1/5ppp/8/8/8/8/8/R3K3 w - - 0 1",
+    played: "e1e2",
+    best: "a1a8",
+    expect: "missed_mate",
+  },
+  {
+    label: "Kd8 misses the royal fork Ne2+ (knight defended by b4 pawn)",
+    fen: "4k3/8/8/8/1p6/2n5/8/2Q3K1 b - - 0 1",
+    played: "e8d8",
+    best: "c3e2",
+    expect: "fork",
+  },
+  {
     label: "a quiet developing move → no tactical motif",
     fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
     played: "e2e4",

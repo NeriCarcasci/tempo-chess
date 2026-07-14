@@ -7,6 +7,7 @@ import { parseUci, makeSquare } from "chessops/util";
 import { makeSan } from "chessops/san";
 import { Chess } from "chessops/chess";
 import {
+  attacks,
   bishopAttacks,
   rookAttacks,
   knightAttacks,
@@ -126,28 +127,76 @@ export function explainMove(
   }
   const played = parseUci(playedUci);
   if (!played || !("from" in played)) return null;
+  const mover = posBefore.turn;
+  const enemyMask = (b: typeof posBefore.board) => (mover === "white" ? b.black : b.white);
 
-  // 1. Does the played move hang material? (opponent is to move afterwards)
   const afterPlayed = posBefore.clone();
   try {
     afterPlayed.play(played);
   } catch {
     return null;
   }
+
+  const best = bestUci ? parseUci(bestUci) : undefined;
+  const bestNormal = best && "from" in best ? best : undefined;
+
+  // 1. Missed a forced mate (the engine's move is checkmate).
+  if (bestNormal) {
+    const afterBest = posBefore.clone();
+    try {
+      afterBest.play(bestNormal);
+      if (afterBest.isCheckmate()) {
+        return { motif: "missed_mate", text: `Missed mate with ${makeSan(posBefore, bestNormal)}.` };
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // 2. The played move hangs material.
   const hang = bestWinnableCapture(afterPlayed);
   if (hang && hang.gain >= 200) {
     return { motif: "hanging", text: `This hangs the ${NAME[hang.role]} on ${makeSquare(hang.to)}.` };
   }
 
-  // 2. Did the engine's move win material the player passed up?
-  if (bestUci) {
-    const best = parseUci(bestUci);
-    if (best && "from" in best) {
-      const target = posBefore.board.get(best.to);
-      if (target && see(posBefore.board, best.to, best.from) >= 150) {
-        const san = makeSan(posBefore, best);
-        return { motif: "missed_material", text: `${san} wins the ${NAME[target.role]}.` };
+  // 3. Missed a fork — the engine's move attacks two valuable enemy pieces.
+  if (bestNormal) {
+    const afterBest = posBefore.clone();
+    try {
+      afterBest.play(bestNormal);
+      const forker = afterBest.board.get(bestNormal.to);
+      if (forker) {
+        const enemy = enemyMask(afterBest.board);
+        const hits = attacks(forker, bestNormal.to, afterBest.board.occupied).intersect(enemy);
+        const targets: { role: Role; value: number }[] = [];
+        for (const sq of hits) {
+          const t = afterBest.board.get(sq);
+          if (!t) continue;
+          const defended = !attackersTo(afterBest.board, sq, afterBest.board.occupied)
+            .intersect(enemy)
+            .isEmpty();
+          if (VALUES[t.role] > VALUES[forker.role] || !defended) {
+            targets.push({ role: t.role, value: VALUES[t.role] });
+          }
+        }
+        if (targets.length >= 2) {
+          targets.sort((a, b) => b.value - a.value);
+          return {
+            motif: "fork",
+            text: `${makeSan(posBefore, bestNormal)} forks the ${NAME[targets[0].role]} and ${NAME[targets[1].role]}.`,
+          };
+        }
       }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // 4. Missed a winning capture.
+  if (bestNormal) {
+    const target = posBefore.board.get(bestNormal.to);
+    if (target && see(posBefore.board, bestNormal.to, bestNormal.from) >= 150) {
+      return { motif: "missed_material", text: `${makeSan(posBefore, bestNormal)} wins the ${NAME[target.role]}.` };
     }
   }
   return null;
