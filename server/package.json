@@ -11,7 +11,9 @@
     "db:migrate": "drizzle-kit migrate",
     "benchmark": "tsx src/benchmark/run.ts --adapter=fixture",
     "benchmark:stockfish": "tsx src/benchmark/run.ts --adapter=stockfish",
-    "benchmark:test": "tsx src/benchmark/corpus.test.ts && tsx src/benchmark/report.test.ts"
+    "benchmark:test": "tsx src/benchmark/corpus.test.ts && tsx src/benchmark/report.test.ts",
+    "ingest:identity:test": "tsx src/ingest/canonical.test.ts",
+    "ingest:test": "tsx src/ingest/canonical.test.ts && tsx src/ingest/pgn.test.ts && tsx src/ingest/providers.test.ts && tsx src/ingest/sync.test.ts && tsx src/analysis/phase.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",

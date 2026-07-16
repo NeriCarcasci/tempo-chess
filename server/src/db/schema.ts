@@ -4,6 +4,7 @@ import {
   uuid,
   text,
   integer,
+  bigint,
   timestamp,
   numeric,
   jsonb,
@@ -65,6 +66,8 @@ export const linkedAccounts = pgTable(
       .references(() => profiles.id, { onDelete: "cascade" }),
     platform: platformEnum("platform").notNull(),
     username: text("username").notNull(),
+    normalizedUsername: text("normalized_username").notNull(),
+    providerAccountId: text("provider_account_id"),
     ratings: jsonb("ratings"), // { bullet, blitz, rapid, classical }
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -72,7 +75,11 @@ export const linkedAccounts = pgTable(
       .defaultNow(),
   },
   (t) => [
-    uniqueIndex("linked_accounts_uq").on(t.userId, t.platform, t.username),
+    uniqueIndex("linked_accounts_uq").on(
+      t.userId,
+      t.platform,
+      t.normalizedUsername,
+    ),
   ],
 );
 
@@ -92,6 +99,14 @@ export const games = pgTable(
       .references(() => linkedAccounts.id, { onDelete: "cascade" }),
     platform: platformEnum("platform").notNull(),
     platformGameId: text("platform_game_id").notNull(),
+    normalizedSchemaVersion: integer("normalized_schema_version")
+      .notNull()
+      .default(1),
+    canonicalGameId: text("canonical_game_id").notNull(),
+    pgnFingerprint: text("pgn_fingerprint"),
+    provenance: jsonb("provenance"),
+    players: jsonb("players"),
+    providerAccuracy: jsonb("provider_accuracy"),
     url: text("url"),
     playedAt: timestamp("played_at", { withTimezone: true }),
     color: colorEnum("color").notNull(), // the user's color
@@ -117,10 +132,80 @@ export const games = pgTable(
       .defaultNow(),
   },
   (t) => [
-    uniqueIndex("games_platform_game_uq").on(t.platform, t.platformGameId),
+    uniqueIndex("games_user_platform_game_uq").on(
+      t.userId,
+      t.platform,
+      t.platformGameId,
+    ),
+    index("games_user_fingerprint_idx").on(t.userId, t.pgnFingerprint),
+    index("games_canonical_game_idx").on(t.canonicalGameId),
     index("games_user_played_idx").on(t.userId, t.playedAt),
     index("games_user_eco_idx").on(t.userId, t.eco),
     index("games_analysis_status_idx").on(t.analysisStatus),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// game_sources — every linked-account/provider occurrence of a canonical game.
+// A game can be visible through multiple accounts without duplicating metrics.
+// ---------------------------------------------------------------------------
+export const gameSources = pgTable(
+  "game_sources",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    gameId: uuid("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => linkedAccounts.id, { onDelete: "cascade" }),
+    platform: platformEnum("platform").notNull(),
+    platformGameId: text("platform_game_id").notNull(),
+    accountUsername: text("account_username").notNull(),
+    accountProviderId: text("account_provider_id"),
+    sourceUrl: text("source_url"),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("game_sources_account_provider_game_uq").on(
+      t.accountId,
+      t.platform,
+      t.platformGameId,
+    ),
+    index("game_sources_game_idx").on(t.gameId),
+    index("game_sources_account_idx").on(t.accountId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// canonical_moves — provider-neutral replay and optional source annotations.
+// ---------------------------------------------------------------------------
+export const canonicalMoves = pgTable(
+  "canonical_moves",
+  {
+    gameId: uuid("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    ply: integer("ply").notNull(),
+    moveNumber: integer("move_number").notNull(),
+    color: colorEnum("color").notNull(),
+    uci: text("uci").notNull(),
+    san: text("san").notNull(),
+    fenBefore: text("fen_before").notNull(),
+    fenAfter: text("fen_after").notNull(),
+    clockMs: bigint("clock_ms", { mode: "number" }),
+    thinkTimeMs: bigint("think_time_ms", { mode: "number" }),
+    providerEvaluation: jsonb("provider_evaluation"),
+    annotations: jsonb("annotations")
+      .notNull()
+      .default({ comment: null, nags: [], raw: {} }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.gameId, t.ply] }),
+    index("canonical_moves_fen_before_idx").on(t.fenBefore),
   ],
 );
 
