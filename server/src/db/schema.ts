@@ -213,17 +213,40 @@ export const positionEval = pgTable(
   "position_eval",
   {
     fen: text("fen").notNull(),
-    depth: integer("depth").notNull(),
-    evalCp: integer("eval_cp"), // centipawns, side-to-move perspective
-    mate: integer("mate"), // mate-in-N if forced mate
+    // Digest of all compatibility-relevant engine/profile settings.
+    cacheKey: text("cache_key").notNull(),
+    depth: integer("depth"),
+    evalCp: integer("eval_cp"), // centipawns, White's perspective
+    mate: integer("mate"), // mate-in-N, signed from White's perspective
+    wdlWin: integer("wdl_win"),
+    wdlDraw: integer("wdl_draw"),
+    wdlLoss: integer("wdl_loss"),
     bestMoveUci: text("best_move_uci"),
     pv: text("pv"), // principal variation (space-separated UCI)
+    candidates: jsonb("candidates"), // CandidateLine[] for reproducible MultiPV results
     engine: text("engine").notNull().default("stockfish"),
+    engineVersion: text("engine_version"),
+    binarySha256: text("binary_sha256"),
+    network: text("network"),
+    networkHash: text("network_hash"),
+    profileId: text("profile_id").notNull(),
+    profileVersion: integer("profile_version").notNull(),
+    limitType: text("limit_type").notNull(),
+    limitValue: integer("limit_value").notNull(),
+    multiPv: integer("multi_pv").notNull(),
+    threads: integer("threads").notNull(),
+    hashMb: integer("hash_mb").notNull(),
+    nodes: integer("nodes"),
+    nps: integer("nps"),
+    engineTimeMs: integer("engine_time_ms"),
+    elapsedMs: integer("elapsed_ms").notNull(),
+    workerRevision: text("worker_revision").notNull(),
+    cacheProvenance: text("cache_provenance").notNull(),
     computedAt: timestamp("computed_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.fen, t.depth] })],
+  (t) => [primaryKey({ columns: [t.fen, t.cacheKey] })],
 );
 
 // ---------------------------------------------------------------------------

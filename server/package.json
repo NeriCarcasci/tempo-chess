@@ -8,7 +8,10 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "benchmark": "tsx src/benchmark/run.ts --adapter=fixture",
+    "benchmark:stockfish": "tsx src/benchmark/run.ts --adapter=stockfish",
+    "benchmark:test": "tsx src/benchmark/corpus.test.ts && tsx src/benchmark/report.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",

@@ -1,0 +1,1 @@
+ALTER TABLE "position_eval" ADD COLUMN "candidates" jsonb;

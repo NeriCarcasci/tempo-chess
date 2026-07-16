@@ -29,6 +29,7 @@ export interface Profile {
 
 export interface GameLite {
   id: string;
+  url?: string;
   createdAt: number;
   speed: string;
   rated: boolean;
@@ -88,6 +89,7 @@ export async function fetchGames(username: string, max = 100): Promise<GameLite[
     const an = me.analysis;
     out.push({
       id: g.id,
+      url: `${API}/${g.id}`,
       createdAt: g.createdAt,
       speed: g.speed,
       rated: g.rated,
@@ -235,7 +237,7 @@ function recentPosition(games: GameLite[]): RecentPosition | null {
 
 export function aggregate(profile: Profile, games: GameLite[]): Summary {
   const formats: FormatStat[] = (Object.keys(SPEED_LABELS) as Speed[])
-    .map((key) => {
+    .map<FormatStat | null>((key) => {
       const p = profile.perfs[key];
       return p
         ? {

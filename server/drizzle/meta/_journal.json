@@ -8,6 +8,20 @@
       "when": 1784035307299,
       "tag": "0000_worthless_nico_minoru",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784238994571,
+      "tag": "0001_far_the_watchers",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784239376906,
+      "tag": "0002_noisy_wrecker",
+      "breakpoints": true
     }
   ]
 }
