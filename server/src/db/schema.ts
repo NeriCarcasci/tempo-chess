@@ -4,6 +4,7 @@ import {
   uuid,
   text,
   integer,
+  boolean,
   bigint,
   timestamp,
   numeric,
@@ -40,6 +41,22 @@ export const analysisStatusEnum = pgEnum("analysis_status", [
 ]);
 export const puzzleSourceEnum = pgEnum("puzzle_source", ["mistake", "lichess"]);
 export const planEnum = pgEnum("plan", ["free", "pro"]);
+export const importStatusEnum = pgEnum("analysis_import_status", [
+  "queued",
+  "ingesting",
+  "analyzing",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+export const taskStatusEnum = pgEnum("analysis_task_status", [
+  "queued",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+export const analysisPassEnum = pgEnum("analysis_pass", ["screening", "deep"]);
 
 // ---------------------------------------------------------------------------
 // profiles — one row per app user (id == Supabase auth.users.id)
@@ -332,6 +349,80 @@ export const positionEval = pgTable(
       .defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.fen, t.cacheKey] })],
+);
+
+// ---------------------------------------------------------------------------
+// analysis_imports / analysis_tasks — durable two-pass orchestration.
+// ---------------------------------------------------------------------------
+export const analysisImports = pgTable(
+  "analysis_imports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => linkedAccounts.id, { onDelete: "cascade" }),
+    status: importStatusEnum("status").notNull().default("queued"),
+    requestedGames: integer("requested_games").notNull(),
+    discoveredGames: integer("discovered_games").notNull().default(0),
+    queuedTasks: integer("queued_tasks").notNull().default(0),
+    runningTasks: integer("running_tasks").notNull().default(0),
+    completedTasks: integer("completed_tasks").notNull().default(0),
+    failedTasks: integer("failed_tasks").notNull().default(0),
+    totalPositions: integer("total_positions").notNull().default(0),
+    analyzedPositions: integer("analyzed_positions").notNull().default(0),
+    cacheHits: integer("cache_hits").notNull().default(0),
+    deepPositions: integer("deep_positions").notNull().default(0),
+    maxPositions: integer("max_positions").notNull(),
+    estimatedCostUsd: numeric("estimated_cost_usd").notNull().default("0"),
+    actualCostUsd: numeric("actual_cost_usd").notNull().default("0"),
+    cancelRequested: boolean("cancel_requested").notNull().default(false),
+    error: text("error"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("analysis_imports_user_created_idx").on(t.userId, t.createdAt),
+    index("analysis_imports_status_idx").on(t.status),
+  ],
+);
+
+export const analysisTasks = pgTable(
+  "analysis_tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    importId: uuid("import_id")
+      .notNull()
+      .references(() => analysisImports.id, { onDelete: "cascade" }),
+    gameId: uuid("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    pass: analysisPassEnum("pass").notNull(),
+    status: taskStatusEnum("status").notNull().default("queued"),
+    priority: integer("priority").notNull().default(0),
+    idempotencyKey: text("idempotency_key").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    payload: jsonb("payload").notNull().default({}),
+    result: jsonb("result"),
+    error: text("error"),
+    workerId: text("worker_id"),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("analysis_tasks_idempotency_uq").on(t.idempotencyKey),
+    index("analysis_tasks_claim_idx").on(t.status, t.priority, t.createdAt),
+    index("analysis_tasks_import_idx").on(t.importId),
+    index("analysis_tasks_game_idx").on(t.gameId),
+  ],
 );
 
 // ---------------------------------------------------------------------------

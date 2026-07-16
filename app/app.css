@@ -5,26 +5,27 @@
 /* accent, validated diverging data colors. Dark, editorial, chess-native.*/
 /* ------------------------------------------------------------------ */
 @theme {
-  --font-serif: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-serif: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular",
     monospace;
 
   /* warm near-black ink ramp (wood-in-shadow, not cool charcoal) */
-  --color-bg: oklch(0.16 0.008 60);
-  --color-surface: oklch(0.202 0.01 60);
-  --color-surface-2: oklch(0.245 0.011 62);
-  --color-line: oklch(0.31 0.01 60);
-  --color-line-strong: oklch(0.42 0.012 60);
+  --color-bg: oklch(0.115 0.014 260);
+  --color-surface: oklch(0.165 0.018 260);
+  --color-surface-2: oklch(0.215 0.022 258);
+  --color-line: oklch(0.29 0.025 258);
+  --color-line-strong: oklch(0.44 0.04 255);
 
   /* bone / ivory type (chess pieces, a scoresheet) */
-  --color-ink: oklch(0.93 0.014 82);
-  --color-ink-muted: oklch(0.73 0.014 74);
-  --color-ink-faint: oklch(0.57 0.012 66);
+  --color-ink: oklch(0.965 0.008 255);
+  --color-ink-muted: oklch(0.76 0.025 255);
+  --color-ink-faint: oklch(0.57 0.03 255);
 
   /* brass — the interactive accent (the chess clock; "tempo") */
-  --color-accent: oklch(0.72 0.11 78);
-  --color-accent-ink: oklch(0.23 0.04 74);
+  --color-accent: oklch(0.88 0.22 127);
+  --color-accent-ink: oklch(0.16 0.04 132);
+  --color-signal: oklch(0.79 0.15 205);
 
   /* validated diverging data colors (win<->loss, draw = neutral midpoint) */
   --color-win: oklch(0.6 0.12 162);
@@ -32,11 +33,11 @@
   --color-draw: oklch(0.66 0.014 70);
 
   /* board (warm wood) */
-  --color-board-light: oklch(0.75 0.045 74);
-  --color-board-dark: oklch(0.46 0.045 58);
+  --color-board-light: oklch(0.75 0.035 245);
+  --color-board-dark: oklch(0.38 0.05 250);
 
-  --radius-panel: 9px;
-  --radius-control: 6px;
+  --radius-panel: 12px;
+  --radius-control: 5px;
 }
 
 @layer base {
@@ -57,11 +58,12 @@
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    background: radial-gradient(
-      130% 90% at 50% -20%,
-      color-mix(in oklch, var(--color-accent) 9%, transparent),
-      transparent 55%
-    );
+    background:
+      linear-gradient(color-mix(in oklch, var(--color-line) 22%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in oklch, var(--color-line) 18%, transparent) 1px, transparent 1px),
+      radial-gradient(90% 70% at 75% -10%, color-mix(in oklch, var(--color-signal) 12%, transparent), transparent 62%);
+    background-size: 48px 48px, 48px 48px, auto;
+    mask-image: linear-gradient(to bottom, black, transparent 70%);
   }
   ::selection {
     background: color-mix(in oklch, var(--color-accent) 30%, transparent);
@@ -83,7 +85,7 @@
     font-family: var(--font-mono);
     font-size: 0.6875rem;
     line-height: 1;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.09em;
     text-transform: uppercase;
     color: var(--color-ink-faint);
   }
@@ -95,6 +97,28 @@
   .rule {
     border-color: var(--color-line);
   }
+  .panel {
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-panel);
+    background: color-mix(in oklch, var(--color-surface) 90%, transparent);
+    box-shadow: inset 0 1px color-mix(in oklch, white 5%, transparent), 0 24px 70px color-mix(in oklch, black 28%, transparent);
+  }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 1px solid var(--color-line);
+    border-radius: 999px;
+    padding: 0.35rem 0.6rem;
+    font: 700 0.625rem/1 var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .status-pill i { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: currentColor; }
+  .status-queued, .status-ingesting { color: var(--color-signal); }
+  .status-analyzing { color: var(--color-accent); }
+  .status-completed { color: var(--color-win); }
+  .status-failed, .status-cancelled { color: var(--color-loss); }
 }
 
 @keyframes rise {

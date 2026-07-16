@@ -34,11 +34,17 @@ function TopBar({ username }: { username: string }) {
             <line x1="10" y1="10" x2="10" y2="4.5" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" />
             <line x1="10" y1="10" x2="13.5" y2="11.5" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-          <span className="font-serif text-lg tracking-tight text-ink">
-            Tempo <span className="italic text-ink-faint">Chess</span>
+          <span className="font-serif text-lg font-extrabold uppercase tracking-[-0.05em] text-ink">
+            Tempo <span className="text-accent">Chess</span>
           </span>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            to="/operations"
+            className="rounded-control border border-accent/40 bg-accent/8 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-accent transition-colors hover:bg-accent hover:text-accent-ink"
+          >
+            Analysis queue
+          </Link>
           <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" />
             <span className="cap">
@@ -73,7 +79,7 @@ function Masthead({ s }: { s: Summary }) {
         <h1 className="font-serif text-5xl leading-[0.95] tracking-tight text-ink sm:text-6xl">
           {s.username}
         </h1>
-        <p className="mt-5 font-serif text-xl italic leading-snug text-ink-muted">
+        <p className="mt-5 max-w-xl text-xl font-semibold leading-snug text-ink-muted">
           {verdict}
         </p>
         <div className="cap mt-5">
