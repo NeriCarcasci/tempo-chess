@@ -41,7 +41,7 @@ function TopBar({ username, coverage }: { username: string; coverage: PlayerCove
       : 0;
   const busy = sync.state !== "idle" || coverage?.activeImport != null;
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
+    <header className="dashboard-topbar sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-[1160px] items-center justify-between px-6 sm:px-10">
         <div className="flex items-center gap-2.5">
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
@@ -400,7 +400,7 @@ export function Dashboard({
     <div className="relative z-10 min-h-dvh">
       <a className="skip-link" href="#player-overview-main">Skip to player overview</a>
       <TopBar username={summary.username} coverage={coverage} />
-      <main id="player-overview-main" className="mx-auto max-w-[1160px] px-6 pb-28 sm:px-10">
+      <main id="player-overview-main" className="dashboard-main mx-auto max-w-[1160px] px-6 pb-28 sm:px-10">
         <Masthead s={summary} />
         {opening ? <OpeningPriority data={opening} /> : null}
         <BoardAndTrend s={summary} />

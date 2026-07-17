@@ -6,6 +6,7 @@ export interface BoardTheme {
 }
 
 export const BOARD_THEMES: BoardTheme[] = [
+  { id: "tempo", name: "Tempo", light: "#f7e6d2", dark: "#f58a24" },
   { id: "walnut", name: "Walnut", light: "#c9a97e", dark: "#6d4f37" },
   { id: "forest", name: "Forest", light: "#eeeed2", dark: "#6f8f57" },
   { id: "ocean", name: "Ocean", light: "#d3dce8", dark: "#547a9e" },
@@ -14,7 +15,7 @@ export const BOARD_THEMES: BoardTheme[] = [
 ];
 
 const KEY = "tempo-board-theme";
-const DEFAULT_ID = "walnut";
+const DEFAULT_ID = "tempo";
 
 export function loadBoardTheme(): BoardTheme {
   try {

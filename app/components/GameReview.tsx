@@ -327,7 +327,7 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
 
   return (
     <div className="relative z-10 min-h-dvh">
-      <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
+      <header className="game-review-topbar sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-[1280px] items-center justify-between px-4 sm:px-6">
           <Link to="/" className="cap transition-colors hover:text-ink">← Report</Link>
           <div className="flex items-center gap-4">
@@ -395,7 +395,7 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1280px] px-4 pb-10 pt-5 sm:px-6">
+      <main className="game-review-main mx-auto max-w-[1280px] px-4 pb-10 pt-5 sm:px-6">
         <div className="mb-4">
           <div className="cap mb-1.5">
             {g.speed ? `${g.speed} · ` : ""}
@@ -413,7 +413,7 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)_minmax(0,360px)]">
           {/* EXPLANATION (left, vertically centered on the board) */}
           <aside
-            className="order-2 flex items-center lg:order-1 lg:min-h-[var(--bh)]"
+            className="game-insight-panel order-2 flex items-center lg:order-1 lg:min-h-[var(--bh)]"
             style={{ ["--bh" as string]: `${boardH}px` }}
           >
             <div className="w-full">
@@ -435,17 +435,23 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
                   )}
                 </div>
               ) : !g.hasAnalysis ? (
-                <p className="text-sm text-ink-faint">Analyze the game to see move quality and reasons.</p>
+                <div>
+                  <div className="cap mb-2">Current move</div>
+                  <p className="text-sm text-ink-faint">Analyze the game to see move quality and reasons.</p>
+                </div>
               ) : (
-                <p className="text-sm text-ink-faint">
-                  Nothing wrong with this move.{formatEval(current) ? ` Evaluation ${formatEval(current)}.` : ""}
-                </p>
+                <div>
+                  <div className="cap mb-2" style={{ color: "var(--color-win)" }}>Good move</div>
+                  <p className="text-sm leading-relaxed text-ink-muted">
+                    Nothing wrong with this move.{formatEval(current) ? ` Evaluation ${formatEval(current)}.` : ""}
+                  </p>
+                </div>
               )}
             </div>
           </aside>
 
           {/* BOARD (center) */}
-          <div className="order-1 lg:order-2">
+          <div className="game-board-stage order-1 lg:order-2">
             <div className="flex items-start gap-2">
               <button
                 type="button"
@@ -498,7 +504,7 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
           </div>
 
           {/* TIMELINE (right) */}
-          <div className="order-3">
+          <div className="game-timeline-panel order-3">
             <EvalTimeline plies={g.plies} current={idx} keypoints={keypoints} hasAnalysis={g.hasAnalysis} height={boardH} onSeek={goto} />
           </div>
         </div>
