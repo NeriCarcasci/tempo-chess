@@ -1,0 +1,1 @@
+ALTER TABLE "player_opening_observations" ALTER COLUMN "classifier_version" SET DEFAULT 2;

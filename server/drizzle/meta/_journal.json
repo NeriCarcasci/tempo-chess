@@ -36,6 +36,27 @@
       "when": 1784243221163,
       "tag": "0004_cool_peter_parker",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784292928299,
+      "tag": "0005_flippant_rhino",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784293632441,
+      "tag": "0006_tough_mister_fear",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784293813175,
+      "tag": "0007_careful_vertigo",
+      "breakpoints": true
     }
   ]
 }

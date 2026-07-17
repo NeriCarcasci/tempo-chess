@@ -312,6 +312,7 @@ async function screenGame(task: AnalysisTaskRecord): Promise<Json> {
   const selected = selection.selected.map((item) => ({
     ply: item.candidate.ply, fen: moves[item.candidate.ply - 1]!.fenBefore,
     reasons: item.reasons.map((reason) => reason.code), priorityScore: item.priorityScore,
+    evaluationLossCp: item.candidate.evaluationLossCp ?? null,
   }));
   if (selected.length) {
     await client`insert into analysis_tasks (import_id, game_id, pass, priority, idempotency_key, payload)

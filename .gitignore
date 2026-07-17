@@ -6,3 +6,4 @@
 /.react-router/
 /build/
 /.codex-*.log
+/.tmp-chess-openings-*/

@@ -40,10 +40,10 @@ function TopBar({ username }: { username: string }) {
         </div>
         <div className="flex items-center gap-3">
           <Link
-            to="/operations"
+            to="/openings"
             className="rounded-control border border-accent/40 bg-accent/8 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-accent transition-colors hover:bg-accent hover:text-accent-ink"
           >
-            Analysis queue
+            Opening explorer
           </Link>
           <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" />

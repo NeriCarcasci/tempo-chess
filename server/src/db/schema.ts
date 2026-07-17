@@ -57,6 +57,13 @@ export const taskStatusEnum = pgEnum("analysis_task_status", [
   "cancelled",
 ]);
 export const analysisPassEnum = pgEnum("analysis_pass", ["screening", "deep"]);
+export const openingFindingStatusEnum = pgEnum("opening_finding_status", [
+  "emerging",
+  "stable",
+  "unstable",
+  "blind_spot",
+  "decaying",
+]);
 
 // ---------------------------------------------------------------------------
 // profiles — one row per app user (id == Supabase auth.users.id)
@@ -424,6 +431,156 @@ export const analysisTasks = pgTable(
     index("analysis_tasks_game_idx").on(t.gameId),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Opening intelligence — canonical catalogue plus player observations.
+// Position keys ignore move counters, so transpositions converge.
+// ---------------------------------------------------------------------------
+export const openingPositions = pgTable(
+  "opening_positions",
+  {
+    positionKey: text("position_key").primaryKey(),
+    fen: text("fen").notNull(),
+    eco: text("eco"),
+    openingName: text("opening_name"),
+    family: text("family"),
+    variation: text("variation"),
+    ply: integer("ply").notNull(),
+    representativeLineUci: text("representative_line_uci"),
+    representativeLineSan: text("representative_line_san"),
+    sourceRevision: text("source_revision"),
+    sourceLicense: text("source_license"),
+    catalogue: boolean("catalogue").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("opening_positions_family_idx").on(t.family),
+    index("opening_positions_eco_idx").on(t.eco),
+  ],
+).enableRLS();
+
+export const openingEdges = pgTable(
+  "opening_edges",
+  {
+    fromKey: text("from_key")
+      .notNull()
+      .references(() => openingPositions.positionKey, { onDelete: "cascade" }),
+    moveUci: text("move_uci").notNull(),
+    toKey: text("to_key")
+      .notNull()
+      .references(() => openingPositions.positionKey, { onDelete: "cascade" }),
+    moveSan: text("move_san").notNull(),
+    catalogue: boolean("catalogue").notNull().default(false),
+    sourceRevision: text("source_revision"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.fromKey, t.moveUci, t.toKey] }),
+    index("opening_edges_to_idx").on(t.toKey),
+  ],
+).enableRLS();
+
+export const playerOpeningObservations = pgTable(
+  "player_opening_observations",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    gameId: uuid("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    ply: integer("ply").notNull(),
+    positionKey: text("position_key")
+      .notNull()
+      .references(() => openingPositions.positionKey, { onDelete: "cascade" }),
+    nextPositionKey: text("next_position_key")
+      .notNull()
+      .references(() => openingPositions.positionKey, { onDelete: "cascade" }),
+    moveUci: text("move_uci").notNull(),
+    moveSan: text("move_san").notNull(),
+    actorIsPlayer: boolean("actor_is_player").notNull(),
+    playerColor: colorEnum("player_color").notNull(),
+    platform: platformEnum("platform").notNull(),
+    speed: speedEnum("speed"),
+    playedAt: timestamp("played_at", { withTimezone: true }),
+    result: resultEnum("result").notNull(),
+    eco: text("eco"),
+    openingName: text("opening_name"),
+    family: text("family"),
+    acceptable: boolean("acceptable"),
+    acceptableReason: text("acceptable_reason"),
+    evaluationLossCp: integer("evaluation_loss_cp"),
+    classifierVersion: integer("classifier_version").notNull().default(2),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.gameId, t.ply] }),
+    index("player_opening_observations_user_position_idx").on(t.userId, t.positionKey),
+    index("player_opening_observations_user_family_idx").on(t.userId, t.family),
+    index("player_opening_observations_filter_idx").on(
+      t.userId,
+      t.platform,
+      t.speed,
+      t.playerColor,
+      t.playedAt,
+    ),
+  ],
+).enableRLS();
+
+export const openingRepertoireMoves = pgTable(
+  "opening_repertoire_moves",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    positionKey: text("position_key")
+      .notNull()
+      .references(() => openingPositions.positionKey, { onDelete: "cascade" }),
+    moveUci: text("move_uci").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("opening_repertoire_moves_user_position_move_uq").on(
+      t.userId,
+      t.positionKey,
+      t.moveUci,
+    ),
+    index("opening_repertoire_moves_user_position_idx").on(t.userId, t.positionKey),
+  ],
+).enableRLS();
+
+export const openingDrills = pgTable(
+  "opening_drills",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    positionKey: text("position_key")
+      .notNull()
+      .references(() => openingPositions.positionKey, { onDelete: "cascade" }),
+    sourceGameId: uuid("source_game_id").references(() => games.id, {
+      onDelete: "set null",
+    }),
+    solutionUci: text("solution_uci").notNull(),
+    prompt: text("prompt").notNull(),
+    status: text("status").notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("opening_drills_user_position_solution_uq").on(
+      t.userId,
+      t.positionKey,
+      t.solutionUci,
+    ),
+    index("opening_drills_user_status_idx").on(t.userId, t.status),
+  ],
+).enableRLS();
 
 // ---------------------------------------------------------------------------
 // player_opening_stats — precomputed per-user/per-opening aggregates
