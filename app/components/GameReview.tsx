@@ -250,13 +250,13 @@ function NavButton({ children, onClick, disabled }: { children: React.ReactNode;
   );
 }
 
-export function GameReview({ game }: { game: GameData }) {
+export function GameReview({ game, initialPly }: { game: GameData; initialPly?: number | null }) {
   const [analyzed, setAnalyzed] = useState<GameData | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const g = analyzed ?? game;
   const n = g.plies.length;
-  const [idx, setIdx] = useState(n);
+  const [idx, setIdx] = useState(() => initialPly ? Math.max(1, Math.min(n, initialPly)) : n);
   const [flip, setFlip] = useState(false);
   const [theme, setTheme] = useState<BoardTheme>(() => loadBoardTheme());
   const [pieceSet, setPieceSet] = useState<PieceSet>(() => loadPieceSet());

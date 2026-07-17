@@ -380,7 +380,6 @@ function passes(row: ObservationRow, filters: ExplorerFilters): boolean {
   if (filters.speed && filters.speed !== "all" && row.speed !== filters.speed) return false;
   if (filters.color && filters.color !== "all" && row.player_color !== filters.color) return false;
   if (filters.since && (!row.played_at || new Date(row.played_at) < new Date(filters.since))) return false;
-  if (filters.family && row.family !== filters.family) return false;
   return true;
 }
 
@@ -484,6 +483,8 @@ export async function getOpeningExplorer(
       family,
       games: new Set(familyRows.map((row) => row.game_id)).size,
       opportunities: familyRows.filter((row) => row.acceptable != null).length,
+      acceptable: familyRows.filter((row) => row.acceptable === true).length,
+      failures: familyRows.filter((row) => row.acceptable === false).length,
       mastery: familyMetrics.mastery,
       evidence: familyMetrics.evidence,
       status: familyMetrics.status,
@@ -543,6 +544,7 @@ export async function getOpeningExplorer(
       opponent: row.opponent_username,
       playedAt: row.played_at,
       result: row.result,
+      playerColor: row.player_color,
       moveUci: row.move_uci,
       moveSan: row.move_san,
       bestMoveUci: row.best_move_uci,

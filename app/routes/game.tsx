@@ -1,13 +1,18 @@
 import { useLoaderData, useRouteError } from "react-router";
 import { fetchGame, type GameData } from "../lib/game";
 import { GameReview } from "../components/GameReview";
+import type { Route } from "./+types/game";
 
 export function meta() {
   return [{ title: "Game review · Tempo Chess" }];
 }
 
-export async function clientLoader({ params }: { params: { id?: string } }) {
-  return { game: await fetchGame(params.id ?? "") };
+export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {
+  const ply = Number(new URL(request.url).searchParams.get("ply"));
+  return {
+    game: await fetchGame(params.id ?? ""),
+    initialPly: Number.isInteger(ply) && ply > 0 ? ply : null,
+  };
 }
 
 export function HydrateFallbackNote() {
@@ -34,6 +39,6 @@ export function ErrorBoundary() {
 }
 
 export default function GamePage() {
-  const { game } = useLoaderData() as { game: GameData };
-  return <GameReview game={game} />;
+  const { game, initialPly } = useLoaderData() as { game: GameData; initialPly: number | null };
+  return <GameReview game={game} initialPly={initialPly} />;
 }

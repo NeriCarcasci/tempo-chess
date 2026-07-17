@@ -1,8 +1,16 @@
-import { Link } from "react-router";
+import { Link, useFetcher } from "react-router";
 import type { Summary, GameLite, FormatStat, Result } from "../lib/lichess";
+import {
+  handledPercent,
+  rankOpeningFamilies,
+  reliabilityLabel,
+  type OpeningExplorerData,
+  type PlayerCoverage,
+} from "../lib/openings";
 import { pct, playTime, monthYear, relTime, signed } from "../lib/format";
 import { CountUp, RatingLine, ProportionBar, DivergingOpenings } from "./charts";
 import { Chessboard } from "./Chessboard";
+import { InfoTip } from "./InfoTip";
 
 const RESULT: Record<Result, { color: string; label: string }> = {
   win: { color: "var(--color-win)", label: "W" },
@@ -24,7 +32,14 @@ function ResultChip({ result }: { result: Result }) {
   );
 }
 
-function TopBar({ username }: { username: string }) {
+function TopBar({ username, coverage }: { username: string; coverage: PlayerCoverage | null }) {
+  const sync = useFetcher<{ ok: boolean; message: string }>();
+  const missing = coverage?.historyComplete
+    ? 0
+    : coverage
+      ? Math.max(0, coverage.availableGames - coverage.importedGames)
+      : 0;
+  const busy = sync.state !== "idle" || coverage?.activeImport != null;
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-[1160px] items-center justify-between px-6 sm:px-10">
@@ -43,7 +58,7 @@ function TopBar({ username }: { username: string }) {
             to="/openings"
             className="rounded-control border border-accent/40 bg-accent/8 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-accent transition-colors hover:bg-accent hover:text-accent-ink"
           >
-            Opening explorer
+            Opening review
           </Link>
           <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" />
@@ -51,12 +66,17 @@ function TopBar({ username }: { username: string }) {
               Lichess · <span className="text-ink-muted">{username}</span>
             </span>
           </div>
-          <button
-            type="button"
-            className="rounded-control border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:border-line-strong hover:text-ink active:translate-y-px"
-          >
-            Sync
-          </button>
+          <sync.Form method="post">
+            <input type="hidden" name="username" value={username} />
+            <button
+              className="rounded-control border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:border-line-strong hover:text-ink active:translate-y-px disabled:opacity-50"
+              disabled={busy || missing === 0}
+              title={missing ? `${missing} Lichess games have not been imported` : "All Lichess games imported"}
+            >
+              {busy ? "Syncing…" : missing ? `Sync ${missing} games` : "Up to date"}
+            </button>
+          </sync.Form>
+          {sync.data ? <span className="sr-only" aria-live="polite">{sync.data.message}</span> : null}
         </div>
       </div>
     </header>
@@ -65,12 +85,9 @@ function TopBar({ username }: { username: string }) {
 
 function Masthead({ s }: { s: Summary }) {
   const best = s.bestFormat;
-  const worst = s.toughOpenings[0];
-  const weaker = s.byColor.black.winRate <= s.byColor.white.winRate ? "Black" : "White";
   const verdict =
     `${Math.round(s.winRate * 100)}% across ${s.record.all} games.` +
-    (best ? ` Strongest at ${best.label} ${best.rating};` : "") +
-    (worst ? ` the ${family(worst.name)} and playing ${weaker} are where it slips.` : "");
+    (best ? ` Your highest current rating is ${best.label} at ${best.rating}.` : "");
 
   return (
     <header className="rise grid gap-10 border-b border-line py-12 lg:grid-cols-[1fr_16rem]">
@@ -109,6 +126,49 @@ function Masthead({ s }: { s: Summary }) {
         </div>
       </aside>
     </header>
+  );
+}
+
+function OpeningPriority({ data }: { data: OpeningExplorerData }) {
+  const selected = data.selected;
+  const opening = data.families.find((item) => item.family === selected?.family) ?? rankOpeningFamilies(data.families)[0];
+  const failure = data.failures[0];
+  if (!selected || !opening) return null;
+  const costlyRate = opening.opportunities ? opening.failures / opening.opportunities : 0;
+  const reviewLabel = opening.games < 3
+    ? "Not enough games"
+    : opening.failures >= 3 && costlyRate >= 0.15
+      ? "Needs work"
+      : "Holding up";
+  const href = `/openings?username=${encodeURIComponent(data.username)}&family=${encodeURIComponent(opening.family)}&node=${encodeURIComponent(selected.nodeKey)}`;
+  return (
+    <section className="rise border-b border-line py-12">
+      <div className="mb-5 flex items-center gap-2">
+        <h2 className="font-serif text-2xl text-ink">Your next opening review</h2>
+        <InfoTip label="opening recommendation">
+          This is based on engine-checked moves in your games. Repeated problems across different games rank above one-off mistakes.
+        </InfoTip>
+      </div>
+      <div className="grid border border-line bg-surface lg:grid-cols-[1fr_auto]">
+        <div className="p-6 sm:p-8">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="review-label">{reviewLabel}</span>
+            <span className="plain-context">{reliabilityLabel(opening.games)}</span>
+          </div>
+          <h3 className="mt-5 text-3xl font-extrabold tracking-[-0.05em] sm:text-4xl">{opening.family}</h3>
+          <p className="mt-2 text-sm text-ink-muted">{selected.variation ?? selected.name}</p>
+          <p className="mt-5 max-w-2xl leading-relaxed text-ink-muted">
+            {opening.games < 3
+              ? `You have only ${opening.games} game${opening.games === 1 ? "" : "s"} here. Review the position, but do not call it a pattern yet.`
+              : `${opening.failures} of ${opening.opportunities} checked opening moves were costly across ${opening.games} games. You handled ${handledPercent(opening)}% well.`}
+          </p>
+          {failure ? <p className="mt-3 text-sm text-ink-faint">Clearest example: {failure.moveSan} against {failure.opponent ?? "an opponent"}.</p> : null}
+        </div>
+        <div className="flex min-w-56 items-center border-t border-line p-6 lg:border-l lg:border-t-0">
+          <Link to={href} className="primary-button w-full">Review the position</Link>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -187,16 +247,20 @@ function Openings({ s }: { s: Summary }) {
   return (
     <section className="rise border-b border-line py-12">
       <div className="mb-8 flex items-baseline justify-between">
-        <h2 className="font-serif text-2xl text-ink">Openings</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-serif text-2xl text-ink">Results by opening</h2>
+          <InfoTip label="results by opening">
+            This chart shows game results only. It does not measure whether your opening moves were good. Use Opening Review for engine-checked decisions.
+          </InfoTip>
+        </div>
         <span className="cap">last 100 games</span>
       </div>
       <div className="grid gap-12 lg:grid-cols-[1fr_18rem]">
         <DivergingOpenings openings={s.openings} />
         <div className="lg:border-l lg:border-line lg:pl-10">
-          <div className="cap mb-3">Drill these first</div>
+          <div className="cap mb-3">Lowest results</div>
           <p className="mb-5 text-sm leading-relaxed text-ink-muted">
-            Your worst-scoring lines this window. These are the repertoire holes to
-            patch, in order.
+            These openings had the lowest results in this window. Results alone do not prove an opening weakness.
           </p>
           <ol className="space-y-4">
             {s.toughOpenings.slice(0, 3).map((o, i) => (
@@ -301,46 +365,51 @@ function EngineRead({ s }: { s: Summary }) {
   );
 }
 
-function Focus({ s }: { s: Summary }) {
-  const worst = s.toughOpenings[0];
+function Focus({ s, opening }: { s: Summary; opening: OpeningExplorerData | null }) {
   const weaker = s.byColor.black.winRate <= s.byColor.white.winRate ? s.byColor.black : s.byColor.white;
   const weakerLabel = weaker === s.byColor.black ? "Black" : "White";
+  const family = opening ? rankOpeningFamilies(opening.families)[0] : null;
   return (
     <div
       className="rounded-panel p-6"
       style={{ background: "color-mix(in oklch, var(--color-accent) 9%, var(--color-surface))" }}
     >
       <div className="cap mb-3" style={{ color: "var(--color-accent)" }}>
-        Start here
+        Next review
       </div>
       <p className="font-serif text-lg leading-snug text-ink">
-        You score {pct(weaker.winRate)} as {weakerLabel}
-        {worst ? `, and ${pct(worst.winRate)} in the ${family(worst.name)}` : ""}. Turn those
-        positions into puzzles and drill the line.
+        {family
+          ? `${family.family} is the clearest opening pattern in the games Tempo has checked.`
+          : `You score ${pct(weaker.winRate)} as ${weakerLabel}. Import analyzed games to learn whether the cause is in the opening.`}
       </p>
-      <button
-        type="button"
-        className="mt-5 w-full rounded-control bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink transition-transform active:translate-y-px"
-      >
-        Build puzzles from my mistakes
-      </button>
+      <Link to="/openings" className="primary-button mt-5 w-full">Open review</Link>
     </div>
   );
 }
 
-export function Dashboard({ summary }: { summary: Summary }) {
+export function Dashboard({
+  summary,
+  opening,
+  coverage,
+}: {
+  summary: Summary;
+  opening: OpeningExplorerData | null;
+  coverage: PlayerCoverage | null;
+}) {
   return (
     <div className="relative z-10 min-h-dvh">
-      <TopBar username={summary.username} />
-      <main className="mx-auto max-w-[1160px] px-6 pb-28 sm:px-10">
+      <a className="skip-link" href="#player-overview-main">Skip to player overview</a>
+      <TopBar username={summary.username} coverage={coverage} />
+      <main id="player-overview-main" className="mx-auto max-w-[1160px] px-6 pb-28 sm:px-10">
         <Masthead s={summary} />
+        {opening ? <OpeningPriority data={opening} /> : null}
         <BoardAndTrend s={summary} />
         <Openings s={summary} />
         <section className="rise grid gap-12 py-12 lg:grid-cols-[1fr_18rem]">
           <RecentGames games={summary.recent} />
           <div className="flex flex-col gap-8 lg:border-l lg:border-line lg:pl-10">
             <EngineRead s={summary} />
-            <Focus s={summary} />
+            <Focus s={summary} opening={opening} />
           </div>
         </section>
       </main>

@@ -8,6 +8,7 @@ import { normalizeProviderUsername } from "../ingest/canonical.js";
 import type { NormalizedGame, NormalizedMove } from "../ingest/types.js";
 import { classifyTaskFailure } from "./state.js";
 import { DEFAULT_ANALYSIS_BUDGET, type AnalysisTaskRecord, type ImportProgress } from "./types.js";
+import { buildPlayerOpeningGraph } from "../openings/service.js";
 
 const DEMO_EMAIL = "local@tempo.chess";
 const workerId = `local-${process.pid}-${randomUUID().slice(0, 8)}`;
@@ -60,6 +61,17 @@ export async function getImport(id: string): Promise<ImportProgress | null> {
   return rows[0] ? mapImport(rows[0] as Record<string, unknown>) : null;
 }
 
+export interface PlayerCoverage {
+  username: string;
+  availableGames: number;
+  importedGames: number;
+  analyzedGames: number;
+  activeImport: ImportProgress | null;
+  historyComplete: boolean;
+  skippedGames: number;
+  importLimit: number;
+}
+
 async function ensureAccount(username: string): Promise<{ userId: string; accountId: string }> {
   const normalized = normalizeProviderUsername(username);
   return client.begin(async (sql) => {
@@ -77,11 +89,67 @@ async function ensureAccount(username: string): Promise<{ userId: string; accoun
   });
 }
 
+export async function getLichessCoverage(username: string): Promise<PlayerCoverage> {
+  const { userId, accountId } = await ensureAccount(username);
+  const [profileResponse, storedRows, analyzedRows, activeRows, latestRows] = await Promise.all([
+    fetch(`https://lichess.org/api/user/${encodeURIComponent(username)}`, {
+      headers: { Accept: "application/json" },
+    }),
+    client`select count(*)::int as count from games
+      where user_id = ${userId} and account_id = ${accountId}`,
+    client`select count(distinct t.game_id)::int as count
+      from analysis_tasks t
+      join games g on g.id = t.game_id
+      where g.user_id = ${userId} and g.account_id = ${accountId}
+        and t.pass = 'screening' and t.status = 'completed'`,
+    client.unsafe(`${IMPORT_SELECT} where i.account_id = $1
+      and i.status in ('queued', 'ingesting', 'analyzing')
+      order by i.created_at desc limit 1`, [accountId]),
+    client.unsafe(`${IMPORT_SELECT} where i.account_id = $1
+      order by i.created_at desc limit 1`, [accountId]),
+  ]);
+  if (!profileResponse.ok) {
+    throw new Error(`Lichess profile returned ${profileResponse.status} for "${username}"`);
+  }
+  const profile = await profileResponse.json() as { count?: { all?: number } };
+  const availableGames = Number(profile.count?.all ?? 0);
+  const activeImport = activeRows[0]
+    ? mapImport(activeRows[0] as Record<string, unknown>)
+    : null;
+  const latestImport = latestRows[0]
+    ? mapImport(latestRows[0] as Record<string, unknown>)
+    : null;
+  const historyComplete = activeImport == null
+    && latestImport?.status === "completed"
+    && latestImport.requestedGames >= Math.min(availableGames, 500);
+  const skippedGames = historyComplete
+    ? Math.max(0, Math.min(availableGames, 500) - latestImport.discoveredGames)
+    : 0;
+  return {
+    username,
+    availableGames,
+    importedGames: number(storedRows[0]?.count),
+    analyzedGames: number(analyzedRows[0]?.count),
+    activeImport,
+    historyComplete,
+    skippedGames,
+    importLimit: 500,
+  };
+}
+
 export async function createLichessImport(username: string, requestedGames: number): Promise<ImportProgress> {
   const { userId, accountId } = await ensureAccount(username);
+  const active = await client.unsafe(`${IMPORT_SELECT} where i.account_id = $1
+    and i.status in ('queued', 'ingesting', 'analyzing')
+    order by i.created_at desc limit 1`, [accountId]);
+  if (active[0]) return mapImport(active[0] as Record<string, unknown>);
+  const maxPositions = Math.min(
+    50_000,
+    Math.max(DEFAULT_ANALYSIS_BUDGET.maxPositions, requestedGames * 100),
+  );
   const rows = await client`
     insert into analysis_imports (user_id, account_id, requested_games, max_positions, estimated_cost_usd)
-    values (${userId}, ${accountId}, ${requestedGames}, ${DEFAULT_ANALYSIS_BUDGET.maxPositions},
+    values (${userId}, ${accountId}, ${requestedGames}, ${maxPositions},
       ${requestedGames * 70 * DEFAULT_ANALYSIS_BUDGET.estimatedScreeningCostPerPositionUsd})
     returning id`;
   const id = String(rows[0]!.id);
@@ -220,7 +288,17 @@ async function workerLoop(): Promise<void> {
         worker_id = null, locked_at = null, completed_at = ${next === "failed" ? new Date().toISOString() : null}, updated_at = now()
         where id = ${task.id}`;
     }
-    await refreshImport(task.importId);
+    const status = await refreshImport(task.importId);
+    if (status === "completed") {
+      const account = await client`
+        select a.username
+        from analysis_imports i
+        join linked_accounts a on a.id = i.account_id
+        where i.id = ${task.importId}`;
+      if (account[0]?.username) {
+        await buildPlayerOpeningGraph(String(account[0].username));
+      }
+    }
   }
 }
 
@@ -340,8 +418,8 @@ async function deepenGame(task: AnalysisTaskRecord): Promise<Json> {
   return { positions: results, cacheHits: hits };
 }
 
-async function refreshImport(importId: string): Promise<void> {
-  await client.unsafe(`
+async function refreshImport(importId: string): Promise<ImportProgress["status"] | null> {
+  const rows = await client.unsafe(`
     update analysis_imports i set
       queued_tasks = s.queued, running_tasks = s.running, completed_tasks = s.completed, failed_tasks = s.failed,
       status = case
@@ -355,7 +433,9 @@ async function refreshImport(importId: string): Promise<void> {
       count(*) filter (where status = 'running')::int running,
       count(*) filter (where status = 'completed')::int completed,
       count(*) filter (where status = 'failed')::int failed
-      from analysis_tasks where import_id = $1) s where i.id = $1`, [importId]);
+      from analysis_tasks where import_id = $1) s where i.id = $1
+      returning i.status`, [importId]);
+  return rows[0]?.status as ImportProgress["status"] | undefined ?? null;
 }
 
 export async function recoverPipeline(): Promise<void> {

@@ -3,7 +3,14 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import { analyzeFens } from "./engine/stockfish.js";
-import { cancelImport, createLichessImport, getImport, listImports, recoverPipeline } from "./pipeline/service.js";
+import {
+  cancelImport,
+  createLichessImport,
+  getImport,
+  getLichessCoverage,
+  listImports,
+  recoverPipeline,
+} from "./pipeline/service.js";
 import {
   buildPlayerOpeningGraph,
   createOpeningDrill,
@@ -39,9 +46,27 @@ app.get("/imports/:id", async (c) => {
 
 app.post("/imports/lichess", async (c) => {
   const body = await c.req.json().catch(() => null);
-  const parsed = z.object({ username: z.string().trim().min(2).max(40), games: z.number().int().min(1).max(500).default(30) }).safeParse(body);
-  if (!parsed.success) return c.json({ error: "expected { username: string, games: 1..500 }" }, 400);
-  return c.json({ import: await createLichessImport(parsed.data.username, parsed.data.games) }, 202);
+  const parsed = z.object({
+    username: z.string().trim().min(2).max(40),
+    games: z.union([z.literal("all"), z.number().int().min(1).max(500)]).default("all"),
+  }).safeParse(body);
+  if (!parsed.success) return c.json({ error: "expected { username, games?: \"all\" | 1..500 }" }, 400);
+  const coverage = await getLichessCoverage(parsed.data.username);
+  const games = parsed.data.games === "all"
+    ? Math.min(coverage.availableGames, coverage.importLimit)
+    : parsed.data.games;
+  return c.json({
+    import: await createLichessImport(parsed.data.username, games),
+    coverage,
+  }, 202);
+});
+
+app.get("/players/:username/coverage", async (c) => {
+  try {
+    return c.json(await getLichessCoverage(c.req.param("username")));
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 404);
+  }
 });
 
 app.post("/imports/:id/cancel", async (c) => {
