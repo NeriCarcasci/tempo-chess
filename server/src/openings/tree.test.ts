@@ -29,6 +29,7 @@ function row(
     playedAt: "2026-07-01T12:00:00.000Z",
     nodeName: positionKey,
     nextNodeName: nextPositionKey,
+    openingFamily: "Test Opening",
   };
 }
 
@@ -60,6 +61,7 @@ assert.equal(tree.nodes.find((node) => node.key === "shared")!.terminalGames, 3)
 assert.equal(tree.edges.find((edge) => edge.moveSan === "e5")!.actor, "opponent");
 assert.equal(tree.edges.find((edge) => edge.moveSan === "e4")!.failures, 1);
 assert.equal(tree.nodes.find((node) => node.key === "root")!.failures, 1);
+assert.equal(tree.edges.find((edge) => edge.moveSan === "e4")!.openingLabel, "Test Opening");
 assert.equal(tree.scope, "family");
 
 const focused = focusPersonalOpeningTree(tree, "e4");
@@ -81,5 +83,11 @@ const repeated = buildPersonalOpeningTree("Repeated", [
 ])!;
 assert.equal(repeated.edges.length, 1);
 assert.equal(repeated.edges[0]!.moveSan, "e4");
+
+const ambiguous = buildPersonalOpeningTree("Mixed families", [
+  { ...row("g1", "root", "e4", 1, "e4"), openingFamily: "Sicilian Defense" },
+  { ...row("g2", "root", "e4", 1, "e4"), openingFamily: "French Defense" },
+])!;
+assert.equal(ambiguous.edges[0]!.openingLabel, null);
 
 console.log("personal opening tree tests passed");

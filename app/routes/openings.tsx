@@ -1,9 +1,10 @@
-import { Form, Link, useFetcher, useSearchParams } from "react-router";
+import { Form, Link, useFetcher, useLocation, useSearchParams } from "react-router";
 import { Chess } from "chess.js";
 import type { Route } from "./+types/openings";
 import { Chessboard } from "../components/Chessboard";
 import { InfoTip } from "../components/InfoTip";
 import { OpeningLineTree } from "../components/OpeningLineTree";
+import { openingLesson, openingSlug } from "../lib/openingContent";
 import {
   handledPercent,
   rankOpeningFamilies,
@@ -36,15 +37,23 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const coverage = await coverageResponse.json();
   if (!explorerResponse.ok) throw new Error(explorer.error ?? "Could not build your opening review.");
   if (!coverageResponse.ok) throw new Error(coverage.error ?? "Could not check your game history.");
-  if (!query.has("node") && !query.has("family")) {
-    const first = rankOpeningFamilies(explorer.families).find((family) => family.failures > 0);
-    if (first?.weakestNodeKey && explorer.selected?.nodeKey !== first.weakestNodeKey) {
-      query.set("family", first.family);
-      query.set("node", first.weakestNodeKey);
-      const selectedResponse = await fetch(`${API}/opening-explorer?${query}`);
-      const selectedData = await selectedResponse.json();
-      if (selectedResponse.ok) explorer = selectedData as OpeningExplorerData;
-    }
+  const familySlug = url.pathname.startsWith("/openings/")
+    ? url.pathname.split("/").filter(Boolean).at(-1)
+    : null;
+  if (familySlug && !query.has("family")) {
+    const matched = explorer.families.find((family) => openingSlug(family.family) === familySlug);
+    if (matched) query.set("family", matched.family);
+  }
+  if (!query.has("node") && !query.has("family") && explorer.tree) {
+    query.set("node", explorer.tree.rootKey);
+  }
+  if (
+    query.get("node") !== url.searchParams.get("node") ||
+    query.get("family") !== url.searchParams.get("family")
+  ) {
+    const selectedResponse = await fetch(`${API}/opening-explorer?${query}`);
+    const selectedData = await selectedResponse.json();
+    if (selectedResponse.ok) explorer = selectedData as OpeningExplorerData;
   }
   return {
     explorer,
@@ -208,6 +217,73 @@ function FamilyList({
   );
 }
 
+function OpeningLibrary({
+  families,
+  username,
+  activeFamily,
+}: {
+  families: OpeningFamily[];
+  username: string;
+  activeFamily: string | null;
+}) {
+  const ordered = [...families].sort((left, right) =>
+    right.games - left.games || left.family.localeCompare(right.family),
+  );
+  return (
+    <details className="opening-library">
+      <summary>
+        <span>
+          <strong>Browse your openings</strong>
+          <small>{ordered.length} opening families found in your games</small>
+        </span>
+        <span aria-hidden="true">⌄</span>
+      </summary>
+      <nav aria-label="Your opening families">
+        {ordered.map((item) => (
+          <Link
+            preventScrollReset
+            key={item.family}
+            to={`/openings/${openingSlug(item.family)}?username=${encodeURIComponent(username)}&family=${encodeURIComponent(item.family)}`}
+            className={activeFamily === item.family ? "is-active" : ""}
+          >
+            <strong>{item.family}</strong>
+            <span>{item.games} game{item.games === 1 ? "" : "s"}</span>
+          </Link>
+        ))}
+      </nav>
+    </details>
+  );
+}
+
+function OpeningTeaching({ family }: { family: string }) {
+  const lesson = openingLesson(family);
+  return (
+    <section className="opening-teaching" aria-labelledby="opening-teaching-heading">
+      <div className="opening-teaching-copy">
+        <p className="eyebrow">Opening guide</p>
+        <h2 id="opening-teaching-heading">What this opening is trying to do</h2>
+        <p>{lesson.summary}</p>
+      </div>
+      <div className="opening-lesson-grid">
+        <div>
+          <h3>Ideas to recognise</h3>
+          <ul>{lesson.ideas.map((idea) => <li key={idea}>{idea}</li>)}</ul>
+        </div>
+        <div>
+          <h3>Watch for</h3>
+          <p>{lesson.watchFor}</p>
+          {lesson.notablePlayers.length ? (
+            <>
+              <h3 className="lesson-player-heading">Players to study</h3>
+              <p>{lesson.notablePlayers.join(" · ")}</p>
+            </>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Filters({ username, params }: { username: string; params: URLSearchParams }) {
   const today = new Date();
   const since = (days: number) => {
@@ -290,7 +366,7 @@ function GameEvidence({ failure }: { failure: OpeningFailure }) {
   );
 }
 
-export default function OpeningReview({ loaderData }: Route.ComponentProps) {
+function LegacyOpeningReview({ loaderData }: Route.ComponentProps) {
   const { explorer: data, coverage } = loaderData;
   const [params] = useSearchParams();
   const practice = useFetcher<typeof clientAction>();
@@ -454,6 +530,172 @@ export default function OpeningReview({ loaderData }: Route.ComponentProps) {
           <section className="empty-opening-review">
             <h2>No opening review yet</h2>
             <p>Import your games first. Tempo needs completed engine checks before it can recommend a position.</p>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
+export default function OpeningReview({ loaderData }: Route.ComponentProps) {
+  const { explorer: data, coverage } = loaderData;
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const practice = useFetcher<typeof clientAction>();
+  const selected = data.selected;
+  const routeFamily = location.pathname.startsWith("/openings/")
+    ? params.get("family") ?? selected?.family ?? null
+    : null;
+  const primaryFailure = data.failures[0];
+  const selectedMove = data.selectedMove;
+  const preferredMove = primaryFailure
+    ? moveName(primaryFailure.fen, primaryFailure.bestMoveUci)
+    : null;
+  const decisionNode = selectedMove && data.tree
+    ? data.tree.nodes.find((node) => node.key === selectedMove.fromKey)
+    : null;
+  const selectedNode = data.tree?.nodes.find((node) =>
+    node.key === (selected?.nodeKey ?? data.tree?.rootKey),
+  );
+  const boardFen = decisionNode?.fen ?? selectedNode?.fen ??
+    primaryFailure?.fen ?? selected?.fen ?? "";
+  const practicePositionKey = selectedMove?.fromKey ?? selected?.nodeKey ?? "";
+  const selectedNodeKey = selected?.nodeKey ?? data.tree?.rootKey ?? "";
+
+  return (
+    <div className="relative z-10 min-h-dvh">
+      <a className="skip-link" href="#opening-review-main">Skip to opening explorer</a>
+      <header className="product-header">
+        <div>
+          <Link to="/" className="product-mark">Tempo <span>Chess</span></Link>
+          <nav aria-label="Primary navigation">
+            <Link to="/">Overview</Link>
+            <Link to="/openings" aria-current="page">Openings</Link>
+          </nav>
+        </div>
+      </header>
+
+      <main id="opening-review-main" className="opening-review-shell">
+        <header className="opening-review-header">
+          <div>
+            <p className="eyebrow">{routeFamily ? "Opening workspace" : "Your repertoire"}</p>
+            <h1>{routeFamily ?? "Your opening map"}</h1>
+            <p>
+              {routeFamily
+                ? `Explore every ${routeFamily} position from your games, learn the plans, and open the exact evidence when a move needs work.`
+                : "Start at move one and follow the paths you actually played. Named branches open into a focused learning workspace."}
+            </p>
+          </div>
+          {routeFamily
+            ? <Link to={`/openings?username=${encodeURIComponent(data.username)}`} className="text-link">All openings</Link>
+            : <Link to="/" className="text-link">Back to overview</Link>}
+        </header>
+
+        <CoverageBar coverage={coverage} username={data.username} />
+        <Filters username={data.username} params={params} />
+        <OpeningLibrary
+          families={data.families}
+          username={data.username}
+          activeFamily={routeFamily}
+        />
+
+        {data.tree && selectedNodeKey ? (
+          <section className="opening-recommendation" aria-label="Opening explorer">
+            {routeFamily ? <OpeningTeaching family={routeFamily} /> : null}
+
+            <OpeningLineTree
+              tree={data.tree}
+              selectedNodeKey={selectedNodeKey}
+              selectedMove={selectedMove}
+              params={params}
+              focusFamily={routeFamily}
+            />
+
+            <details className="position-board-disclosure">
+              <summary>
+                <span>
+                  <strong>Show position board</strong>
+                  <small>The board follows the selected branch</small>
+                </span>
+                <span aria-hidden="true">⌄</span>
+              </summary>
+              <div className="opening-position-review">
+                <div className="opening-board-wrap">
+                  <Chessboard
+                    fen={boardFen}
+                    flip={primaryFailure?.playerColor === "black" ||
+                      (!primaryFailure && params.get("color") === "black")}
+                  />
+                </div>
+                <div className="position-explanation">
+                  <p className="eyebrow">{selectedMove ? "Selected branch" : "Starting position"}</p>
+                  {selectedMove ? (
+                    <>
+                      <h3>
+                        {selectedMove.actor === "opponent"
+                          ? `Your opponent played ${selectedMove.moveSan}.`
+                          : selectedMove.actor === "mixed"
+                            ? `${selectedMove.moveSan} appeared for both colours.`
+                            : `You played ${selectedMove.moveSan}.`}
+                      </h3>
+                      <p>
+                        {selectedMove.games} of your {data.tree.games} imported games
+                        used this branch. Among games that reached the previous
+                        position, it was chosen {selectedMove.sharePercent}% of the time.
+                      </p>
+                      {primaryFailure ? (
+                        <p>
+                          {preferredMove
+                            ? `In the flagged game, the engine preferred ${preferredMove}.`
+                            : "Open the flagged game to compare the engine alternatives."}
+                        </p>
+                      ) : null}
+                      <div className="position-actions">
+                        {primaryFailure ? (
+                          <Link to={`/game/${primaryFailure.platformGameId}?ply=${primaryFailure.ply}`} className="primary-button">
+                            Review game
+                          </Link>
+                        ) : null}
+                        <practice.Form method="post">
+                          <input type="hidden" name="intent" value="drill" />
+                          <input type="hidden" name="username" value={data.username} />
+                          <input type="hidden" name="positionKey" value={practicePositionKey} />
+                          <button className="secondary-button" disabled={practice.state !== "idle"}>
+                            {practice.state === "idle" ? "Practice from here" : "Adding…"}
+                          </button>
+                        </practice.Form>
+                      </div>
+                      {practice.data ? <p className="action-message" aria-live="polite">{practice.data.message}</p> : null}
+                    </>
+                  ) : (
+                    <>
+                      <h3>Move one.</h3>
+                      <p>Choose a branch in the map to update this board.</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </details>
+
+            {routeFamily ? (
+              <section className="opening-evidence" aria-labelledby="evidence-heading">
+                <div className="opening-section-heading">
+                  <h3 id="evidence-heading">Games from this exact decision</h3>
+                  <InfoTip label="supporting games">
+                    A game appears here only when you made the selected move and the
+                    screening engine measured a meaningful evaluation loss.
+                  </InfoTip>
+                </div>
+                {data.failures.length
+                  ? <div className="evidence-list">{data.failures.map((failure) => <GameEvidence key={`${failure.gameId}-${failure.ply}`} failure={failure} />)}</div>
+                  : <p className="empty-evidence">No costly move was flagged at this exact decision. Continue along another branch to inspect it.</p>}
+              </section>
+            ) : null}
+          </section>
+        ) : (
+          <section className="empty-opening-review">
+            <h2>No opening map yet</h2>
+            <p>Import and analyse games first so Tempo can build your position tree.</p>
           </section>
         )}
       </main>

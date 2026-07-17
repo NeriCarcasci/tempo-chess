@@ -1,19 +1,28 @@
 import { useMemo } from "react";
 import { Link } from "react-router";
 import { InfoTip } from "./InfoTip";
+import { openingSlug } from "../lib/openingContent";
 import type {
   OpeningTreeEdge,
   OpeningTreeNode,
   PersonalOpeningTree,
 } from "../lib/openings";
 
-function hrefForEdge(params: URLSearchParams, family: string, edge: OpeningTreeEdge): string {
+function hrefForEdge(
+  params: URLSearchParams,
+  family: string,
+  edge: OpeningTreeEdge,
+): string {
   const next = new URLSearchParams(params);
-  next.set("family", family);
+  const destinationFamily = edge.openingLabel ?? family;
+  next.set("family", destinationFamily);
   next.set("node", edge.toKey);
   next.set("from", edge.fromKey);
   next.set("move", edge.moveUci);
-  return `/openings?${next}`;
+  const pathname = edge.openingLabel
+    ? `/openings/${openingSlug(edge.openingLabel)}`
+    : typeof window === "undefined" ? "/openings" : window.location.pathname;
+  return `${pathname}?${next}`;
 }
 
 function hrefForRoot(params: URLSearchParams, tree: PersonalOpeningTree): string {
@@ -22,7 +31,8 @@ function hrefForRoot(params: URLSearchParams, tree: PersonalOpeningTree): string
   next.set("node", tree.rootKey);
   next.delete("from");
   next.delete("move");
-  return `/openings?${next}`;
+  const pathname = typeof window === "undefined" ? "/openings" : window.location.pathname;
+  return `${pathname}?${next}`;
 }
 
 function findPath(tree: PersonalOpeningTree, targetKey: string): OpeningTreeEdge[] {
@@ -63,8 +73,7 @@ function sideToMove(node: OpeningTreeNode): "white" | "black" {
 }
 
 function moveLabel(node: OpeningTreeNode): string {
-  const move = Math.floor(node.ply / 2) + 1;
-  return `Move ${move}`;
+  return `Move ${Math.floor(node.ply / 2) + 1}`;
 }
 
 function moveNotation(node: OpeningTreeNode): string {
@@ -94,11 +103,13 @@ export function OpeningLineTree({
   selectedNodeKey,
   selectedMove,
   params,
+  focusFamily,
 }: {
   tree: PersonalOpeningTree;
   selectedNodeKey: string;
   selectedMove: OpeningTreeEdge | null;
   params: URLSearchParams;
+  focusFamily?: string | null;
 }) {
   const nodeByKey = useMemo(
     () => new Map(tree.nodes.map((node) => [node.key, node])),
@@ -139,28 +150,25 @@ export function OpeningLineTree({
     <section className="opening-tree-panel" aria-labelledby="opening-tree-heading">
       <header className="opening-tree-header">
         <div>
-          <p className="eyebrow">
-            {tree.scope === "player" ? "Player position tree" : "Personal opening tree"}
-          </p>
+          <p className="eyebrow">{focusFamily ? "Your games in this opening" : "Your opening map"}</p>
           <div className="flex items-center gap-2">
-            <h3 id="opening-tree-heading">
-              {tree.scope === "player"
-                ? "Your complete opening map"
-                : `Your ${tree.family} lines`}
-            </h3>
+            <h3 id="opening-tree-heading">{focusFamily ?? "Start from move one"}</h3>
             <InfoTip label="personal opening tree">
-              Every branch comes from your imported games. The graph is position-based,
-              so games that reach the same position are merged even when their provider
-              gives them different opening names.
+              Every branch is built from your imported games. Games that reach the
+              same position are merged even if the sites gave them different names.
             </InfoTip>
           </div>
           <p>
-            {tree.games} imported game{tree.games === 1 ? "" : "s"} · reviewing{" "}
-            {tree.family} · follow the line downward or choose an alternative.
+            Follow a move to see exactly how the sample narrows from your full
+            {` ${tree.games}`}-game repertoire.
           </p>
         </div>
-        <Link to={hrefForRoot(params, tree)} className="tree-root-link">
-          Return to root
+        <Link
+          preventScrollReset
+          to={hrefForRoot(params, tree)}
+          className="tree-root-link"
+        >
+          Return to move one
         </Link>
       </header>
 
@@ -175,17 +183,30 @@ export function OpeningLineTree({
         <div className="tree-origin">
           <span className="tree-origin-mark" aria-hidden="true" />
           <strong>Starting position</strong>
-          <small>{tree.games} games</small>
+          <small>{tree.games} imported games</small>
         </div>
 
         {levels.map((level) => {
           const side = sideToMove(level.node);
+          const repertoireShare = tree.games
+            ? Math.round((level.node.games / tree.games) * 100)
+            : 0;
           return (
             <section
               className={`opening-tree-level is-${side}`}
               key={level.node.key}
               aria-label={`${moveLabel(level.node)}, ${side} to move`}
             >
+              <div className="tree-sample-funnel">
+                <span>
+                  <strong>{level.node.games} of {tree.games}</strong> games reached here
+                  {level.node.games === tree.games ? "" : ` · ${repertoireShare}% of repertoire`}
+                </span>
+                <span className="tree-sample-track" aria-hidden="true">
+                  <i style={{ width: `${repertoireShare}%` }} />
+                </span>
+              </div>
+
               {level.branches.length ? (
                 <div
                   className={[
@@ -206,6 +227,7 @@ export function OpeningLineTree({
                         key={edge.id}
                       >
                         <Link
+                          preventScrollReset
                           to={hrefForEdge(params, tree.family, edge)}
                           className={[
                             "graph-move-node",
@@ -216,7 +238,7 @@ export function OpeningLineTree({
                             selected ? "is-selected" : "",
                           ].filter(Boolean).join(" ")}
                           aria-current={selected ? "step" : undefined}
-                          aria-label={`${edge.moveSan}, ${side} move by ${actorLabel(edge.actor)}, ${edge.games} game${edge.games === 1 ? "" : "s"}, ${edge.sharePercent}% from here, ${finding}`}
+                          aria-label={`${edge.moveSan}, ${side} move by ${actorLabel(edge.actor)}, ${edge.games} of ${tree.games} games, ${edge.sharePercent}% of games from this position, ${finding}`}
                         >
                           <span className="move-node-topline">
                             <span className="move-side">{moveNotation(level.node)}</span>
@@ -233,8 +255,11 @@ export function OpeningLineTree({
                               </i>
                             ) : null}
                           </span>
+                          {edge.openingLabel ? (
+                            <span className="move-opening-label">{edge.openingLabel}</span>
+                          ) : null}
                           <small>
-                            {edge.games} game{edge.games === 1 ? "" : "s"}
+                            {edge.games} of {tree.games} games
                             <span aria-hidden="true"> · </span>
                             {edge.sharePercent}% from here
                           </small>
@@ -244,7 +269,7 @@ export function OpeningLineTree({
                   })}
                 </div>
               ) : (
-                <div className="tree-line-end">No further moves in your imported games</div>
+                <div className="tree-line-end">No later move is stored for these games</div>
               )}
             </section>
           );
@@ -252,8 +277,9 @@ export function OpeningLineTree({
       </div>
 
       <p className="tree-instruction">
-        The orange route is the line you are viewing. A ↗ marks the same position
-        reached through a different move order.
+        The first count is always against your complete imported repertoire. The
+        percentage is local to the position above it. A ↗ means the same position
+        was reached through another move order.
       </p>
     </section>
   );

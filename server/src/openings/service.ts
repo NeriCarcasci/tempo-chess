@@ -590,6 +590,7 @@ export async function getOpeningExplorer(
         playedAt: row.played_at,
         nodeName: row.node_name,
         nextNodeName: row.next_node_name,
+        openingFamily: row.family,
       })), "player")
     : null;
   const tree = fullTree

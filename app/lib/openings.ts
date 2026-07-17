@@ -89,6 +89,7 @@ export interface OpeningTreeEdge {
   lastPlayedAt: string | null;
   savedMove: boolean;
   catalogueMove: boolean;
+  openingLabel: string | null;
 }
 
 export interface PersonalOpeningTree {

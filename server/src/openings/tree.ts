@@ -14,6 +14,7 @@ export interface TreeObservation {
   playedAt: string | Date | null;
   nodeName: string | null;
   nextNodeName: string | null;
+  openingFamily: string | null;
 }
 
 export interface PersonalOpeningTreeNode {
@@ -44,6 +45,7 @@ export interface PersonalOpeningTreeEdge {
   lastPlayedAt: string | null;
   savedMove: boolean;
   catalogueMove: boolean;
+  openingLabel: string | null;
 }
 
 export interface PersonalOpeningTree {
@@ -82,6 +84,7 @@ interface EdgeAccumulator {
   lastPlayedAt: Date | null;
   savedMove: boolean;
   catalogueMove: boolean;
+  openingFamilies: Map<string, number>;
 }
 
 function latest(left: Date | null, value: string | Date | null): Date | null {
@@ -167,6 +170,7 @@ export function buildPersonalOpeningTree(
       lastPlayedAt: null,
       savedMove: false,
       catalogueMove: false,
+      openingFamilies: new Map<string, number>(),
     };
     edge.games.add(row.gameId);
     (row.actorIsPlayer ? edge.playerGames : edge.opponentGames).add(row.gameId);
@@ -180,6 +184,12 @@ export function buildPersonalOpeningTree(
       }
     }
     edge.lastPlayedAt = latest(edge.lastPlayedAt, row.playedAt);
+    if (row.openingFamily && row.openingFamily !== "Unclassified") {
+      edge.openingFamilies.set(
+        row.openingFamily,
+        (edge.openingFamilies.get(row.openingFamily) ?? 0) + 1,
+      );
+    }
     edge.savedMove ||= row.acceptableReason === "saved_repertoire_move";
     edge.catalogueMove ||= row.acceptableReason === "catalogue_move";
     edges.set(id, edge);
@@ -194,6 +204,12 @@ export function buildPersonalOpeningTree(
       : edge.playerGames.size
         ? "player"
         : "opponent";
+    const [dominantFamily, dominantCount] = [...edge.openingFamilies.entries()]
+      .sort((left, right) => right[1] - left[1])[0] ?? [null, 0];
+    const openingLabel = dominantFamily &&
+      dominantCount >= Math.max(2, Math.ceil(edge.games.size * 0.7))
+      ? dominantFamily
+      : null;
     return {
       id,
       fromKey: edge.fromKey,
@@ -210,6 +226,7 @@ export function buildPersonalOpeningTree(
       lastPlayedAt: edge.lastPlayedAt?.toISOString() ?? null,
       savedMove: edge.savedMove,
       catalogueMove: edge.catalogueMove,
+      openingLabel,
     } satisfies PersonalOpeningTreeEdge;
   }).sort((left, right) =>
     nodes.get(left.fromKey)!.ply - nodes.get(right.fromKey)!.ply ||
