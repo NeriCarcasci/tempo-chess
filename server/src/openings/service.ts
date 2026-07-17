@@ -5,6 +5,7 @@ import {
   calculateMastery,
   canonicalPositionKey,
   classifyOpeningDecision,
+  gameOpeningIdentity,
   splitOpeningName,
   type MasteryMetrics,
 } from "./model.js";
@@ -230,28 +231,14 @@ export async function buildPlayerOpeningGraph(username: string): Promise<{
   const observedNodes = new Map<string, Record<string, unknown>>();
   const observedEdges = new Map<string, Record<string, unknown>>();
   const observations: Record<string, unknown>[] = [];
-  const identityByGame = new Map<string, { eco: string | null; name: string; family: string; variation: string | null }>();
 
   for (const raw of moveRows as unknown as GameMoveRow[]) {
     const fromKey = canonicalPositionKey(String(raw.fen_before));
     const toKey = canonicalPositionKey(String(raw.fen_after));
-    const named = catalogue.get(fromKey) ?? catalogue.get(toKey);
-    const previous = identityByGame.get(String(raw.game_id));
-    const fallback = splitOpeningName(String(raw.game_opening_name ?? "Unclassified"));
-    const identity = named?.opening_name
-      ? {
-          eco: named.eco == null ? null : String(named.eco),
-          name: String(named.opening_name),
-          family: String(named.family ?? fallback.family),
-          variation: named.variation == null ? null : String(named.variation),
-        }
-      : previous ?? {
-          eco: raw.eco,
-          name: String(raw.game_opening_name ?? fallback.family),
-          family: fallback.family,
-          variation: fallback.variation,
-        };
-    identityByGame.set(String(raw.game_id), identity);
+    // Attribute every decision to the game's final provider opening. Shared
+    // early positions belong to many openings and cannot safely supply family
+    // identity from a single catalogue row.
+    const identity = gameOpeningIdentity(raw.eco, raw.game_opening_name);
 
     const beforeEval = evaluations.get(String(raw.fen_before))?.evalCp;
     const afterEval = evaluations.get(String(raw.fen_after))?.evalCp;
@@ -360,6 +347,15 @@ export async function buildPlayerOpeningGraph(username: string): Promise<{
           next_position_key = excluded.next_position_key,
           move_uci = excluded.move_uci,
           move_san = excluded.move_san,
+          actor_is_player = excluded.actor_is_player,
+          player_color = excluded.player_color,
+          platform = excluded.platform,
+          speed = excluded.speed,
+          played_at = excluded.played_at,
+          result = excluded.result,
+          eco = excluded.eco,
+          opening_name = excluded.opening_name,
+          family = excluded.family,
           acceptable = excluded.acceptable,
           acceptable_reason = excluded.acceptable_reason,
           evaluation_loss_cp = excluded.evaluation_loss_cp,
@@ -469,7 +465,7 @@ export async function getOpeningExplorer(
     .sort(weaknessOrder);
 
   const familyMap = new Map<string, ObservationRow[]>();
-  for (const row of filtered.filter((item) => item.actor_is_player && item.acceptable != null)) {
+  for (const row of filtered.filter((item) => item.actor_is_player)) {
     const family = String(row.family ?? "Unclassified");
     const list = familyMap.get(family) ?? [];
     list.push(row);
@@ -563,7 +559,7 @@ export async function getOpeningExplorer(
       observations: filtered.length,
       scoredDecisions: filtered.filter((row) => row.actor_is_player && row.acceptable != null).length,
     },
-    families: families.slice(0, 20),
+    families,
     selected,
     children,
     failures,

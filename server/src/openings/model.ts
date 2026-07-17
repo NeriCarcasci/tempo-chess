@@ -1,4 +1,4 @@
-export const OPENING_CLASSIFIER_VERSION = 2 as const;
+export const OPENING_CLASSIFIER_VERSION = 3 as const;
 export const OPENING_PRIOR = Object.freeze({ alpha: 4, beta: 2 });
 
 export type FindingStatus =
@@ -146,5 +146,23 @@ export function splitOpeningName(name: string | null | undefined): {
   return {
     family: family.trim(),
     variation: rest.length ? rest.join(":").trim() : null,
+  };
+}
+
+export function gameOpeningIdentity(
+  eco: string | null,
+  openingName: string | null,
+): {
+  eco: string | null;
+  name: string;
+  family: string;
+  variation: string | null;
+} {
+  const parsed = splitOpeningName(openingName);
+  return {
+    eco,
+    name: openingName?.trim() || parsed.family,
+    family: parsed.family,
+    variation: parsed.variation,
   };
 }

@@ -35,7 +35,7 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const coverage = await coverageResponse.json();
   if (!explorerResponse.ok) throw new Error(explorer.error ?? "Could not build your opening review.");
   if (!coverageResponse.ok) throw new Error(coverage.error ?? "Could not check your game history.");
-  if (!query.has("node")) {
+  if (!query.has("node") && !query.has("family")) {
     const first = rankOpeningFamilies(explorer.families).find((family) => family.failures > 0);
     if (first?.weakestNodeKey && explorer.selected?.nodeKey !== first.weakestNodeKey) {
       query.set("family", first.family);
@@ -157,21 +157,29 @@ function FamilyList({
   families,
   selectedFamily,
   params,
+  sampleGames,
 }: {
   families: OpeningFamily[];
   selectedFamily: string;
   params: URLSearchParams;
+  sampleGames: number;
 }) {
+  const priorities = rankOpeningFamilies(families)
+    .filter((family) => family.failures > 0)
+    .slice(0, 10);
   return (
     <aside className="opening-review-list" aria-labelledby="opening-list-heading">
       <div className="opening-section-heading">
-        <h2 id="opening-list-heading">Openings to review</h2>
+        <div>
+          <h2 id="opening-list-heading">Priority openings</h2>
+          <p>Ranked from all {sampleGames} imported games.</p>
+        </div>
         <InfoTip label="opening order">
-          Openings with repeated costly decisions appear first. A single bad game is kept below patterns seen across several games.
+          This is a priority list, not your complete opening history. Openings with repeated costly decisions appear first; openings without a flagged mistake are not shown here.
         </InfoTip>
       </div>
       <nav aria-label="Opening families">
-        {rankOpeningFamilies(families).filter((family) => family.failures > 0).slice(0, 10).map((family) => (
+        {priorities.map((family) => (
           <Link
             key={family.family}
             to={queryHref(params, { family: family.family, node: family.weakestNodeKey })}
@@ -187,6 +195,9 @@ function FamilyList({
           </Link>
         ))}
       </nav>
+      <p className="opening-list-footnote">
+        Showing {priorities.length} opening{priorities.length === 1 ? "" : "s"} with flagged moves. No games are excluded from the report.
+      </p>
     </aside>
   );
 }
@@ -310,7 +321,12 @@ export default function OpeningReview({ loaderData }: Route.ComponentProps) {
 
         {selected && family ? (
           <div className="opening-review-layout">
-            <FamilyList families={data.families} selectedFamily={selected.family} params={params} />
+            <FamilyList
+              families={data.families}
+              selectedFamily={selected.family}
+              params={params}
+              sampleGames={data.sample.games}
+            />
 
             <section className="opening-recommendation" aria-labelledby="recommendation-heading">
               <div className="recommendation-heading-row">

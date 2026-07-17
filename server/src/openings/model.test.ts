@@ -3,6 +3,7 @@ import {
   calculateMastery,
   canonicalPositionKey,
   classifyOpeningDecision,
+  gameOpeningIdentity,
   splitOpeningName,
 } from "./model.js";
 
@@ -31,6 +32,12 @@ assert.ok(established.evidence > tiny.evidence);
 assert.equal(established.averageLossCp, 119);
 
 assert.deepEqual(splitOpeningName("Scotch Game: Schmidt Variation"), {
+  family: "Scotch Game",
+  variation: "Schmidt Variation",
+});
+assert.deepEqual(gameOpeningIdentity("C45", "Scotch Game: Schmidt Variation"), {
+  eco: "C45",
+  name: "Scotch Game: Schmidt Variation",
   family: "Scotch Game",
   variation: "Schmidt Variation",
 });

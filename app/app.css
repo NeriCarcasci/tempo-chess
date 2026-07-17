@@ -299,6 +299,9 @@
   .opening-section-heading { display: flex; align-items: center; gap: 0.55rem; }
   .opening-section-heading h2,
   .opening-section-heading h3 { font-size: 0.82rem; font-weight: 800; }
+  .opening-section-heading p {
+    margin-top: 0.28rem; color: var(--color-ink-faint); font-size: 0.68rem; line-height: 1.45;
+  }
   .opening-review-list nav { margin-top: 1rem; border-top: 1px solid var(--color-line); }
   .opening-review-link {
     display: flex; min-width: 0; align-items: center; justify-content: space-between;
@@ -313,6 +316,9 @@
   .opening-review-link small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .opening-review-link strong { font-size: 0.82rem; }
   .opening-review-link small { margin-top: 0.35rem; color: var(--color-ink-faint); font-size: 0.7rem; }
+  .opening-list-footnote {
+    margin-top: 0.9rem; color: var(--color-ink-faint); font-size: 0.68rem; line-height: 1.55;
+  }
   .opening-recommendation { min-width: 0; }
   .recommendation-heading-row { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
   .recommendation-heading-row h2 {
