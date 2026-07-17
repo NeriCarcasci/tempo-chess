@@ -366,82 +366,142 @@
     padding: 0.75rem 0; color: var(--color-ink-faint); font-size: 0.67rem;
   }
   .tree-legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
-  .tree-key { display: inline-block; width: 0.5rem; height: 0.5rem; background: var(--color-line-strong); }
-  .tree-key-player { background: var(--color-accent); }
-  .tree-key-opponent { background: var(--color-ink-faint); }
+  .tree-key {
+    display: inline-block; width: 0.6rem; height: 0.6rem;
+    border: 1px solid var(--color-line-strong); background: var(--color-surface-strong);
+  }
+  .tree-key-white { border-color: #d7d9dc; background: #d7d9dc; }
+  .tree-key-black { border-color: #737984; background: #171a20; }
   .tree-key-costly { background: var(--color-loss); }
   .tree-key-path {
     border: 1px solid var(--color-accent); background: transparent;
   }
-  .opening-graph-viewport {
-    overflow-x: auto; border-top: 1px solid var(--color-line);
+  .opening-tree-flow {
+    position: relative; border-top: 1px solid var(--color-line);
+    padding: 1.5rem clamp(0rem, 2.5vw, 2rem) 0;
     background:
-      linear-gradient(var(--color-line) 1px, transparent 1px) 0 0 / 100% 34px,
-      color-mix(in oklch, var(--color-bg) 85%, transparent);
-    scrollbar-color: var(--color-line-strong) transparent; scrollbar-width: thin;
-    overscroll-behavior-inline: contain;
+      linear-gradient(90deg, transparent calc(50% - 0.5px), color-mix(in oklch, var(--color-line) 72%, transparent) 50%, transparent calc(50% + 0.5px)),
+      color-mix(in oklch, var(--color-bg) 82%, transparent);
   }
-  .opening-graph-viewport:focus-visible { outline-offset: -2px; }
-  .opening-graph-canvas { position: relative; min-width: 100%; }
-  .opening-graph-lines { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .graph-root-dot { fill: var(--color-accent); }
-  .graph-connector {
-    fill: none; stroke: var(--color-line-strong); stroke-width: 1;
-    vector-effect: non-scaling-stroke;
+  .tree-origin {
+    position: relative; z-index: 1; display: grid; width: max-content;
+    min-width: 10rem; margin: 0 auto 2.5rem; justify-items: center;
+    border: 1px solid var(--color-line-strong); background: var(--color-surface-strong);
+    padding: 0.7rem 1rem;
   }
-  .graph-connector.is-on-path { stroke: var(--color-accent); stroke-width: 2; }
-  .graph-connector.has-failure.is-on-path { stroke: var(--color-loss); }
-  .graph-root-label,
-  .graph-depth-label,
-  .graph-terminal-label {
-    position: absolute; color: var(--color-ink-faint);
-    font: 650 0.58rem/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  .tree-origin-mark {
+    position: absolute; bottom: -0.35rem; width: 0.6rem; height: 0.6rem;
+    border: 2px solid var(--color-bg); background: var(--color-accent);
+    transform: rotate(45deg);
+  }
+  .tree-origin strong { color: var(--color-ink); font-size: 0.72rem; }
+  .tree-origin small {
+    margin-top: 0.2rem; color: var(--color-ink-faint);
+    font: 600 0.58rem/1 var(--font-mono);
+  }
+  .opening-tree-level {
+    position: relative; margin-bottom: 2.75rem;
+  }
+  .tree-level-heading {
+    position: relative; z-index: 2; display: grid; width: max-content;
+    min-width: 12rem; margin: 0 auto 1.2rem; grid-template-columns: auto auto;
+    align-items: baseline; gap: 0.2rem 0.65rem;
+    border: 1px solid var(--color-line); background: var(--color-bg);
+    padding: 0.55rem 0.7rem;
+  }
+  .tree-level-heading span {
+    color: var(--color-ink-faint); font: 650 0.58rem/1 var(--font-mono);
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .tree-level-heading strong {
+    color: var(--color-ink); font-size: 0.69rem; text-transform: capitalize;
+  }
+  .tree-level-heading small {
+    grid-column: 1 / -1; color: var(--color-ink-faint);
+    font: 550 0.56rem/1 var(--font-mono); font-variant-numeric: tabular-nums;
+  }
+  .tree-branch-row {
+    position: relative; z-index: 1; display: flex; align-items: stretch;
+    justify-content: center; gap: clamp(0.55rem, 1.5vw, 1rem);
+  }
+  .tree-branch-row::before {
+    position: absolute; top: -1.2rem; left: max(6.5rem, 8%); right: max(6.5rem, 8%);
+    height: 1.2rem; border-top: 1px solid var(--color-line-strong);
+    border-inline: 1px solid var(--color-line-strong); content: "";
+  }
+  .tree-branch-row.is-single::before {
+    left: 50%; right: auto; width: 0; border-right: 0;
+  }
+  .tree-branch {
+    position: relative; display: flex; min-width: 0; flex: 1 1 9rem;
+    max-width: 12rem; justify-content: center;
+  }
+  .tree-branch::before {
+    position: absolute; top: -1.2rem; left: 50%; height: 1.2rem;
+    border-left: 1px solid var(--color-line-strong); content: "";
+  }
+  .tree-branch.is-on-path::before { border-color: var(--color-accent); border-left-width: 2px; }
+  .graph-move-node {
+    position: relative; display: grid; width: 100%; min-height: 6.5rem;
+    align-content: space-between; border: 1px solid var(--color-line-strong);
+    padding: 0.7rem 0.75rem; touch-action: manipulation;
+    box-shadow: 0 8px 22px rgb(0 0 0 / 0.18);
+  }
+  .graph-move-node.is-white {
+    border-color: #d7d9dc; background: #d7d9dc; color: #12151a;
+  }
+  .graph-move-node.is-black {
+    border-color: #4c515b; background: #15181e; color: #f3f4f5;
+  }
+  .graph-move-node::after {
+    position: absolute; inset: auto 0 0; height: 2px;
+    background: transparent; content: "";
+  }
+  .graph-move-node.is-player::after { background: var(--color-accent); }
+  .graph-move-node.has-failure::after { background: var(--color-loss); }
+  .move-node-topline {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  }
+  .move-side,
+  .move-owner {
+    font: 750 0.53rem/1 var(--font-mono); letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .is-white .move-side { color: #252a32; }
+  .is-white .move-owner { color: #626873; }
+  .is-black .move-side { color: #f3f4f5; }
+  .is-black .move-owner { color: #858c98; }
+  .move-node-main {
+    display: flex; min-width: 0; align-items: center; gap: 0.4rem; margin: 0.55rem 0;
+  }
+  .graph-move-node strong {
+    overflow: hidden; color: currentColor; font-size: 1.05rem; font-weight: 850;
+    letter-spacing: -0.025em; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .graph-move-node b { color: var(--color-accent); font-size: 0.7rem; }
+  .graph-move-node small {
+    color: currentColor; font: 550 0.56rem/1.25 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    opacity: 0.6;
+  }
+  .graph-move-node i {
+    margin-left: auto; background: var(--color-loss); padding: 0.25rem 0.35rem;
+    color: #fff; font: 800 0.5rem/1 var(--font-mono); font-style: normal;
     white-space: nowrap;
   }
-  .graph-root-label { left: 8px; }
-  .graph-depth-label {
-    display: flex; width: 132px; align-items: baseline; justify-content: space-between;
-    letter-spacing: 0.03em; text-transform: uppercase;
-  }
-  .graph-depth-label small { font: 500 0.54rem/1 var(--font-mono); letter-spacing: 0; text-transform: none; }
-  .graph-terminal-label { width: 132px; text-align: center; }
-  .graph-move-node {
-    position: absolute; display: grid; grid-template-columns: 1fr auto;
-    grid-template-rows: 1fr auto; align-items: center; gap: 0 0.45rem;
-    border: 1px solid var(--color-line-strong); background: var(--color-bg);
-    padding: 0.55rem 0.65rem; color: var(--color-ink-muted);
-    box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
-    touch-action: manipulation;
-  }
-  .graph-move-node::before {
-    position: absolute; inset: 0 auto 0 0; width: 2px;
-    background: var(--color-ink-faint); content: "";
-  }
-  .graph-move-node.is-player::before,
-  .graph-move-node.is-mixed::before { background: var(--color-accent); }
-  .graph-move-node.has-failure::before { background: var(--color-loss); }
-  .graph-move-node > span { display: flex; min-width: 0; align-items: center; gap: 0.35rem; }
-  .graph-move-node strong {
-    overflow: hidden; color: var(--color-ink); font-size: 0.82rem;
-    text-overflow: ellipsis; white-space: nowrap;
-  }
-  .graph-move-node b { color: var(--color-accent); font-size: 0.64rem; }
-  .graph-move-node small {
-    color: var(--color-ink-faint); font: 550 0.57rem/1 var(--font-mono);
-    font-variant-numeric: tabular-nums;
-  }
-  .graph-move-node > i {
-    display: grid; width: 1.15rem; height: 1.15rem; place-items: center;
-    background: var(--color-loss); color: var(--color-bg);
-    font: 800 0.56rem/1 var(--font-mono); font-style: normal;
-  }
-  .graph-move-node:hover,
-  .graph-move-node.is-on-path { border-color: var(--color-accent); background: var(--color-surface-strong); }
+  .graph-move-node:hover { transform: translateY(-2px); }
+  .graph-move-node.is-on-path { border-color: var(--color-accent); }
   .graph-move-node.has-failure.is-on-path { border-color: var(--color-loss); }
   .graph-move-node.is-selected {
     outline: 2px solid var(--color-accent); outline-offset: 2px;
   }
   .graph-move-node.has-failure.is-selected { outline-color: var(--color-loss); }
+  .tree-line-end {
+    position: relative; z-index: 1; width: max-content; max-width: 100%;
+    margin: 0 auto; border: 1px dashed var(--color-line-strong);
+    background: var(--color-bg); padding: 0.7rem 1rem;
+    color: var(--color-ink-faint); font-size: 0.68rem;
+  }
   .tree-instruction {
     border-top: 1px solid var(--color-line); padding: 0.7rem 0;
     color: var(--color-ink-faint); font-size: 0.65rem;
@@ -551,6 +611,26 @@
   .opening-review-link { min-width: 14rem; border: 1px solid var(--color-line); }
   .opening-tree-header { display: block; }
   .tree-root-link { display: inline-block; margin-top: 0.9rem; }
+  .opening-tree-flow { padding-inline: 0; }
+  .tree-branch-row {
+    display: grid; width: 100%; max-width: 20rem; margin-inline: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem;
+  }
+  .tree-branch-row::before,
+  .tree-branch::before { display: none; }
+  .tree-branch {
+    width: 100%; max-width: none;
+  }
+  .tree-branch.is-on-path {
+    grid-column: 1 / -1; width: calc(50% - 0.325rem); justify-self: center;
+    order: -1;
+  }
+  .tree-branch.is-on-path::before {
+    display: block; top: -1.2rem; height: 1.2rem;
+  }
+  .tree-branch-row.is-single { display: flex; }
+  .tree-branch-row.is-single .tree-branch.is-on-path { width: min(100%, 10rem); }
+  .graph-move-node { min-height: 6rem; }
   .opening-position-review { grid-template-columns: 1fr; }
   .opening-board-wrap { border-right: 0; border-bottom: 1px solid var(--color-line); }
   .position-explanation h3 { font-size: 1.6rem; }

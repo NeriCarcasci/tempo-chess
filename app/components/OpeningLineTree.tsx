@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router";
 import { InfoTip } from "./InfoTip";
 import type {
@@ -6,12 +6,6 @@ import type {
   OpeningTreeNode,
   PersonalOpeningTree,
 } from "../lib/openings";
-
-const COLUMN_STEP = 176;
-const NODE_WIDTH = 132;
-const NODE_HEIGHT = 54;
-const ROW_STEP = 68;
-const GRAPH_LEFT = 72;
 
 function hrefForEdge(params: URLSearchParams, family: string, edge: OpeningTreeEdge): string {
   const next = new URLSearchParams(params);
@@ -39,6 +33,7 @@ function findPath(tree: PersonalOpeningTree, targetKey: string): OpeningTreeEdge
     list.push(edge);
     outgoing.set(edge.fromKey, list);
   }
+
   const queue: Array<{ key: string; path: OpeningTreeEdge[] }> = [
     { key: tree.rootKey, path: [] },
   ];
@@ -57,50 +52,36 @@ function findPath(tree: PersonalOpeningTree, targetKey: string): OpeningTreeEdge
   return [];
 }
 
-function turnLabel(node: OpeningTreeNode): string {
-  const move = Math.floor(node.ply / 2) + 1;
-  return node.ply % 2 === 0 ? `${move} · White` : `${move} · Black`;
-}
-
 function actorLabel(actor: OpeningTreeEdge["actor"]): string {
-  if (actor === "player") return "Your move";
+  if (actor === "player") return "You";
   if (actor === "opponent") return "Opponent";
   return "Both sides";
 }
 
-interface GraphColumn {
+function sideToMove(node: OpeningTreeNode): "white" | "black" {
+  return node.ply % 2 === 0 ? "white" : "black";
+}
+
+function moveLabel(node: OpeningTreeNode): string {
+  const move = Math.floor(node.ply / 2) + 1;
+  return `Move ${move}`;
+}
+
+function centerChosen(
+  branches: OpeningTreeEdge[],
+  chosen: OpeningTreeEdge | null,
+): OpeningTreeEdge[] {
+  const active = branches.find((edge) => edge.id === chosen?.id);
+  if (!active) return branches;
+  const rest = branches.filter((edge) => edge.id !== active.id);
+  rest.splice(Math.floor(rest.length / 2), 0, active);
+  return rest;
+}
+
+interface TreeLevel {
   node: OpeningTreeNode;
   branches: OpeningTreeEdge[];
   chosen: OpeningTreeEdge | null;
-  x: number;
-  points: Array<{ edge: OpeningTreeEdge; y: number }>;
-}
-
-function arrangeBranches(
-  branches: OpeningTreeEdge[],
-  chosen: OpeningTreeEdge | null,
-  centerY: number,
-): Array<{ edge: OpeningTreeEdge; y: number }> {
-  if (!branches.length) return [];
-  const primary = branches.find((edge) => edge.id === chosen?.id) ?? branches[0]!;
-  const others = branches.filter((edge) => edge.id !== primary.id);
-  const points = [{ edge: primary, y: centerY }];
-  others.forEach((edge, index) => {
-    const distance = Math.floor(index / 2) + 1;
-    const direction = index % 2 === 0 ? -1 : 1;
-    points.push({ edge, y: centerY + direction * distance * ROW_STEP });
-  });
-  return points.sort((left, right) => left.y - right.y);
-}
-
-function curve(
-  sourceX: number,
-  sourceY: number,
-  targetX: number,
-  targetY: number,
-): string {
-  const middle = sourceX + (targetX - sourceX) * 0.48;
-  return `M ${sourceX} ${sourceY} C ${middle} ${sourceY}, ${middle} ${targetY}, ${targetX} ${targetY}`;
 }
 
 export function OpeningLineTree({
@@ -114,7 +95,6 @@ export function OpeningLineTree({
   selectedMove: OpeningTreeEdge | null;
   params: URLSearchParams;
 }) {
-  const viewport = useRef<HTMLDivElement>(null);
   const nodeByKey = useMemo(
     () => new Map(tree.nodes.map((node) => [node.key, node])),
     [tree.nodes],
@@ -140,30 +120,15 @@ export function OpeningLineTree({
     [tree, selectedNodeKey],
   );
   const nodeKeys = [...path.map((edge) => edge.fromKey), selectedNodeKey];
-  const rawColumns = nodeKeys.map((key, index) => {
+  const levels: TreeLevel[] = nodeKeys.map((key, index) => {
     const node = nodeByKey.get(key)!;
+    const chosen = path[index] ?? (selectedMove?.fromKey === key ? selectedMove : null);
     return {
       node,
-      branches: outgoing.get(key) ?? [],
-      chosen: path[index] ?? (selectedMove?.fromKey === key ? selectedMove : null),
+      chosen,
+      branches: centerChosen(outgoing.get(key) ?? [], chosen),
     };
   });
-  const maxBranches = Math.max(1, ...rawColumns.map((column) => column.branches.length));
-  const sideRows = Math.ceil((maxBranches - 1) / 2);
-  const graphHeight = Math.max(250, sideRows * ROW_STEP * 2 + 126);
-  const centerY = Math.round(graphHeight / 2) + 12;
-  const columns: GraphColumn[] = rawColumns.map((column, index) => ({
-    ...column,
-    x: GRAPH_LEFT + index * COLUMN_STEP,
-    points: arrangeBranches(column.branches, column.chosen, centerY),
-  }));
-  const graphWidth = Math.max(540, GRAPH_LEFT + columns.length * COLUMN_STEP + 40);
-
-  useEffect(() => {
-    const element = viewport.current;
-    if (!element) return;
-    element.scrollTo({ left: element.scrollWidth });
-  }, [selectedNodeKey, selectedMove?.id]);
 
   return (
     <section className="opening-tree-panel" aria-labelledby="opening-tree-heading">
@@ -173,111 +138,121 @@ export function OpeningLineTree({
           <div className="flex items-center gap-2">
             <h3 id="opening-tree-heading">Your {tree.family} lines</h3>
             <InfoTip label="personal opening tree">
-              Every branch comes from your imported games. Counts use unique games, identical positions are merged, and red nodes mark your costly engine-checked decisions.
+              Every branch comes from your imported games. Counts use unique games,
+              identical positions are merged, and red markers show costly engine-checked decisions.
             </InfoTip>
           </div>
-          <p>{tree.games} game{tree.games === 1 ? "" : "s"} in this opening · select a node to expand that branch.</p>
+          <p>
+            {tree.games} game{tree.games === 1 ? "" : "s"} in this opening · follow
+            the line downward and choose any alternative to explore it.
+          </p>
         </div>
-        <Link to={hrefForRoot(params, tree)} className="tree-root-link">Return to root</Link>
+        <Link to={hrefForRoot(params, tree)} className="tree-root-link">
+          Return to root
+        </Link>
       </header>
 
       <div className="tree-legend" aria-label="Tree legend">
-        <span><i className="tree-key tree-key-player" /> Your move</span>
-        <span><i className="tree-key tree-key-opponent" /> Opponent move</span>
+        <span><i className="tree-key tree-key-white" /> White move</span>
+        <span><i className="tree-key tree-key-black" /> Black move</span>
         <span><i className="tree-key tree-key-costly" /> Costly decision</span>
         <span><i className="tree-key tree-key-path" /> Active line</span>
       </div>
 
-      <div className="opening-graph-viewport" ref={viewport} tabIndex={0}>
-        <div
-          className="opening-graph-canvas"
-          style={{ width: graphWidth, height: graphHeight }}
-        >
-          <svg
-            className="opening-graph-lines"
-            viewBox={`0 0 ${graphWidth} ${graphHeight}`}
-            aria-hidden="true"
-          >
-            <circle className="graph-root-dot" cx="24" cy={centerY} r="5" />
-            {columns.flatMap((column, index) => {
-              const previous = columns[index - 1];
-              const sourceX = previous ? previous.x + NODE_WIDTH : 29;
-              return column.points.map(({ edge, y }) => {
-                const onPath = column.chosen?.id === edge.id;
-                return (
-                  <path
-                    key={edge.id}
-                    className={[
-                      "graph-connector",
-                      onPath ? "is-on-path" : "",
-                      edge.failures > 0 ? "has-failure" : "",
-                    ].filter(Boolean).join(" ")}
-                    d={curve(sourceX, centerY, column.x, y)}
-                  />
-                );
-              });
-            })}
-          </svg>
-
-          <span className="graph-root-label" style={{ top: centerY + 12 }}>Root</span>
-          {columns.map((column) => (
-            <div key={column.node.key}>
-              <span className="graph-depth-label" style={{ left: column.x, top: 15 }}>
-                {turnLabel(column.node)}
-                <small>{column.node.games} reached</small>
-              </span>
-              {column.points.map(({ edge, y }) => {
-                const onPath = column.chosen?.id === edge.id;
-                const selected = selectedMove?.id === edge.id;
-                const target = nodeByKey.get(edge.toKey);
-                const finding = edge.failures > 0
-                  ? `${edge.failures} costly`
-                  : edge.actor === "opponent"
-                    ? "reply"
-                    : "handled";
-                return (
-                  <Link
-                    key={edge.id}
-                    to={hrefForEdge(params, tree.family, edge)}
-                    className={[
-                      "graph-move-node",
-                      `is-${edge.actor}`,
-                      edge.failures > 0 ? "has-failure" : "",
-                      onPath ? "is-on-path" : "",
-                      selected ? "is-selected" : "",
-                    ].filter(Boolean).join(" ")}
-                    style={{
-                      left: column.x,
-                      top: y - NODE_HEIGHT / 2,
-                      width: NODE_WIDTH,
-                      height: NODE_HEIGHT,
-                    }}
-                    aria-current={selected ? "step" : undefined}
-                    aria-label={`${edge.moveSan}, ${actorLabel(edge.actor)}, ${edge.games} game${edge.games === 1 ? "" : "s"}, ${edge.sharePercent}% from here, ${finding}`}
-                  >
-                    <span>
-                      <strong>{edge.moveSan}</strong>
-                      {target?.transposition ? <b title="Also reached by another move order">↗</b> : null}
-                    </span>
-                    <small>{edge.games}g · {edge.sharePercent}%</small>
-                    {edge.failures > 0 ? <i>{edge.failures}</i> : null}
-                  </Link>
-                );
-              })}
-              {column.node.terminalGames > 0 ? (
-                <span
-                  className="graph-terminal-label"
-                  style={{ left: column.x, top: graphHeight - 28 }}
-                >
-                  {column.node.terminalGames} ended here
-                </span>
-              ) : null}
-            </div>
-          ))}
+      <div className="opening-tree-flow">
+        <div className="tree-origin">
+          <span className="tree-origin-mark" aria-hidden="true" />
+          <strong>Starting position</strong>
+          <small>{tree.games} games</small>
         </div>
+
+        {levels.map((level) => {
+          const side = sideToMove(level.node);
+          return (
+            <section
+              className={`opening-tree-level is-${side}`}
+              key={level.node.key}
+              aria-label={`${moveLabel(level.node)}, ${side} to move`}
+            >
+              <header className="tree-level-heading">
+                <span>{moveLabel(level.node)}</span>
+                <strong>{side} to move</strong>
+                <small>
+                  {level.node.games} reached
+                  {level.node.terminalGames > 0
+                    ? ` · ${level.node.terminalGames} ended here`
+                    : ""}
+                </small>
+              </header>
+
+              {level.branches.length ? (
+                <div
+                  className={[
+                    "tree-branch-row",
+                    level.branches.length === 1 ? "is-single" : "",
+                  ].filter(Boolean).join(" ")}
+                >
+                  {level.branches.map((edge) => {
+                    const onPath = level.chosen?.id === edge.id;
+                    const selected = selectedMove?.id === edge.id;
+                    const target = nodeByKey.get(edge.toKey);
+                    const finding = edge.failures > 0
+                      ? `${edge.failures} costly decision${edge.failures === 1 ? "" : "s"}`
+                      : "no costly decision flagged";
+                    return (
+                      <div
+                        className={`tree-branch ${onPath ? "is-on-path" : ""}`}
+                        key={edge.id}
+                      >
+                        <Link
+                          to={hrefForEdge(params, tree.family, edge)}
+                          className={[
+                            "graph-move-node",
+                            `is-${side}`,
+                            `is-${edge.actor}`,
+                            edge.failures > 0 ? "has-failure" : "",
+                            onPath ? "is-on-path" : "",
+                            selected ? "is-selected" : "",
+                          ].filter(Boolean).join(" ")}
+                          aria-current={selected ? "step" : undefined}
+                          aria-label={`${edge.moveSan}, ${side} move by ${actorLabel(edge.actor)}, ${edge.games} game${edge.games === 1 ? "" : "s"}, ${edge.sharePercent}% from here, ${finding}`}
+                        >
+                          <span className="move-node-topline">
+                            <span className="move-side">{side}</span>
+                            <span className="move-owner">{actorLabel(edge.actor)}</span>
+                          </span>
+                          <span className="move-node-main">
+                            <strong>{edge.moveSan}</strong>
+                            {target?.transposition ? (
+                              <b title="Also reached by another move order">↗</b>
+                            ) : null}
+                            {edge.failures > 0 ? (
+                              <i aria-label={`${edge.failures} costly`}>
+                                {edge.failures} costly
+                              </i>
+                            ) : null}
+                          </span>
+                          <small>
+                            {edge.games} game{edge.games === 1 ? "" : "s"}
+                            <span aria-hidden="true"> · </span>
+                            {edge.sharePercent}% from here
+                          </small>
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="tree-line-end">No further moves in your imported games</div>
+              )}
+            </section>
+          );
+        })}
       </div>
+
       <p className="tree-instruction">
-        Follow the highlighted line. Select any sibling node to expand a different continuation; ↗ marks a transposition.
+        The blue route is the line you are viewing. A ↗ marks the same position
+        reached through a different move order.
       </p>
     </section>
   );
