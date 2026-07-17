@@ -342,6 +342,110 @@
     max-width: 800px; margin-top: 1.5rem; border-left: 2px solid var(--color-line-strong);
     padding-left: 1rem; color: var(--color-ink-muted); font-size: 1rem; line-height: 1.7;
   }
+  .opening-tree-panel {
+    margin-top: 2.25rem; border-block: 1px solid var(--color-line);
+    background: color-mix(in oklch, var(--color-surface) 68%, transparent);
+  }
+  .opening-tree-header {
+    display: flex; align-items: end; justify-content: space-between; gap: 1.5rem;
+    padding: 1.25rem 0;
+  }
+  .opening-tree-header h3 {
+    font-size: 1.35rem; font-weight: 820; letter-spacing: -0.035em;
+  }
+  .opening-tree-header > div > p:last-child {
+    margin-top: 0.4rem; color: var(--color-ink-faint); font-size: 0.76rem;
+  }
+  .tree-root-link {
+    flex: 0 0 auto; color: var(--color-ink-muted); font: 700 0.68rem/1 var(--font-mono);
+    text-decoration: underline; text-underline-offset: 0.3rem;
+  }
+  .tree-root-link:hover { color: var(--color-ink); }
+  .tree-legend {
+    display: flex; flex-wrap: wrap; gap: 1.1rem; border-top: 1px solid var(--color-line);
+    padding: 0.75rem 0; color: var(--color-ink-faint); font-size: 0.67rem;
+  }
+  .tree-legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .tree-key { display: inline-block; width: 0.5rem; height: 0.5rem; background: var(--color-line-strong); }
+  .tree-key-player { background: var(--color-accent); }
+  .tree-key-opponent { background: var(--color-ink-faint); }
+  .tree-key-costly { background: var(--color-loss); }
+  .tree-key-path {
+    border: 1px solid var(--color-accent); background: transparent;
+  }
+  .opening-graph-viewport {
+    overflow-x: auto; border-top: 1px solid var(--color-line);
+    background:
+      linear-gradient(var(--color-line) 1px, transparent 1px) 0 0 / 100% 34px,
+      color-mix(in oklch, var(--color-bg) 85%, transparent);
+    scrollbar-color: var(--color-line-strong) transparent; scrollbar-width: thin;
+    overscroll-behavior-inline: contain;
+  }
+  .opening-graph-viewport:focus-visible { outline-offset: -2px; }
+  .opening-graph-canvas { position: relative; min-width: 100%; }
+  .opening-graph-lines { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .graph-root-dot { fill: var(--color-accent); }
+  .graph-connector {
+    fill: none; stroke: var(--color-line-strong); stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  .graph-connector.is-on-path { stroke: var(--color-accent); stroke-width: 2; }
+  .graph-connector.has-failure.is-on-path { stroke: var(--color-loss); }
+  .graph-root-label,
+  .graph-depth-label,
+  .graph-terminal-label {
+    position: absolute; color: var(--color-ink-faint);
+    font: 650 0.58rem/1 var(--font-mono); font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .graph-root-label { left: 8px; }
+  .graph-depth-label {
+    display: flex; width: 132px; align-items: baseline; justify-content: space-between;
+    letter-spacing: 0.03em; text-transform: uppercase;
+  }
+  .graph-depth-label small { font: 500 0.54rem/1 var(--font-mono); letter-spacing: 0; text-transform: none; }
+  .graph-terminal-label { width: 132px; text-align: center; }
+  .graph-move-node {
+    position: absolute; display: grid; grid-template-columns: 1fr auto;
+    grid-template-rows: 1fr auto; align-items: center; gap: 0 0.45rem;
+    border: 1px solid var(--color-line-strong); background: var(--color-bg);
+    padding: 0.55rem 0.65rem; color: var(--color-ink-muted);
+    box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+    touch-action: manipulation;
+  }
+  .graph-move-node::before {
+    position: absolute; inset: 0 auto 0 0; width: 2px;
+    background: var(--color-ink-faint); content: "";
+  }
+  .graph-move-node.is-player::before,
+  .graph-move-node.is-mixed::before { background: var(--color-accent); }
+  .graph-move-node.has-failure::before { background: var(--color-loss); }
+  .graph-move-node > span { display: flex; min-width: 0; align-items: center; gap: 0.35rem; }
+  .graph-move-node strong {
+    overflow: hidden; color: var(--color-ink); font-size: 0.82rem;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .graph-move-node b { color: var(--color-accent); font-size: 0.64rem; }
+  .graph-move-node small {
+    color: var(--color-ink-faint); font: 550 0.57rem/1 var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .graph-move-node > i {
+    display: grid; width: 1.15rem; height: 1.15rem; place-items: center;
+    background: var(--color-loss); color: var(--color-bg);
+    font: 800 0.56rem/1 var(--font-mono); font-style: normal;
+  }
+  .graph-move-node:hover,
+  .graph-move-node.is-on-path { border-color: var(--color-accent); background: var(--color-surface-strong); }
+  .graph-move-node.has-failure.is-on-path { border-color: var(--color-loss); }
+  .graph-move-node.is-selected {
+    outline: 2px solid var(--color-accent); outline-offset: 2px;
+  }
+  .graph-move-node.has-failure.is-selected { outline-color: var(--color-loss); }
+  .tree-instruction {
+    border-top: 1px solid var(--color-line); padding: 0.7rem 0;
+    color: var(--color-ink-faint); font-size: 0.65rem;
+  }
   .opening-position-review {
     display: grid; grid-template-columns: minmax(18rem, 25rem) minmax(0, 1fr);
     margin-top: 2.25rem; border: 1px solid var(--color-line); background: var(--color-surface);
@@ -445,6 +549,8 @@
   .opening-review-list { position: static; margin-bottom: 2.5rem; }
   .opening-review-list nav { display: flex; overflow-x: auto; }
   .opening-review-link { min-width: 14rem; border: 1px solid var(--color-line); }
+  .opening-tree-header { display: block; }
+  .tree-root-link { display: inline-block; margin-top: 0.9rem; }
   .opening-position-review { grid-template-columns: 1fr; }
   .opening-board-wrap { border-right: 0; border-bottom: 1px solid var(--color-line); }
   .position-explanation h3 { font-size: 1.6rem; }

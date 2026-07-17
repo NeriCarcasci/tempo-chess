@@ -61,11 +61,51 @@ export interface OpeningFailure {
   fen: string;
 }
 
+export interface OpeningTreeNode {
+  key: string;
+  fen: string;
+  name: string | null;
+  ply: number;
+  games: number;
+  opportunities: number;
+  failures: number;
+  terminalGames: number;
+  transposition: boolean;
+}
+
+export interface OpeningTreeEdge {
+  id: string;
+  fromKey: string;
+  toKey: string;
+  moveUci: string;
+  moveSan: string;
+  games: number;
+  sharePercent: number;
+  actor: "player" | "opponent" | "mixed";
+  opportunities: number;
+  acceptable: number;
+  failures: number;
+  averageLossCp: number | null;
+  lastPlayedAt: string | null;
+  savedMove: boolean;
+  catalogueMove: boolean;
+}
+
+export interface PersonalOpeningTree {
+  family: string;
+  games: number;
+  rootKey: string;
+  nodes: OpeningTreeNode[];
+  edges: OpeningTreeEdge[];
+}
+
 export interface OpeningExplorerData {
   username: string;
   sample: { games: number; observations: number; scoredDecisions: number };
   families: OpeningFamily[];
   selected: OpeningFinding | null;
+  selectedMove: OpeningTreeEdge | null;
+  tree: PersonalOpeningTree | null;
   failures: OpeningFailure[];
   findings: OpeningFinding[];
 }

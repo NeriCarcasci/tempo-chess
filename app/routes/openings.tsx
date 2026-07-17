@@ -3,6 +3,7 @@ import { Chess } from "chess.js";
 import type { Route } from "./+types/openings";
 import { Chessboard } from "../components/Chessboard";
 import { InfoTip } from "../components/InfoTip";
+import { OpeningLineTree } from "../components/OpeningLineTree";
 import {
   handledPercent,
   rankOpeningFamilies,
@@ -182,7 +183,12 @@ function FamilyList({
         {priorities.map((family) => (
           <Link
             key={family.family}
-            to={queryHref(params, { family: family.family, node: family.weakestNodeKey })}
+            to={queryHref(params, {
+              family: family.family,
+              node: family.weakestNodeKey,
+              from: null,
+              move: null,
+            })}
             className={`opening-review-link ${selectedFamily === family.family ? "is-active" : ""}`}
           >
             <span className="min-w-0">
@@ -292,6 +298,12 @@ export default function OpeningReview({ loaderData }: Route.ComponentProps) {
   const family = data.families.find((item) => item.family === selected?.family) ?? data.families[0];
   const primaryFailure = data.failures[0];
   const preferredMove = primaryFailure ? moveName(primaryFailure.fen, primaryFailure.bestMoveUci) : null;
+  const selectedMove = data.selectedMove;
+  const decisionNode = selectedMove && data.tree
+    ? data.tree.nodes.find((node) => node.key === selectedMove.fromKey)
+    : null;
+  const boardFen = primaryFailure?.fen ?? decisionNode?.fen ?? selected?.fen ?? "";
+  const practicePositionKey = selectedMove?.fromKey ?? selected?.nodeKey ?? "";
 
   return (
     <div className="relative z-10 min-h-dvh">
@@ -347,16 +359,25 @@ export default function OpeningReview({ loaderData }: Route.ComponentProps) {
                 <RecommendationCopy family={family} lineGames={selected.games} />
               </div>
 
+              {data.tree ? (
+                <OpeningLineTree
+                  tree={data.tree}
+                  selectedNodeKey={selected.nodeKey}
+                  selectedMove={selectedMove}
+                  params={params}
+                />
+              ) : null}
+
               <div className="opening-position-review">
                 <div className="opening-board-wrap">
                   <Chessboard
-                    fen={selected.fen}
+                    fen={boardFen}
                     flip={primaryFailure?.playerColor === "black" ||
                       (!primaryFailure && params.get("color") === "black")}
                   />
                 </div>
                 <div className="position-explanation">
-                  <p className="eyebrow">Position to review</p>
+                  <p className="eyebrow">{selectedMove ? "Selected branch" : "Position to review"}</p>
                   {primaryFailure ? (
                     <>
                       <h3>You played {primaryFailure.moveSan}.</h3>
@@ -370,9 +391,38 @@ export default function OpeningReview({ loaderData }: Route.ComponentProps) {
                         <practice.Form method="post">
                           <input type="hidden" name="intent" value="drill" />
                           <input type="hidden" name="username" value={data.username} />
-                          <input type="hidden" name="positionKey" value={selected.nodeKey} />
+                          <input type="hidden" name="positionKey" value={practicePositionKey} />
                           <button className="secondary-button" disabled={practice.state !== "idle"}>
                             {practice.state === "idle" ? "Practice this position" : "Adding…"}
+                          </button>
+                        </practice.Form>
+                      </div>
+                      {practice.data ? <p className="action-message" aria-live="polite">{practice.data.message}</p> : null}
+                    </>
+                  ) : selectedMove ? (
+                    <>
+                      <h3>
+                        {selectedMove.actor === "opponent"
+                          ? `Opponent played ${selectedMove.moveSan}.`
+                          : selectedMove.actor === "mixed"
+                            ? `${selectedMove.moveSan} appeared for both sides.`
+                            : `You played ${selectedMove.moveSan}.`}
+                      </h3>
+                      <p>
+                        This branch appeared in {selectedMove.games} game{selectedMove.games === 1 ? "" : "s"} ({selectedMove.sharePercent}% of the games that reached this position).
+                        {selectedMove.actor === "player" && selectedMove.failures === 0
+                          ? " Tempo did not flag it as costly in the checked games."
+                          : selectedMove.actor === "opponent"
+                            ? " Follow the tree to inspect how you responded."
+                            : ""}
+                      </p>
+                      <div className="position-actions">
+                        <practice.Form method="post">
+                          <input type="hidden" name="intent" value="drill" />
+                          <input type="hidden" name="username" value={data.username} />
+                          <input type="hidden" name="positionKey" value={practicePositionKey} />
+                          <button className="secondary-button" disabled={practice.state !== "idle"}>
+                            {practice.state === "idle" ? "Practice from here" : "Addingâ€¦"}
                           </button>
                         </practice.Form>
                       </div>

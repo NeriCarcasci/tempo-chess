@@ -9,6 +9,7 @@ import {
   splitOpeningName,
   type MasteryMetrics,
 } from "./model.js";
+import { buildPersonalOpeningTree } from "./tree.js";
 
 const MAX_OPENING_PLIES = 30;
 
@@ -61,6 +62,8 @@ interface ObservationRow extends Record<string, unknown> {
   opponent_username: string | null;
   url: string | null;
   best_move_uci: string | null;
+  next_fen: string;
+  next_node_name: string | null;
 }
 
 export interface ExplorerFilters {
@@ -70,6 +73,8 @@ export interface ExplorerFilters {
   since?: string;
   family?: string;
   node?: string;
+  from?: string;
+  move?: string;
 }
 
 export interface OpeningFinding {
@@ -423,10 +428,13 @@ async function observationsForUser(userId: string): Promise<ObservationRow[]> {
   const rows = await client`
     select o.*, p.fen, p.opening_name as node_name, p.variation,
       p.representative_line_san, p.representative_line_uci,
+      next_position.fen as next_fen,
+      next_position.opening_name as next_node_name,
       g.opponent_username, g.url, g.platform_game_id,
       pe.best_move_uci
     from player_opening_observations o
     join opening_positions p on p.position_key = o.position_key
+    join opening_positions next_position on next_position.position_key = o.next_position_key
     join games g on g.id = o.game_id
     left join lateral (
       select best_move_uci from position_eval
@@ -498,7 +506,11 @@ export async function getOpeningExplorer(
     families[0]?.weakestNodeKey ??
     findings[0]?.nodeKey ??
     null;
-  const selectedRows = selectedKey ? byNode.get(selectedKey) ?? [] : [];
+  const selectedRows = selectedKey
+    ? (byNode.get(selectedKey) ?? []).filter((row) =>
+        !filters.family || row.family === filters.family,
+      )
+    : [];
   const selected = selectedRows.length
     ? finding(selectedRows, incoming.get(selectedKey!) ?? 0)
     : null;
@@ -529,8 +541,17 @@ export async function getOpeningExplorer(
     };
   }).sort((left, right) => right.games - left.games).slice(0, 12);
 
-  const failures = selectedRows
-    .filter((row) => row.actor_is_player && row.acceptable === false)
+  const decisionRows = (filters.from
+    ? byNode.get(filters.from) ?? []
+    : selectedRows).filter((row) =>
+      !filters.family || row.family === filters.family,
+    );
+  const failures = decisionRows
+    .filter((row) =>
+      row.actor_is_player &&
+      row.acceptable === false &&
+      (!filters.move || row.move_uci === filters.move),
+    )
     .sort((left, right) => Number(right.evaluation_loss_cp ?? 0) - Number(left.evaluation_loss_cp ?? 0))
     .slice(0, 5)
     .map((row) => ({
@@ -549,6 +570,34 @@ export async function getOpeningExplorer(
       url: row.url,
       fen: row.fen,
     }));
+  const treeFamily = filters.family ?? selected?.family ?? families[0]?.family ?? null;
+  const treeRows = treeFamily
+    ? filtered.filter((row) => row.family === treeFamily)
+    : [];
+  const tree = treeFamily
+    ? buildPersonalOpeningTree(treeFamily, treeRows.map((row) => ({
+        gameId: row.game_id,
+        positionKey: row.position_key,
+        nextPositionKey: row.next_position_key,
+        fen: row.fen,
+        nextFen: row.next_fen,
+        ply: Number(row.ply),
+        moveUci: row.move_uci,
+        moveSan: row.move_san,
+        actorIsPlayer: row.actor_is_player,
+        acceptable: row.acceptable,
+        acceptableReason: row.acceptable_reason,
+        evaluationLossCp: row.evaluation_loss_cp == null
+          ? null
+          : Number(row.evaluation_loss_cp),
+        playedAt: row.played_at,
+        nodeName: row.node_name,
+        nextNodeName: row.next_node_name,
+      })))
+    : null;
+  const selectedMove = tree?.edges.find((edge) =>
+    edge.fromKey === (filters.from ?? selectedKey) && edge.moveUci === filters.move,
+  ) ?? null;
 
   return {
     username: account.username,
@@ -561,6 +610,8 @@ export async function getOpeningExplorer(
     },
     families,
     selected,
+    selectedMove,
+    tree,
     children,
     failures,
     findings: findings.slice(0, 12),

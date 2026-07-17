@@ -82,6 +82,8 @@ const explorerQuery = z.object({
   since: z.string().optional(),
   family: z.string().optional(),
   node: z.string().optional(),
+  from: z.string().optional(),
+  move: z.string().regex(/^[a-h][1-8][a-h][1-8][qrbn]?$/).optional(),
 });
 
 app.get("/opening-explorer", async (c) => {
