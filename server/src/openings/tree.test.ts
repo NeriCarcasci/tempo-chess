@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { buildPersonalOpeningTree, type TreeObservation } from "./tree.js";
+import {
+  buildPersonalOpeningTree,
+  focusPersonalOpeningTree,
+  type TreeObservation,
+} from "./tree.js";
 
 function row(
   gameId: string,
@@ -56,6 +60,14 @@ assert.equal(tree.nodes.find((node) => node.key === "shared")!.terminalGames, 3)
 assert.equal(tree.edges.find((edge) => edge.moveSan === "e5")!.actor, "opponent");
 assert.equal(tree.edges.find((edge) => edge.moveSan === "e4")!.failures, 1);
 assert.equal(tree.nodes.find((node) => node.key === "root")!.failures, 1);
+assert.equal(tree.scope, "family");
+
+const focused = focusPersonalOpeningTree(tree, "e4");
+assert.deepEqual(
+  new Set(focused.edges.map((edge) => edge.fromKey)),
+  new Set(["root", "e4"]),
+);
+assert.equal(focused.nodes.some((node) => node.key === "shared"), true);
 
 const mixed = buildPersonalOpeningTree("Mixed", [
   row("g1", "root", "e4", 1, "e4", true),

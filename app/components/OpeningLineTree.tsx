@@ -139,17 +139,24 @@ export function OpeningLineTree({
     <section className="opening-tree-panel" aria-labelledby="opening-tree-heading">
       <header className="opening-tree-header">
         <div>
-          <p className="eyebrow">Personal opening tree</p>
+          <p className="eyebrow">
+            {tree.scope === "player" ? "Player position tree" : "Personal opening tree"}
+          </p>
           <div className="flex items-center gap-2">
-            <h3 id="opening-tree-heading">Your {tree.family} lines</h3>
+            <h3 id="opening-tree-heading">
+              {tree.scope === "player"
+                ? "Your complete opening map"
+                : `Your ${tree.family} lines`}
+            </h3>
             <InfoTip label="personal opening tree">
-              Every branch comes from your imported games. Counts use unique games,
-              identical positions are merged, and red markers show costly engine-checked decisions.
+              Every branch comes from your imported games. The graph is position-based,
+              so games that reach the same position are merged even when their provider
+              gives them different opening names.
             </InfoTip>
           </div>
           <p>
-            {tree.games} game{tree.games === 1 ? "" : "s"} in this opening · follow
-            the line downward and choose any alternative to explore it.
+            {tree.games} imported game{tree.games === 1 ? "" : "s"} · reviewing{" "}
+            {tree.family} · follow the line downward or choose an alternative.
           </p>
         </div>
         <Link to={hrefForRoot(params, tree)} className="tree-root-link">

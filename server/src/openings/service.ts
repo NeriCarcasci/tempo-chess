@@ -9,7 +9,7 @@ import {
   splitOpeningName,
   type MasteryMetrics,
 } from "./model.js";
-import { buildPersonalOpeningTree } from "./tree.js";
+import { buildPersonalOpeningTree, focusPersonalOpeningTree } from "./tree.js";
 
 const MAX_OPENING_PLIES = 30;
 
@@ -571,11 +571,8 @@ export async function getOpeningExplorer(
       fen: row.fen,
     }));
   const treeFamily = filters.family ?? selected?.family ?? families[0]?.family ?? null;
-  const treeRows = treeFamily
-    ? filtered.filter((row) => row.family === treeFamily)
-    : [];
-  const tree = treeFamily
-    ? buildPersonalOpeningTree(treeFamily, treeRows.map((row) => ({
+  const fullTree = treeFamily
+    ? buildPersonalOpeningTree(treeFamily, filtered.map((row) => ({
         gameId: row.game_id,
         positionKey: row.position_key,
         nextPositionKey: row.next_position_key,
@@ -593,7 +590,10 @@ export async function getOpeningExplorer(
         playedAt: row.played_at,
         nodeName: row.node_name,
         nextNodeName: row.next_node_name,
-      })))
+      })), "player")
+    : null;
+  const tree = fullTree
+    ? focusPersonalOpeningTree(fullTree, selectedKey ?? fullTree.rootKey)
     : null;
   const selectedMove = tree?.edges.find((edge) =>
     edge.fromKey === (filters.from ?? selectedKey) && edge.moveUci === filters.move,

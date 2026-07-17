@@ -93,6 +93,7 @@ export interface OpeningTreeEdge {
 
 export interface PersonalOpeningTree {
   family: string;
+  scope: "family" | "player";
   games: number;
   rootKey: string;
   nodes: OpeningTreeNode[];

@@ -48,6 +48,7 @@ export interface PersonalOpeningTreeEdge {
 
 export interface PersonalOpeningTree {
   family: string;
+  scope: "family" | "player";
   games: number;
   rootKey: string;
   nodes: PersonalOpeningTreeNode[];
@@ -93,6 +94,7 @@ function latest(left: Date | null, value: string | Date | null): Date | null {
 export function buildPersonalOpeningTree(
   family: string,
   rows: TreeObservation[],
+  scope: PersonalOpeningTree["scope"] = "family",
 ): PersonalOpeningTree | null {
   if (!rows.length) return null;
   const nodes = new Map<string, NodeAccumulator>();
@@ -223,6 +225,7 @@ export function buildPersonalOpeningTree(
 
   return {
     family,
+    scope,
     games: root.games.size,
     rootKey: root.key,
     nodes: [...nodes.values()].map((node) => ({
@@ -239,5 +242,51 @@ export function buildPersonalOpeningTree(
       transposition: node.incoming.size > 1,
     })).sort((left, right) => left.ply - right.ply || right.games - left.games),
     edges: treeEdges,
+  };
+}
+
+export function focusPersonalOpeningTree(
+  tree: PersonalOpeningTree,
+  targetKey: string,
+): PersonalOpeningTree {
+  const outgoing = new Map<string, PersonalOpeningTreeEdge[]>();
+  for (const edge of tree.edges) {
+    const list = outgoing.get(edge.fromKey) ?? [];
+    list.push(edge);
+    outgoing.set(edge.fromKey, list);
+  }
+
+  const queue: Array<{ key: string; path: PersonalOpeningTreeEdge[] }> = [
+    { key: tree.rootKey, path: [] },
+  ];
+  const visited = new Set([tree.rootKey]);
+  let path: PersonalOpeningTreeEdge[] = [];
+  while (queue.length) {
+    const current = queue.shift()!;
+    if (current.key === targetKey) {
+      path = current.path;
+      break;
+    }
+    for (const edge of outgoing.get(current.key) ?? []) {
+      if (visited.has(edge.toKey)) continue;
+      visited.add(edge.toKey);
+      queue.push({ key: edge.toKey, path: [...current.path, edge] });
+    }
+  }
+
+  const visibleParents = new Set([
+    tree.rootKey,
+    ...path.map((edge) => edge.fromKey),
+    targetKey,
+  ]);
+  const edges = tree.edges.filter((edge) => visibleParents.has(edge.fromKey));
+  const visibleNodes = new Set([
+    tree.rootKey,
+    ...edges.flatMap((edge) => [edge.fromKey, edge.toKey]),
+  ]);
+  return {
+    ...tree,
+    nodes: tree.nodes.filter((node) => visibleNodes.has(node.key)),
+    edges,
   };
 }
