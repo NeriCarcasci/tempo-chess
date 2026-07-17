@@ -67,6 +67,11 @@ function moveLabel(node: OpeningTreeNode): string {
   return `Move ${move}`;
 }
 
+function moveNotation(node: OpeningTreeNode): string {
+  const move = Math.floor(node.ply / 2) + 1;
+  return node.ply % 2 === 0 ? `${move}.` : `${move}…`;
+}
+
 function centerChosen(
   branches: OpeningTreeEdge[],
   chosen: OpeningTreeEdge | null,
@@ -174,17 +179,6 @@ export function OpeningLineTree({
               key={level.node.key}
               aria-label={`${moveLabel(level.node)}, ${side} to move`}
             >
-              <header className="tree-level-heading">
-                <span>{moveLabel(level.node)}</span>
-                <strong>{side} to move</strong>
-                <small>
-                  {level.node.games} reached
-                  {level.node.terminalGames > 0
-                    ? ` · ${level.node.terminalGames} ended here`
-                    : ""}
-                </small>
-              </header>
-
               {level.branches.length ? (
                 <div
                   className={[
@@ -218,7 +212,7 @@ export function OpeningLineTree({
                           aria-label={`${edge.moveSan}, ${side} move by ${actorLabel(edge.actor)}, ${edge.games} game${edge.games === 1 ? "" : "s"}, ${edge.sharePercent}% from here, ${finding}`}
                         >
                           <span className="move-node-topline">
-                            <span className="move-side">{side}</span>
+                            <span className="move-side">{moveNotation(level.node)}</span>
                             <span className="move-owner">{actorLabel(edge.actor)}</span>
                           </span>
                           <span className="move-node-main">
@@ -251,7 +245,7 @@ export function OpeningLineTree({
       </div>
 
       <p className="tree-instruction">
-        The blue route is the line you are viewing. A ↗ marks the same position
+        The orange route is the line you are viewing. A ↗ marks the same position
         reached through a different move order.
       </p>
     </section>
