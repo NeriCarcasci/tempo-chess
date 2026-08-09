@@ -7,3 +7,6 @@
 /build/
 /.codex-*.log
 /.tmp-chess-openings-*/
+
+# Claude Code (machine-local)
+.claude/settings.local.json

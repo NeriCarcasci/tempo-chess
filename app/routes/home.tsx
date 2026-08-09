@@ -1,83 +1,132 @@
-import { useLoaderData, useRouteError } from "react-router";
-import { fetchProfile, fetchGames, aggregate, type Summary } from "../lib/lichess";
-import { Dashboard } from "../components/Dashboard";
-import { rankOpeningFamilies, type OpeningExplorerData, type PlayerCoverage } from "../lib/openings";
-import type { Route } from "./+types/home";
-
-const DEMO_USER = "ncarcasc";
-const API = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_ENGINE_URL ?? "/api");
+import { Link } from "react-router";
+import { PublicPage } from "../components/PublicShell";
+import { HeroBoard } from "../components/HeroBoard";
+import { RookMark } from "../components/Logo";
 
 export function meta() {
   return [
-    { title: "Tempo Chess · ncarcasc" },
+    { title: "Tempo · Your mistakes have a shape" },
     {
       name: "description",
       content:
-        "Multi-game chess analysis: your record, ratings, openings, weak lines, and mistakes at a glance.",
+        "Tempo reads every game you have played, finds the mistakes you repeat, and turns them into drills.",
     },
   ];
 }
 
-export async function clientLoader() {
-  const [profile, games, openingResponse, coverageResponse] = await Promise.all([
-    fetchProfile(DEMO_USER),
-    fetchGames(DEMO_USER, 100),
-    fetch(`${API}/opening-explorer?username=${encodeURIComponent(DEMO_USER)}`),
-    fetch(`${API}/players/${encodeURIComponent(DEMO_USER)}/coverage`),
-  ]);
-  let opening = openingResponse.ok
-    ? await openingResponse.json() as OpeningExplorerData
-    : null;
-  const coverage = coverageResponse.ok
-    ? await coverageResponse.json() as PlayerCoverage
-    : null;
-  const first = opening ? rankOpeningFamilies(opening.families).find((family) => family.failures > 0) : null;
-  if (first?.weakestNodeKey && opening?.selected?.nodeKey !== first.weakestNodeKey) {
-    const query = new URLSearchParams({
-      username: DEMO_USER,
-      family: first.family,
-      node: first.weakestNodeKey,
-    });
-    const selectedResponse = await fetch(`${API}/opening-explorer?${query}`);
-    if (selectedResponse.ok) opening = await selectedResponse.json() as OpeningExplorerData;
-  }
-  return { summary: aggregate(profile, games), opening, coverage };
-}
+const STEPS = [
+  {
+    title: "Connect",
+    body: "Your Lichess or Chess.com username. Tempo pulls the whole archive, not the last ten games.",
+  },
+  {
+    title: "Analyse",
+    body: "Stockfish walks every move and records what each decision actually cost you.",
+  },
+  {
+    title: "Drill",
+    body: "The positions you got wrong come back as puzzles, hardest first.",
+  },
+];
 
-export async function clientAction({ request }: Route.ClientActionArgs) {
-  const form = await request.formData();
-  const response = await fetch(`${API}/imports/lichess`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: form.get("username"), games: "all" }),
-  });
-  const data = await response.json();
-  if (!response.ok) return { ok: false, message: data.error ?? "Could not sync games." };
-  return { ok: true, message: `Syncing ${data.import.requestedGames} games from Lichess.` };
-}
-
-export function ErrorBoundary() {
-  const error = useRouteError();
-  const message = error instanceof Error ? error.message : "Unknown error";
-  return (
-    <div className="grid min-h-dvh place-items-center px-6">
-      <div className="max-w-md text-center">
-        <h1 className="text-lg font-semibold text-ink">Couldn't load games</h1>
-        <p className="mt-2 text-sm text-ink-muted">
-          Lichess didn't return data for this account. It may be private, rate-limited,
-          or offline.
-        </p>
-        <p className="metric mt-3 text-xs text-ink-faint">{message}</p>
-      </div>
-    </div>
-  );
-}
+const NOT = [
+  ["No streaks or badges.", "Practising to protect a streak is not practising."],
+  ["No forty-metric dashboard.", "Every number on screen informs one decision."],
+  ["No flattering summary.", "If your rating is down, that is the first thing you see."],
+];
 
 export default function Home() {
-  const { summary, opening, coverage } = useLoaderData() as {
-    summary: Summary;
-    opening: OpeningExplorerData | null;
-    coverage: PlayerCoverage | null;
-  };
-  return <Dashboard summary={summary} opening={opening} coverage={coverage} />;
+  return (
+    <PublicPage>
+      <section className="hero">
+        <div className="hero-copy">
+          <h1>
+            Your mistakes
+            <br />
+            have a <em>shape</em>.
+          </h1>
+          <p>
+            Tempo reads every game you have played, finds the errors you repeat,
+            and turns them into drills.
+          </p>
+          <div className="hero-actions">
+            <Link to="/signup" className="primary-button btn-lg">Analyse my games</Link>
+            <Link to="/features" className="secondary-button btn-lg">How it works</Link>
+          </div>
+        </div>
+        <HeroBoard />
+      </section>
+
+      <section className="statement">
+        <p>
+          Reviewing one game tells you what went wrong <i>once</i>. Tempo reads
+          your whole history at once, so the mistake you have made forty times
+          stops looking like bad luck.
+        </p>
+      </section>
+
+      <section className="flow">
+        <h2 className="section-title">Three steps to the first drill</h2>
+        <ol className="flow-track">
+          {STEPS.map((step, i) => (
+            <li key={step.title}>
+              <span className="flow-dot metric">{i + 1}</span>
+              <h3>{step.title}</h3>
+              <p>{step.body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="bento">
+        <p className="eyebrow">What a whole history gives you</p>
+        <div className="bento-grid">
+          <article className="bento-cell bento-lead">
+            <h3>An opening map drawn from your own games</h3>
+            <p>
+              Not what grandmasters play. What you play, with your score at every
+              branch, and a marker on the move where your preparation runs out.
+            </p>
+            <Link to="/features#repertoire" className="text-link">
+              See the repertoire map <span aria-hidden="true">&rarr;</span>
+            </Link>
+          </article>
+
+          <article className="bento-cell bento-accent">
+            <RookMark size={104} className="bento-glyph" />
+            <h3>Mistakes explained in words</h3>
+            <p>The tactic you missed, not a centipawn number and silence.</p>
+          </article>
+
+          <article className="bento-cell">
+            <h3>Drills built from your own errors</h3>
+            <p>Same position, same side, one more chance to find it.</p>
+          </article>
+
+          <article className="bento-cell">
+            <h3>Thirteen guided opening lessons</h3>
+            <p>Move by move, with the reason behind each one.</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="refuse">
+        <h2 className="section-title">What Tempo will not do</h2>
+        <dl className="refuse-list">
+          {NOT.map(([claim, why]) => (
+            <div key={claim}>
+              <dt>{claim}</dt>
+              <dd>{why}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <section className="closer">
+        <h2>The analysis is already sitting in your game history.</h2>
+        <Link to="/signup" className="primary-button btn-lg">Start free</Link>
+        <p>Your last 50 games, no card needed.</p>
+      </section>
+    </PublicPage>
+  );
 }

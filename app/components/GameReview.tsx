@@ -5,9 +5,10 @@ import type { GameData, Ply, Judgment } from "../lib/game";
 import { fenAt } from "../lib/game";
 import { analyzeGameLocally } from "../lib/analyze";
 import { explainMove } from "../lib/motifs";
-import { BOARD_THEMES, loadBoardTheme, saveBoardTheme, type BoardTheme } from "../lib/boardThemes";
-import { PIECE_SETS, loadPieceSet, savePieceSet, type PieceSet } from "../lib/pieceSets";
-import { Chessboard } from "./Chessboard";
+import { loadBoardTheme, type BoardTheme } from "../lib/boardThemes";
+import { loadPieceSet, type PieceSet } from "../lib/pieceSets";
+import { Board } from "./Board";
+import { TopNav } from "./TopNav";
 
 const JUDGMENT: Record<Judgment, { glyph: string; color: string }> = {
   Blunder: { glyph: "??", color: "var(--color-loss)" },
@@ -237,15 +238,17 @@ function EvalTimeline({
   );
 }
 
-function NavButton({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled?: boolean }) {
+function NavButton({ children, onClick, disabled, label }: { children: React.ReactNode; onClick: () => void; disabled?: boolean; label: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-label={label}
+      title={label}
       className="metric grid h-9 w-9 place-items-center rounded-control border border-line text-ink-muted transition-colors hover:border-line-strong hover:text-ink disabled:opacity-40 disabled:hover:border-line"
     >
-      {children}
+      <span aria-hidden="true">{children}</span>
     </button>
   );
 }
@@ -258,9 +261,8 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
   const n = g.plies.length;
   const [idx, setIdx] = useState(() => initialPly ? Math.max(1, Math.min(n, initialPly)) : n);
   const [flip, setFlip] = useState(false);
-  const [theme, setTheme] = useState<BoardTheme>(() => loadBoardTheme());
-  const [pieceSet, setPieceSet] = useState<PieceSet>(() => loadPieceSet());
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [theme] = useState<BoardTheme>(() => loadBoardTheme());
+  const [pieceSet] = useState<PieceSet>(() => loadPieceSet());
   const [boardH, setBoardH] = useState(520);
   const boardRef = useRef<HTMLDivElement>(null);
   const lastWheel = useRef(0);
@@ -324,76 +326,24 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
     () => (current?.judgment ? explainMove(current.fenBefore, current.uci, current.best) : null),
     [current],
   );
+  // When the played move was a mistake, draw the engine's best move as an arrow.
+  const bestArrow = (() => {
+    if (!current?.judgment || !current.best) return undefined;
+    const s = moveSquares(current.best);
+    return s ? [{ from: s[0], to: s[1], color: "var(--color-win)" }] : undefined;
+  })();
 
   return (
     <div className="relative z-10 min-h-dvh">
-      <header className="game-review-topbar sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-[1280px] items-center justify-between px-4 sm:px-6">
-          <Link to="/" className="cap transition-colors hover:text-ink">← Report</Link>
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setSettingsOpen((o) => !o)}
-                title="Settings"
-                className="cap grid h-8 w-8 place-items-center rounded-control text-ink-muted transition-colors hover:bg-surface hover:text-ink"
-              >
-                ⚙
-              </button>
-              {settingsOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setSettingsOpen(false)} />
-                  <div className="absolute right-0 top-full z-20 mt-1 w-56 rounded-panel border border-line bg-surface p-4 shadow-xl">
-                    <div className="cap mb-3">Board theme</div>
-                    <div className="space-y-1">
-                      {BOARD_THEMES.map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => {
-                            setTheme(t);
-                            saveBoardTheme(t.id);
-                          }}
-                          className={`flex w-full items-center gap-3 rounded-control px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface-2 ${theme.id === t.id ? "text-ink" : "text-ink-muted"}`}
-                        >
-                          <span className="grid h-5 w-5 shrink-0 overflow-hidden rounded-[3px]" style={{ gridTemplateColumns: "1fr 1fr" }}>
-                            <span style={{ background: t.light }} />
-                            <span style={{ background: t.dark }} />
-                          </span>
-                          {t.name}
-                          {theme.id === t.id && <span className="ml-auto text-accent">✓</span>}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="cap mb-3 mt-4">Pieces</div>
-                    <div className="space-y-1">
-                      {PIECE_SETS.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => {
-                            setPieceSet(s);
-                            savePieceSet(s.id);
-                          }}
-                          className={`flex w-full items-center gap-3 rounded-control px-2 py-1.5 text-left text-sm transition-colors hover:bg-surface-2 ${pieceSet.id === s.id ? "text-ink" : "text-ink-muted"}`}
-                        >
-                          <span className="w-8 text-center text-base leading-none" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
-                            <span style={{ color: s.whiteFill }}>{s.whiteGlyphs.n}</span>
-                            <span style={{ color: s.blackFill }}>{s.blackGlyphs.n}</span>
-                          </span>
-                          {s.name}
-                          {pieceSet.id === s.id && <span className="ml-auto text-accent">✓</span>}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            <a href={g.url} target="_blank" rel="noreferrer" className="cap transition-colors hover:text-ink">Lichess ↗</a>
-          </div>
-        </div>
-      </header>
+      <TopNav
+        current="game"
+        back={{ to: "/", label: "My Chess" }}
+        right={
+          <a href={g.url} target="_blank" rel="noreferrer" className="cap transition-colors hover:text-ink">
+            Lichess ↗
+          </a>
+        }
+      />
 
       <main className="game-review-main mx-auto max-w-[1280px] px-4 pb-10 pt-5 sm:px-6">
         <div className="mb-4">
@@ -430,8 +380,10 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
                   ) : jComment ? (
                     <p className="mt-2 text-sm text-ink-muted">{jComment}</p>
                   ) : null}
-                  {bestSan && !reason?.text.includes(bestSan) && !jComment.includes(bestSan) && (
-                    <p className="cap mt-3 normal-case tracking-normal">Best line: {bestSan}</p>
+                  {bestSan && (
+                    <p className="cap mt-3 normal-case tracking-normal">
+                      Best move <span style={{ color: "var(--color-win)" }}>↗ {bestSan}</span>
+                    </p>
                   )}
                 </div>
               ) : !g.hasAnalysis ? (
@@ -462,24 +414,25 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
                 ⇅
               </button>
               <div ref={boardRef} className="min-w-0 flex-1 touch-none">
-                <Chessboard
+                <Board
                   fen={fenAt(g, idx)}
                   flip={flip}
                   light={theme.light}
                   dark={theme.dark}
                   pieceSet={pieceSet}
                   lastMove={current ? moveSquares(current.uci) : undefined}
+                  arrows={bestArrow}
                 />
               </div>
               <div className="w-9 shrink-0" aria-hidden />
             </div>
 
             <div className="mt-3 flex items-center justify-center gap-2">
-              <NavButton onClick={() => goto(1)} disabled={idx <= 1}>⏮</NavButton>
-              <NavButton onClick={() => goto(idx - 1)} disabled={idx <= 1}>◀</NavButton>
+              <NavButton onClick={() => goto(1)} disabled={idx <= 1} label="First move">⏮</NavButton>
+              <NavButton onClick={() => goto(idx - 1)} disabled={idx <= 1} label="Previous move">◀</NavButton>
               <span className="metric w-16 text-center text-xs text-ink-faint">{idx} / {n}</span>
-              <NavButton onClick={() => goto(idx + 1)} disabled={idx >= n}>▶</NavButton>
-              <NavButton onClick={() => goto(n)} disabled={idx >= n}>⏭</NavButton>
+              <NavButton onClick={() => goto(idx + 1)} disabled={idx >= n} label="Next move">▶</NavButton>
+              <NavButton onClick={() => goto(n)} disabled={idx >= n} label="Last move">⏭</NavButton>
             </div>
 
             {!g.hasAnalysis && (
@@ -490,11 +443,7 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
                     Grading {n} moves with Stockfish…
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={runAnalysis}
-                    className="rounded-control bg-accent px-4 py-2 text-sm font-semibold text-accent-ink transition-transform active:translate-y-px"
-                  >
+                  <button type="button" onClick={runAnalysis} className="primary-button">
                     Analyze this game
                   </button>
                 )}

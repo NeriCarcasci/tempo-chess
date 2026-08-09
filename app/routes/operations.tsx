@@ -1,5 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
+import { apiFetch } from "../lib/api";
+import { requireSession } from "../lib/session";
 
 type Status = "queued" | "ingesting" | "analyzing" | "completed" | "failed" | "cancelled";
 interface AnalysisImport {
@@ -10,7 +12,7 @@ interface AnalysisImport {
   error: string | null;
 }
 
-const API = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_ENGINE_URL ?? "/api");
+const API = import.meta.env.DEV ? "/api" : (import.meta.env.VITE_ENGINE_URL ?? import.meta.env.VITE_API_URL ?? "/api");
 const active = new Set<Status>(["queued", "ingesting", "analyzing"]);
 const money = (value: number) => `$${value.toFixed(4)}`;
 const progress = (item: AnalysisImport) => {
@@ -19,7 +21,13 @@ const progress = (item: AnalysisImport) => {
 };
 
 export function meta() {
-  return [{ title: "Analysis Operations · Tempo Chess" }];
+  return [{ title: "Analysis Operations · Tempo" }];
+}
+
+/** Ops tooling reads the import pipeline, so it needs a signed-in user too. */
+export async function clientLoader() {
+  await requireSession();
+  return null;
 }
 
 function StatusPill({ status }: { status: Status }) {
@@ -79,7 +87,7 @@ export default function Operations() {
 
   async function reload() {
     try {
-      const response = await fetch(`${API}/imports`);
+      const response = await apiFetch("/imports");
       if (!response.ok) throw new Error(`API returned ${response.status}`);
       setImports((await response.json()).imports); setError(null);
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
@@ -94,17 +102,17 @@ export default function Operations() {
   async function start(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(null);
     try {
-      const response = await fetch(`${API}/imports/lichess`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, games }) });
+      const response = await apiFetch("/imports/lichess", { json: { username, games } });
       if (!response.ok) throw new Error((await response.json()).error ?? `API returned ${response.status}`);
       await reload();
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(false); }
   }
-  async function cancel(id: string) { await fetch(`${API}/imports/${id}/cancel`, { method: "POST" }); await reload(); }
+  async function cancel(id: string) { await apiFetch(`/imports/${id}/cancel`, { method: "POST" }); await reload(); }
 
   return <div className="relative z-10 min-h-dvh">
     <header className="border-b border-line bg-bg/80 backdrop-blur-xl"><div className="mx-auto flex h-16 max-w-[1240px] items-center justify-between px-5 sm:px-8">
-      <Link to="/" className="text-lg font-black uppercase tracking-[-0.05em]">Tempo <span className="text-accent">Chess</span></Link>
+      <Link to="/dashboard" className="text-lg font-black uppercase tracking-[-0.05em]">Tempo <span className="text-accent">Chess</span></Link>
       <div className="flex items-center gap-2"><span className="h-2 w-2 animate-pulse rounded-full bg-accent" /><span className="cap text-ink-muted">Engine online</span></div>
     </div></header>
     <main className="mx-auto max-w-[1240px] px-5 pb-24 pt-12 sm:px-8 sm:pt-16">

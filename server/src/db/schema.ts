@@ -630,3 +630,63 @@ export const playerStyle = pgTable("player_style", {
     .notNull()
     .defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// repertoire_openings — the openings a user has chosen to study/own, per side.
+// Family-level so the account page can track "how well do I know the Sicilian".
+// ---------------------------------------------------------------------------
+export const repertoireOpenings = pgTable(
+  "repertoire_openings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    color: colorEnum("color").notNull(),
+    family: text("family").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("repertoire_openings_user_color_family_uq").on(t.userId, t.color, t.family)],
+).enableRLS();
+
+// ---------------------------------------------------------------------------
+// opening_training_results — one row per completed repertoire-trainer drill, so
+// the account page can show times practiced, accuracy, and a knowledge estimate.
+// ---------------------------------------------------------------------------
+export const openingTrainingResults = pgTable(
+  "opening_training_results",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    color: colorEnum("color").notNull(),
+    family: text("family"),
+    lineUci: text("line_uci").notNull(),
+    movesCorrect: integer("moves_correct").notNull().default(0),
+    movesTotal: integer("moves_total").notNull().default(0),
+    reveals: integer("reveals").notNull().default(0),
+    completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("opening_training_results_user_family_idx").on(t.userId, t.family)],
+).enableRLS();
+
+// ---------------------------------------------------------------------------
+// lesson_progress — per-user progress through a guided opening lesson.
+// ---------------------------------------------------------------------------
+export const lessonProgress = pgTable(
+  "lesson_progress",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    lessonSlug: text("lesson_slug").notNull(),
+    completedSteps: integer("completed_steps").notNull().default(0),
+    totalSteps: integer("total_steps").notNull().default(0),
+    bestScore: integer("best_score").notNull().default(0),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("lesson_progress_user_lesson_uq").on(t.userId, t.lessonSlug)],
+).enableRLS();

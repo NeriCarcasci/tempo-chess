@@ -9,8 +9,9 @@ import {
 } from "../lib/openings";
 import { pct, playTime, monthYear, relTime, signed } from "../lib/format";
 import { CountUp, RatingLine, ProportionBar, DivergingOpenings } from "./charts";
-import { Chessboard } from "./Chessboard";
+import { Board } from "./Board";
 import { InfoTip } from "./InfoTip";
+import { TopNav } from "./TopNav";
 
 const RESULT: Record<Result, { color: string; label: string }> = {
   win: { color: "var(--color-win)", label: "W" },
@@ -32,7 +33,15 @@ function ResultChip({ result }: { result: Result }) {
   );
 }
 
-function TopBar({ username, coverage }: { username: string; coverage: PlayerCoverage | null }) {
+function TopBar({
+  username,
+  coverage,
+  live,
+}: {
+  username: string;
+  coverage: PlayerCoverage | null;
+  live: boolean;
+}) {
   const sync = useFetcher<{ ok: boolean; message: string }>();
   const missing = coverage?.historyComplete
     ? 0
@@ -41,31 +50,20 @@ function TopBar({ username, coverage }: { username: string; coverage: PlayerCove
       : 0;
   const busy = sync.state !== "idle" || coverage?.activeImport != null;
   return (
-    <header className="dashboard-topbar sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-[1160px] items-center justify-between px-6 sm:px-10">
-        <div className="flex items-center gap-2.5">
-          <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
-            <circle cx="10" cy="10" r="8.5" fill="none" stroke="var(--color-accent)" strokeWidth="1.5" />
-            <line x1="10" y1="10" x2="10" y2="4.5" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" />
-            <line x1="10" y1="10" x2="13.5" y2="11.5" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          <span className="font-serif text-lg font-extrabold uppercase tracking-[-0.05em] text-ink">
-            Tempo <span className="text-accent">Chess</span>
+    <TopNav
+      current="home"
+      right={
+        <>
+          <span className="cap hidden sm:inline">
+            Lichess · <span className="text-ink-muted">{username}</span>
           </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link
-            to="/openings"
-            className="rounded-control border border-accent/40 bg-accent/8 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-accent transition-colors hover:bg-accent hover:text-accent-ink"
-          >
-            Opening review
-          </Link>
-          <div className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            <span className="cap">
-              Lichess · <span className="text-ink-muted">{username}</span>
+          {/* Say so when ratings came from imported games rather than the live
+              profile, instead of presenting reconstructed numbers as official. */}
+          {!live ? (
+            <span className="cap hidden text-ink-faint md:inline" title="Lichess didn't respond; ratings are reconstructed from your imported games.">
+              · offline figures
             </span>
-          </div>
+          ) : null}
           <sync.Form method="post">
             <input type="hidden" name="username" value={username} />
             <button
@@ -77,9 +75,9 @@ function TopBar({ username, coverage }: { username: string; coverage: PlayerCove
             </button>
           </sync.Form>
           {sync.data ? <span className="sr-only" aria-live="polite">{sync.data.message}</span> : null}
-        </div>
-      </div>
-    </header>
+        </>
+      }
+    />
   );
 }
 
@@ -204,7 +202,7 @@ function BoardAndTrend({ s }: { s: Summary }) {
         <div className="cap mb-3">From your last game</div>
         {b ? (
           <>
-            <Chessboard fen={b.fen} flip={b.color === "black"} size={288} />
+            <Board fen={b.fen} flip={b.color === "black"} size={288} />
             <p className="mt-3 max-w-[288px] text-sm leading-relaxed text-ink-muted">
               vs {b.opponent} · move {b.moveNumber} · a {b.result}.{" "}
               <span className="text-ink-faint">
@@ -391,15 +389,18 @@ export function Dashboard({
   summary,
   opening,
   coverage,
+  live = true,
 }: {
   summary: Summary;
   opening: OpeningExplorerData | null;
   coverage: PlayerCoverage | null;
+  /** False when Lichess was unreachable and ratings came from imported games. */
+  live?: boolean;
 }) {
   return (
     <div className="relative z-10 min-h-dvh">
       <a className="skip-link" href="#player-overview-main">Skip to player overview</a>
-      <TopBar username={summary.username} coverage={coverage} />
+      <TopBar username={summary.username} coverage={coverage} live={live} />
       <main id="player-overview-main" className="dashboard-main mx-auto max-w-[1160px] px-6 pb-28 sm:px-10">
         <Masthead s={summary} />
         {opening ? <OpeningPriority data={opening} /> : null}

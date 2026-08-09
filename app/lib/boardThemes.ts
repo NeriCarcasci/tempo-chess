@@ -6,16 +6,18 @@ export interface BoardTheme {
 }
 
 export const BOARD_THEMES: BoardTheme[] = [
-  { id: "tempo", name: "Tempo", light: "#f7e6d2", dark: "#f58a24" },
+  { id: "maple", name: "Maple", light: "#ecd7b2", dark: "#b17c4e" },
+  { id: "sage", name: "Sage", light: "#e9ecd6", dark: "#7f9b6f" },
   { id: "walnut", name: "Walnut", light: "#c9a97e", dark: "#6d4f37" },
-  { id: "forest", name: "Forest", light: "#eeeed2", dark: "#6f8f57" },
   { id: "ocean", name: "Ocean", light: "#d3dce8", dark: "#547a9e" },
   { id: "ash", name: "Ash", light: "#d2ccbf", dark: "#6b665c" },
   { id: "midnight", name: "Midnight", light: "#9aa1af", dark: "#383d47" },
+  { id: "tempo", name: "Tempo", light: "#f7e6d2", dark: "#f58a24" },
 ];
 
-const KEY = "tempo-board-theme";
-const DEFAULT_ID = "tempo";
+// v2: default moved from the loud "tempo" orange to a calm warm "maple".
+const KEY = "tempo-board-theme-v2";
+const DEFAULT_ID = "maple";
 
 export function loadBoardTheme(): BoardTheme {
   try {
@@ -31,6 +33,25 @@ export function loadBoardTheme(): BoardTheme {
 export function saveBoardTheme(id: string): void {
   try {
     localStorage.setItem(KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+// Board file/rank coordinates — a learning aid, on by default.
+const COORD_KEY = "tempo-board-coords";
+
+export function loadShowCoordinates(): boolean {
+  try {
+    return localStorage.getItem(COORD_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function saveShowCoordinates(on: boolean): void {
+  try {
+    localStorage.setItem(COORD_KEY, on ? "1" : "0");
   } catch {
     /* ignore */
   }

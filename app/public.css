@@ -1,0 +1,475 @@
+/* ================================================================== */
+/* Public site: marketing shell, landing, pricing, features, legal,    */
+/* plus the auth and billing surfaces that sit between the two.        */
+/* Same graphite/amber system as the app, run wider and quieter.       */
+/* ================================================================== */
+
+@layer components {
+  .public-shell { position: relative; z-index: 1; display: flex; min-height: 100dvh; flex-direction: column; }
+  .public-shell > main { flex: 1; }
+
+  /* -- identity ------------------------------------------------------ */
+  .logo { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--color-ink); }
+  .logo-mark { color: var(--color-accent); flex: 0 0 auto; }
+  .logo-word {
+    font-size: 1.16rem; font-weight: 900; letter-spacing: -0.055em; line-height: 1;
+  }
+
+  /* -- nav ----------------------------------------------------------- */
+  .public-header {
+    position: sticky; top: 0; z-index: 50;
+    border-bottom: 1px solid var(--color-line);
+    background: color-mix(in srgb, var(--color-bg) 86%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+  .public-header-inner {
+    position: relative;
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    margin: 0 auto; max-width: 74rem; height: 68px; padding: 0 1.5rem;
+  }
+  .public-nav { display: flex; align-items: center; gap: 1.75rem; }
+  .public-nav a { font-size: 0.85rem; font-weight: 700; color: var(--color-ink-muted); transition: color 140ms ease; }
+  .public-nav a:hover, .public-nav a.is-active { color: var(--color-ink); }
+  .public-nav a.is-active {
+    text-decoration: underline; text-decoration-color: var(--color-accent);
+    text-decoration-thickness: 2px; text-underline-offset: 0.45rem;
+  }
+  .public-signin { white-space: nowrap; }
+  .public-nav .public-cta, .public-nav .public-cta:hover { color: var(--color-accent-ink); }
+  .public-burger {
+    display: none; width: 2.4rem; height: 2.4rem; place-items: center; gap: 5px;
+    border: 1px solid var(--color-line); border-radius: var(--radius-control);
+  }
+  .public-burger span { display: block; width: 15px; height: 2px; border-radius: 2px; background: var(--color-ink); }
+
+  /* -- shared page furniture ----------------------------------------- */
+  .btn-lg { min-height: 3.1rem; padding: 0 1.6rem; font-size: 0.86rem; }
+  .section-title {
+    max-width: 22ch; font-size: clamp(1.55rem, 3.2vw, 2.15rem);
+    font-weight: 850; letter-spacing: -0.038em; line-height: 1.08;
+  }
+
+  /* -- hero: asymmetric split ---------------------------------------- */
+  .hero {
+    display: grid; align-items: center; gap: clamp(2rem, 5vw, 4.5rem);
+    margin: 0 auto; max-width: 74rem; padding: clamp(2.5rem, 5vw, 5rem) 1.5rem clamp(3rem, 6vw, 6rem);
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  }
+  .hero-copy h1 {
+    font-size: clamp(2.6rem, 6.2vw, 4.4rem); font-weight: 880;
+    letter-spacing: -0.05em; line-height: 0.98; text-wrap: balance;
+  }
+  .hero-copy h1 em {
+    font-style: normal; color: var(--color-accent);
+    /* The one accent moment above the fold; the CTA repeats it below. */
+  }
+  .hero-copy > p {
+    margin-top: 1.4rem; max-width: 34ch;
+    color: var(--color-ink-muted); font-size: 1.06rem; line-height: 1.6;
+  }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 2.2rem; }
+
+  /* -- hero board ----------------------------------------------------
+     Flat and square-on. The pieces are 2D vectors, so the board is 2D too;
+     faking depth under them made them read as cut-outs. The board runs
+     graphite and cream rather than the app's amber, which keeps the accent
+     meaning "the engine's move" instead of decorating 32 squares. */
+  .hb {
+    --hb-light: #ece4d6;
+    --hb-dark: #59616c;
+    --hb-bad: #b3382f;
+    --hb-good: var(--color-accent);
+    display: flex; flex-direction: column; gap: 1.1rem;
+    animation: hb-in 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .hb-board {
+    position: relative; aspect-ratio: 1; width: 100%;
+    border-radius: 6px; overflow: hidden;
+    box-shadow: 0 5px 0 #d3d7dd, 0 26px 50px rgb(41 44 50 / 0.16);
+  }
+  .hb-grid {
+    position: absolute; inset: 0;
+    display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
+  }
+  .hb-sq { background: var(--hb-light); }
+  .hb-sq.is-dark { background: var(--hb-dark); }
+  /* Square tints stay low so the pieces on them keep their contrast; the
+     arrows carry the actual signal. */
+  .hb-sq.is-played { background: color-mix(in srgb, var(--hb-bad) 42%, var(--hb-light)); }
+  .hb-sq.is-dark.is-played { background: color-mix(in srgb, var(--hb-bad) 52%, var(--hb-dark)); }
+  .hb-sq.is-better { background: color-mix(in srgb, var(--hb-good) 46%, var(--hb-light)); }
+  .hb-sq.is-dark.is-better { background: color-mix(in srgb, var(--hb-good) 50%, var(--hb-dark)); }
+
+  .hb-slot { position: absolute; width: 12.5%; height: 12.5%; display: block; }
+  .hb-piece { width: 100%; height: 100%; display: block; }
+
+  .hb-arrows { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hb-arrow line { stroke-width: 1.9; stroke-linecap: round; }
+  .hb-arrow-bad { stroke: var(--hb-bad); fill: var(--hb-bad); }
+  .hb-arrow-good { stroke: var(--hb-good); fill: var(--hb-good); }
+
+  /* -- the engine read under the board ------------------------------- */
+  .hb-read { display: grid; gap: 0.7rem; }
+  .hb-read-game {
+    font: 700 0.63rem/1 var(--font-mono); letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--color-ink-faint);
+  }
+  .hb-read-rows { display: grid; gap: 0; }
+  .hb-read-rows > div {
+    display: grid; align-items: baseline; gap: 0.7rem;
+    grid-template-columns: 0.5rem auto 1fr auto;
+    border-top: 1px solid var(--color-line); padding: 0.6rem 0;
+  }
+  .hb-key { width: 0.5rem; height: 0.5rem; border-radius: 2px; }
+  .hb-read-rows .is-bad .hb-key { background: var(--hb-bad); }
+  .hb-read-rows .is-good .hb-key { background: var(--hb-good); }
+  .hb-read-rows b { font-size: 0.86rem; font-weight: 700; }
+  .hb-read-rows .is-bad b { color: var(--hb-bad); }
+  .hb-read-rows .is-good b { color: color-mix(in srgb, var(--hb-good) 72%, var(--color-ink)); }
+  .hb-read-rows span:not(.hb-key) { color: var(--color-ink-muted); font-size: 0.82rem; }
+  .hb-read-rows em {
+    font-style: normal; font-size: 0.82rem; font-weight: 700;
+    color: var(--color-ink-muted);
+  }
+  .hb-read-foot {
+    border-top: 1px solid var(--color-line); padding-top: 0.6rem;
+    color: var(--color-ink-faint); font-size: 0.7rem; line-height: 1.45;
+  }
+
+  @keyframes hb-in {
+    from { opacity: 0; transform: translateY(12px); }
+  }
+
+  /* -- statement: one full-width sentence ---------------------------- */
+  .statement { border-block: 1px solid var(--color-line); background: var(--color-surface); }
+  .statement p {
+    margin: 0 auto; max-width: 46rem; padding: clamp(3rem, 6vw, 4.5rem) 1.5rem;
+    font-size: clamp(1.15rem, 2.4vw, 1.6rem); font-weight: 550;
+    line-height: 1.45; letter-spacing: -0.02em; text-wrap: balance;
+  }
+  .statement i { font-style: italic; color: var(--color-ink-muted); }
+
+  /* -- flow: three connected steps, not three cards ------------------ */
+  .flow { margin: 0 auto; max-width: 74rem; padding: clamp(4rem, 8vw, 7rem) 1.5rem; }
+  .flow-track {
+    display: grid; gap: 2.5rem; margin-top: 3rem;
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .flow-track > li { position: relative; padding-top: 2.6rem; }
+  /* The rule runs behind the markers and stops at the last step. */
+  .flow-track > li::before {
+    content: ""; position: absolute; top: 0.85rem; left: 0; right: -2.5rem; height: 1px;
+    background: var(--color-line);
+  }
+  .flow-track > li:last-child::before { right: 0; }
+  .flow-dot {
+    position: absolute; top: 0; left: 0;
+    display: grid; width: 1.7rem; height: 1.7rem; place-items: center;
+    border-radius: 50%; background: var(--color-accent); color: var(--color-accent-ink);
+    font-size: 0.72rem; font-weight: 800;
+  }
+  .flow-track h3 { font-size: 1.12rem; font-weight: 820; letter-spacing: -0.028em; }
+  .flow-track p { margin-top: 0.5rem; color: var(--color-ink-muted); font-size: 0.9rem; line-height: 1.6; }
+
+  /* -- bento: asymmetric, one tinted cell ---------------------------- */
+  .bento { margin: 0 auto; max-width: 74rem; padding: 0 1.5rem clamp(4rem, 8vw, 7rem); }
+  .bento-grid {
+    display: grid; gap: 1rem; margin-top: 1.75rem;
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .bento-cell {
+    display: flex; flex-direction: column; justify-content: flex-end;
+    border: 1px solid var(--color-line); border-radius: var(--radius-panel);
+    background: var(--color-surface); padding: 1.6rem;
+    box-shadow: 0 3px 0 #e4e7eb;
+  }
+  .bento-cell h3 { font-size: 1.05rem; font-weight: 820; letter-spacing: -0.028em; line-height: 1.25; }
+  .bento-cell p { margin-top: 0.6rem; color: var(--color-ink-muted); font-size: 0.88rem; line-height: 1.6; }
+  .bento-cell .text-link { margin-top: 1.1rem; align-self: flex-start; }
+  .bento-lead { grid-column: span 2; grid-row: span 2; min-height: 15rem; }
+  .bento-lead h3 { font-size: clamp(1.25rem, 2.4vw, 1.7rem); max-width: 18ch; }
+  .bento-lead p { max-width: 42ch; font-size: 0.94rem; }
+  .bento-accent {
+    position: relative; overflow: hidden; grid-column: span 2; grid-row: span 2;
+    border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-line));
+    background: color-mix(in srgb, var(--color-accent) 9%, var(--color-surface));
+    box-shadow: 0 3px 0 color-mix(in srgb, var(--color-accent) 26%, #e4e7eb);
+  }
+  .bento-glyph {
+    position: absolute; top: -1.2rem; right: -1.2rem;
+    color: color-mix(in srgb, var(--color-accent) 34%, transparent);
+    pointer-events: none;
+  }
+  .bento-accent h3, .bento-accent p { position: relative; }
+  .bento-grid > .bento-cell:not(.bento-lead):not(.bento-accent) { grid-column: span 2; }
+
+  /* -- refuse: definition pairs, no cards ---------------------------- */
+  .refuse {
+    margin: 0 auto; max-width: 74rem; padding: 0 1.5rem clamp(4rem, 8vw, 7rem);
+  }
+  .refuse-list {
+    display: grid; gap: 0; margin-top: 2rem;
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .refuse-list > div { border-top: 2px solid var(--color-ink); padding: 1.1rem 1.5rem 0 0; }
+  .refuse-list dt { font-size: 0.98rem; font-weight: 820; letter-spacing: -0.025em; }
+  .refuse-list dd { margin-top: 0.5rem; color: var(--color-ink-muted); font-size: 0.88rem; line-height: 1.6; }
+
+  /* -- closer -------------------------------------------------------- */
+  .closer {
+    margin: 0 auto; max-width: 42rem;
+    padding: clamp(4rem, 8vw, 6.5rem) 1.5rem clamp(5rem, 9vw, 8rem);
+    text-align: center;
+  }
+  .closer h2 {
+    font-size: clamp(1.6rem, 3.6vw, 2.4rem); font-weight: 860;
+    letter-spacing: -0.04em; line-height: 1.1; text-wrap: balance;
+  }
+  .closer .primary-button { margin-top: 2rem; }
+  .closer > p { margin-top: 1rem; color: var(--color-ink-faint); font-size: 0.8rem; }
+
+  /* -- footer -------------------------------------------------------- */
+  .public-footer { border-top: 1px solid var(--color-line); background: var(--color-surface); }
+  .public-footer-inner {
+    display: grid; gap: 2.5rem; margin: 0 auto; max-width: 74rem; padding: 3.5rem 1.5rem 2.5rem;
+    grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+  }
+  .public-footer-brand p {
+    margin-top: 0.9rem; max-width: 22rem;
+    color: var(--color-ink-muted); font-size: 0.82rem; line-height: 1.6;
+  }
+  .public-footer nav { display: flex; flex-direction: column; gap: 0.55rem; align-items: flex-start; }
+  .public-footer h2 {
+    margin-bottom: 0.3rem; font: 700 0.66rem/1 var(--font-mono);
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-ink-faint);
+  }
+  .public-footer nav a { color: var(--color-ink-muted); font-size: 0.83rem; font-weight: 600; }
+  .public-footer nav a:hover { color: var(--color-accent); }
+  .public-footer-base {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.8rem;
+    margin: 0 auto; max-width: 74rem; border-top: 1px solid var(--color-line);
+    padding: 1.2rem 1.5rem 2rem; color: var(--color-ink-faint); font-size: 0.72rem;
+  }
+  .public-footer-base a { text-decoration: underline; text-underline-offset: 0.2rem; }
+
+  /* -- page head shared by features + pricing ------------------------ */
+  .page-head {
+    margin: 0 auto; max-width: 74rem;
+    padding: clamp(3.5rem, 7vw, 5.5rem) 1.5rem clamp(2rem, 4vw, 3rem);
+  }
+  .page-head h1 {
+    max-width: 18ch; font-size: clamp(2.2rem, 5vw, 3.4rem);
+    font-weight: 870; letter-spacing: -0.048em; line-height: 1.02;
+  }
+  .page-head > p {
+    margin-top: 1.2rem; max-width: 46ch;
+    color: var(--color-ink-muted); font-size: 1.02rem; line-height: 1.6;
+  }
+  .page-head-center { text-align: center; }
+  .page-head-center h1, .page-head-center > p { margin-inline: auto; }
+
+  /* -- pricing ------------------------------------------------------- */
+  .price-cancelled { margin-top: 1.2rem; color: var(--color-mistake); font-size: 0.85rem; font-weight: 650; }
+  .price-toggle {
+    display: inline-flex; gap: 0.25rem; margin-top: 2rem; padding: 0.25rem;
+    border: 1px solid var(--color-line); border-radius: 999px; background: var(--color-surface);
+  }
+  .price-toggle button {
+    border-radius: 999px; padding: 0.5rem 1.2rem;
+    color: var(--color-ink-muted); font-size: 0.78rem; font-weight: 750;
+    transition: background 140ms ease, color 140ms ease;
+  }
+  .price-toggle button.is-active { background: var(--color-ink); color: var(--color-bg); }
+
+  .price-grid {
+    display: grid; gap: 1.25rem; margin: 0 auto; max-width: 54rem;
+    padding: 0 1.5rem; grid-template-columns: repeat(2, 1fr); align-items: start;
+  }
+  .price-card {
+    position: relative; border: 1px solid var(--color-line); border-radius: var(--radius-panel);
+    background: var(--color-surface); padding: 1.9rem 1.6rem;
+    box-shadow: 0 3px 0 #e4e7eb;
+  }
+  .price-card.is-featured {
+    border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-line));
+    box-shadow: 0 4px 0 color-mix(in srgb, var(--color-accent) 30%, #e4e7eb);
+  }
+  .price-flag {
+    position: absolute; top: -0.7rem; left: 1.6rem;
+    border-radius: 999px; background: var(--color-accent); color: var(--color-accent-ink);
+    padding: 0.25rem 0.7rem; font: 800 0.63rem/1.4 var(--font-mono);
+    letter-spacing: 0.07em; text-transform: uppercase;
+  }
+  .price-card h2 { font-size: 1.25rem; font-weight: 850; letter-spacing: -0.03em; }
+  .price-tagline { margin-top: 0.4rem; color: var(--color-ink-muted); font-size: 0.84rem; line-height: 1.5; }
+  .price-amount {
+    display: flex; align-items: baseline; gap: 0.3rem; margin-top: 1.3rem;
+    font-size: 2.6rem; font-weight: 800; letter-spacing: -0.045em;
+  }
+  .price-amount small { color: var(--color-ink-faint); font-size: 0.8rem; font-weight: 650; }
+  .price-saving { margin-top: 0.35rem; color: var(--color-win); font-size: 0.75rem; font-weight: 750; }
+  .price-cta { width: 100%; margin-top: 1.4rem; }
+  .price-current {
+    display: block; margin-top: 1.4rem; border: 1px dashed var(--color-line-strong);
+    border-radius: var(--radius-control); padding: 0.7rem; text-align: center;
+    color: var(--color-ink-muted); font-size: 0.78rem; font-weight: 700;
+  }
+  .price-note { margin-top: 0.8rem; color: var(--color-ink-faint); font-size: 0.74rem; line-height: 1.55; }
+  .price-features {
+    display: grid; gap: 0.6rem; margin-top: 1.6rem;
+    border-top: 1px solid var(--color-line); padding-top: 1.4rem;
+  }
+  .price-features li { display: flex; gap: 0.6rem; color: var(--color-ink-muted); font-size: 0.84rem; line-height: 1.45; }
+  .price-features li > span:first-child { color: var(--color-win); font-weight: 800; }
+  .price-features li.is-excluded { color: var(--color-ink-faint); }
+  .price-features li.is-excluded > span:first-child { color: var(--color-line-strong); }
+
+  .price-faq {
+    display: grid; gap: 0; margin: 0 auto; max-width: 54rem;
+    padding: clamp(3.5rem, 7vw, 5.5rem) 1.5rem;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .price-faq > div { border-top: 1px solid var(--color-line); padding: 1.4rem 2rem 1.4rem 0; }
+  .price-faq dt { font-size: 0.94rem; font-weight: 800; letter-spacing: -0.02em; }
+  .price-faq dd { margin-top: 0.5rem; color: var(--color-ink-muted); font-size: 0.86rem; line-height: 1.6; }
+
+  /* -- features ------------------------------------------------------ */
+  .feature-section {
+    margin: 0 auto; max-width: 74rem; padding: clamp(3rem, 6vw, 4.5rem) 1.5rem;
+    border-top: 1px solid var(--color-line); scroll-margin-top: 5rem;
+  }
+  .feature-row {
+    display: grid; gap: clamp(1.5rem, 4vw, 3.5rem);
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); align-items: start;
+  }
+  .feature-row h2 {
+    font-size: clamp(1.4rem, 2.9vw, 1.95rem); font-weight: 850;
+    letter-spacing: -0.038em; line-height: 1.12; text-wrap: balance;
+  }
+  .feature-row > div > p {
+    margin-top: 0.9rem; max-width: 34ch; color: var(--color-ink-muted);
+    font-size: 0.94rem; line-height: 1.65;
+  }
+  .feature-points { display: grid; gap: 0; }
+  .feature-points > div { border-top: 1px solid var(--color-line); padding: 1.15rem 0; }
+  .feature-points > div:first-child { border-top: 0; padding-top: 0; }
+  .feature-points strong { font-size: 0.94rem; font-weight: 800; letter-spacing: -0.02em; }
+  .feature-points p { margin-top: 0.35rem; color: var(--color-ink-muted); font-size: 0.87rem; line-height: 1.6; }
+
+  /* -- legal --------------------------------------------------------- */
+  .legal { margin: 0 auto; max-width: 42rem; padding: clamp(3rem, 6vw, 4.5rem) 1.5rem 5rem; }
+  .legal h1 { font-size: clamp(1.9rem, 4vw, 2.5rem); font-weight: 860; letter-spacing: -0.045em; }
+  .legal-meta { margin-top: 0.6rem; color: var(--color-ink-faint); font-size: 0.78rem; }
+  .legal-notice {
+    margin-top: 1.8rem; border: 1px solid color-mix(in srgb, var(--color-mistake) 55%, var(--color-line));
+    border-radius: var(--radius-panel);
+    background: color-mix(in srgb, var(--color-mistake) 8%, var(--color-surface));
+    padding: 1rem 1.2rem; color: var(--color-ink-muted); font-size: 0.84rem; line-height: 1.6;
+  }
+  .legal-notice strong { color: var(--color-ink); }
+  .legal h2 { margin-top: 2.6rem; font-size: 1.08rem; font-weight: 820; letter-spacing: -0.025em; }
+  .legal h3 { margin-top: 1.6rem; font-size: 0.94rem; font-weight: 780; }
+  .legal p, .legal li { margin-top: 0.85rem; color: var(--color-ink-muted); font-size: 0.9rem; line-height: 1.7; }
+  .legal ul { margin-top: 0.4rem; padding-left: 1.2rem; list-style: disc; }
+  .legal li { margin-top: 0.45rem; }
+  .legal a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 0.2rem; }
+  .legal-foot { margin-top: 3rem; border-top: 1px solid var(--color-line); padding-top: 1.2rem; font-size: 0.84rem; }
+
+  /* -- auth additions ------------------------------------------------ */
+  .auth-card-wide { width: min(30rem, 100%); }
+  .auth-error {
+    margin-top: 0.9rem; border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--color-loss) 10%, transparent);
+    padding: 0.6rem 0.75rem; color: #c8232a; font-size: 0.78rem; line-height: 1.5;
+  }
+  .auth-ok {
+    margin-top: 0.9rem; border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--color-win) 14%, transparent);
+    padding: 0.6rem 0.75rem; color: #3f8f04; font-size: 0.78rem; line-height: 1.5;
+  }
+  .auth-error code { font-family: var(--font-mono); font-size: 0.72rem; }
+  .auth-inline-link {
+    margin-top: 1rem; color: var(--color-ink-muted); font-size: 0.78rem; font-weight: 650;
+    text-decoration: underline; text-underline-offset: 0.22rem;
+  }
+  .auth-inline-link:hover { color: var(--color-accent); }
+  .auth-reset {
+    display: grid; gap: 0.7rem; margin-top: 1.2rem;
+    border-top: 1px solid var(--color-line); padding-top: 1.2rem;
+  }
+  .auth-reset label { display: grid; gap: 0.35rem; }
+  .auth-reset label span { font-size: 0.72rem; font-weight: 700; color: var(--color-ink-muted); }
+  .auth-reset input {
+    height: 2.6rem; border: 1px solid var(--color-line); border-radius: var(--radius-control);
+    background: var(--color-surface); color: var(--color-ink); padding: 0 0.8rem; font-size: 0.88rem;
+  }
+  .auth-choice { display: flex; gap: 0.6rem; border: 0; padding: 0; }
+  .auth-choice legend { margin-bottom: 0.45rem; font-size: 0.72rem; font-weight: 700; color: var(--color-ink-muted); }
+  .auth-choice label {
+    display: inline-flex; align-items: center; gap: 0.45rem; flex: 1;
+    border: 1px solid var(--color-line); border-radius: var(--radius-control);
+    padding: 0.6rem 0.8rem; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+  }
+  .auth-choice label:has(input:checked) {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  }
+  .auth-choice input { accent-color: var(--color-accent); }
+  .auth-note a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 0.2rem; }
+
+  /* -- account: billing + identity ----------------------------------- */
+  .account-billing, .account-identity {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.5rem;
+    border: 1px solid var(--color-line); border-radius: var(--radius-panel);
+    background: var(--color-surface); padding: 1.4rem 1.5rem;
+  }
+  .account-identity { margin-top: 1rem; }
+  .account-billing-main strong, .account-identity strong {
+    display: block; margin-top: 0.4rem; font-size: 1.15rem; font-weight: 850; letter-spacing: -0.03em;
+  }
+  .account-plan-note { color: var(--color-ink-faint); font-size: 0.75rem; font-style: normal; font-weight: 600; }
+  .account-billing-main > p, .account-identity > div > p {
+    margin-top: 0.5rem; max-width: 34rem; color: var(--color-ink-muted); font-size: 0.85rem; line-height: 1.6;
+  }
+  .account-billing-msg { color: var(--color-accent); font-weight: 650; }
+  .account-billing-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem; }
+  .account-signout { color: var(--color-loss); }
+}
+
+/* The board's entrance is the page's one authored moment; nothing else moves. */
+@media (prefers-reduced-motion: reduce) {
+  .hb-board, .hb-verdict { animation: none; }
+}
+
+@media (max-width: 1000px) {
+  .hero { grid-template-columns: 1fr; }
+  .hero-copy > p { max-width: 46ch; }
+  .hb { max-width: 30rem; margin-inline: auto; width: 100%; }
+}
+
+@media (max-width: 860px) {
+  .flow-track { grid-template-columns: 1fr; gap: 1.75rem; }
+  .flow-track > li::before { right: 0; }
+  .refuse-list { grid-template-columns: 1fr; }
+  .refuse-list > div { padding-right: 0; }
+  .bento-grid { grid-template-columns: repeat(2, 1fr); }
+  .bento-lead, .bento-accent, .bento-grid > .bento-cell { grid-column: span 2; grid-row: auto; }
+  .feature-row { grid-template-columns: 1fr; }
+  .price-grid, .price-faq { grid-template-columns: 1fr; }
+  .price-faq > div { padding-right: 0; }
+  .public-footer-inner { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 720px) {
+  .public-burger { display: grid; }
+  .public-nav {
+    position: absolute; top: 100%; right: 0; left: 0; display: none;
+    flex-direction: column; align-items: stretch; gap: 0.9rem;
+    border-bottom: 1px solid var(--color-line); background: var(--color-surface);
+    padding: 1.2rem 1.5rem 1.5rem;
+  }
+  .public-nav.is-open { display: flex; }
+  .public-footer-inner { grid-template-columns: 1fr; gap: 1.8rem; }
+  .account-billing, .account-identity { flex-direction: column; align-items: flex-start; }
+}

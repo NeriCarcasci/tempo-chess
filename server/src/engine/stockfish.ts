@@ -373,12 +373,78 @@ export class Engine {
   }
 }
 
+/**
+ * Ask Stockfish for a move at a capped strength — for "play it out vs the bot".
+ * Uses UCI_LimitStrength + UCI_Elo (clamped to Stockfish's 1320–3190 range) and
+ * a short thinking time. Spawns a throwaway process per move.
+ */
+export async function botMove(
+  fen: string,
+  elo: number,
+  movetimeMs = 350,
+): Promise<string | undefined> {
+  const sf = spawn(ENGINE_PATH, []);
+  const clampedElo = Math.max(1320, Math.min(3190, Math.round(elo)));
+  return new Promise<string | undefined>((resolve, reject) => {
+    let buf = "";
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      try {
+        sf.stdin.write("quit\n");
+      } catch {
+        /* ignore */
+      }
+      sf.kill();
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("Bot move timed out"));
+    }, movetimeMs + 9000);
+    timer.unref();
+    sf.on("error", (error) => {
+      clearTimeout(timer);
+      cleanup();
+      reject(error);
+    });
+    sf.stdout.on("data", (chunk: Buffer) => {
+      buf += chunk.toString();
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (line === "uciok") {
+          sf.stdin.write("setoption name UCI_LimitStrength value true\n");
+          sf.stdin.write(`setoption name UCI_Elo value ${clampedElo}\n`);
+          sf.stdin.write(`position fen ${fen}\n`);
+          sf.stdin.write(`go movetime ${movetimeMs}\n`);
+        }
+        if (line.startsWith("bestmove")) {
+          clearTimeout(timer);
+          const move = line.split(/\s+/)[1];
+          cleanup();
+          resolve(move && move !== "(none)" ? move : undefined);
+          return;
+        }
+      }
+    });
+    sf.stdin.write("uci\n");
+  });
+}
+
 /** Analyze a list of positions sequentially on one engine process. */
-export async function analyzeFens(fens: string[], depth = 12): Promise<PositionEval[]> {
+export async function analyzeFens(fens: string[], depth = 12, multiPv = 1): Promise<PositionEval[]> {
   const engine = new Engine();
   try {
     const out: PositionEval[] = [];
-    for (const fen of fens) out.push(await engine.analyze(fen, depth));
+    const profile: AnalysisProfile = {
+      id: "legacy-depth",
+      version: 1,
+      limit: { type: "depth", value: depth },
+      multiPv,
+    };
+    for (const fen of fens) out.push(await engine.analyze(fen, profile));
     return out;
   } finally {
     engine.quit();

@@ -1,13 +1,15 @@
 import { useLoaderData, useRouteError } from "react-router";
 import { fetchGame, type GameData } from "../lib/game";
 import { GameReview } from "../components/GameReview";
+import { requireSession } from "../lib/session";
 import type { Route } from "./+types/game";
 
 export function meta() {
-  return [{ title: "Game review · Tempo Chess" }];
+  return [{ title: "Game review · Tempo" }];
 }
 
 export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {
+  await requireSession();
   const ply = Number(new URL(request.url).searchParams.get("ply"));
   return {
     game: await fetchGame(params.id ?? ""),

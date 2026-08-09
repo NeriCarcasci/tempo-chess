@@ -5,6 +5,7 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useNavigation,
 } from "react-router";
 
 import type { Route } from "./+types/root";
@@ -25,12 +26,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
+        <NavProgress />
         {children}
         <ScrollRestoration />
         <Scripts />
       </body>
     </html>
   );
+}
+
+/** Thin top-of-page bar that animates while a route navigation is pending. */
+function NavProgress() {
+  const navigation = useNavigation();
+  const active = navigation.state !== "idle";
+  return <div className={`nav-progress ${active ? "is-active" : ""}`} role="presentation" />;
 }
 
 export default function App() {

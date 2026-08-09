@@ -89,12 +89,40 @@ async function ensureAccount(username: string): Promise<{ userId: string; accoun
   });
 }
 
+const LICHESS_COUNT_TTL_MS = 5 * 60_000;
+const LICHESS_COUNT_TIMEOUT_MS = 2500;
+const lichessCountCache = new Map<string, { value: number; at: number }>();
+
+/**
+ * The player's total game count from Lichess. Lichess rate-limits bursts and can
+ * hang, so this must never block a request: we time out fast, cache the result for
+ * a few minutes, and serve the last known value (or `null`) on any failure. This
+ * keeps `/coverage` and `POST /imports/lichess` off Lichess's critical path.
+ */
+async function getLichessAvailableGames(username: string): Promise<number | null> {
+  const key = username.toLowerCase();
+  const cached = lichessCountCache.get(key);
+  const now = Date.now();
+  if (cached && now - cached.at < LICHESS_COUNT_TTL_MS) return cached.value;
+  try {
+    const response = await fetch(`https://lichess.org/api/user/${encodeURIComponent(username)}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(LICHESS_COUNT_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`Lichess profile returned ${response.status} for "${username}"`);
+    const profile = await response.json() as { count?: { all?: number } };
+    const value = Number(profile.count?.all ?? 0);
+    lichessCountCache.set(key, { value, at: now });
+    return value;
+  } catch {
+    return cached ? cached.value : null; // serve stale on failure, else "unknown"
+  }
+}
+
 export async function getLichessCoverage(username: string): Promise<PlayerCoverage> {
   const { userId, accountId } = await ensureAccount(username);
-  const [profileResponse, storedRows, analyzedRows, activeRows, latestRows] = await Promise.all([
-    fetch(`https://lichess.org/api/user/${encodeURIComponent(username)}`, {
-      headers: { Accept: "application/json" },
-    }),
+  const [availableGamesRaw, storedRows, analyzedRows, activeRows, latestRows] = await Promise.all([
+    getLichessAvailableGames(username),
     client`select count(*)::int as count from games
       where user_id = ${userId} and account_id = ${accountId}`,
     client`select count(distinct t.game_id)::int as count
@@ -108,11 +136,10 @@ export async function getLichessCoverage(username: string): Promise<PlayerCovera
     client.unsafe(`${IMPORT_SELECT} where i.account_id = $1
       order by i.created_at desc limit 1`, [accountId]),
   ]);
-  if (!profileResponse.ok) {
-    throw new Error(`Lichess profile returned ${profileResponse.status} for "${username}"`);
-  }
-  const profile = await profileResponse.json() as { count?: { all?: number } };
-  const availableGames = Number(profile.count?.all ?? 0);
+  const importedGames = number(storedRows[0]?.count);
+  // Lichess is best-effort here; if its count is unknown, fall back to what we've
+  // already imported rather than showing a bogus "sync N games" prompt.
+  const availableGames = availableGamesRaw ?? importedGames;
   const activeImport = activeRows[0]
     ? mapImport(activeRows[0] as Record<string, unknown>)
     : null;
@@ -128,7 +155,7 @@ export async function getLichessCoverage(username: string): Promise<PlayerCovera
   return {
     username,
     availableGames,
-    importedGames: number(storedRows[0]?.count),
+    importedGames,
     analyzedGames: number(analyzedRows[0]?.count),
     activeImport,
     historyComplete,

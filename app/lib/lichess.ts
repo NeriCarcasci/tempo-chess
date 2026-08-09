@@ -52,13 +52,13 @@ export interface GameLite {
 
 const API = "https://lichess.org";
 
-export async function fetchProfile(username: string): Promise<Profile> {
-  const res = await fetch(`${API}/api/user/${encodeURIComponent(username)}`);
+export async function fetchProfile(username: string, signal?: AbortSignal): Promise<Profile> {
+  const res = await fetch(`${API}/api/user/${encodeURIComponent(username)}`, { signal });
   if (!res.ok) throw new Error(`Lichess user "${username}" (${res.status})`);
   return res.json();
 }
 
-export async function fetchGames(username: string, max = 100): Promise<GameLite[]> {
+export async function fetchGames(username: string, max = 100, signal?: AbortSignal): Promise<GameLite[]> {
   const params = new URLSearchParams({
     max: String(max),
     opening: "true",
@@ -68,7 +68,7 @@ export async function fetchGames(username: string, max = 100): Promise<GameLite[
   });
   const res = await fetch(
     `${API}/api/games/user/${encodeURIComponent(username)}?${params}`,
-    { headers: { Accept: "application/x-ndjson" } },
+    { headers: { Accept: "application/x-ndjson" }, signal },
   );
   if (!res.ok) throw new Error(`Lichess games "${username}" (${res.status})`);
   const uname = username.toLowerCase();

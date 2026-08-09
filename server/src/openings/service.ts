@@ -1,4 +1,5 @@
 import { client } from "../db/client.js";
+import { TtlCache } from "../cache.js";
 import { ensureOpeningCatalogue } from "./catalogue.js";
 import {
   OPENING_CLASSIFIER_VERSION,
@@ -9,9 +10,117 @@ import {
   splitOpeningName,
   type MasteryMetrics,
 } from "./model.js";
-import { buildPersonalOpeningTree, focusPersonalOpeningTree } from "./tree.js";
+import {
+  buildPersonalOpeningTree,
+  focusPersonalOpeningTree,
+  type PersonalOpeningTree,
+} from "./tree.js";
 
 const MAX_OPENING_PLIES = 30;
+
+/** The fully-built explorer payload is expensive: a multi-join observation query
+ *  plus in-memory tree building. Cache it per username+filters; it's cleared for a
+ *  user whenever their opening graph is rebuilt (import, repertoire edit, rebuild). */
+const explorerCache = new TtlCache(45_000, 300);
+
+/** Resolved account per normalized username. Profile ids are immutable, so a cache
+ *  hit is always valid and this never needs invalidating. */
+const userCache = new Map<string, { userId: string; username: string }>();
+
+function normalizedUsername(username: string): string {
+  return username.trim().toLowerCase();
+}
+
+function explorerFilterKey(filters: ExplorerFilters): string {
+  return [
+    filters.platform ?? "all",
+    filters.speed ?? "all",
+    filters.color ?? "all",
+    filters.since ?? "",
+    filters.family ?? "",
+    filters.node ?? "",
+    filters.from ?? "",
+    filters.move ?? "",
+    filters.graph ?? "1",
+  ].join("|");
+}
+
+interface PositionEval {
+  evalCp: number | null;
+  best: string | null;
+}
+
+/**
+ * Encode the full player tree so the client can navigate every branch offline.
+ * Nodes are referenced by array index; each keeps its canonical position key
+ * (which doubles as a FEN prefix for board rendering), so no full FENs are
+ * shipped. Each edge also carries the screening eval of the resulting position
+ * (White's perspective, in centipawns) and whether it is the engine's best move
+ * at the parent, so the explorer can show points and flag the top move.
+ */
+function compactGraph(tree: PersonalOpeningTree, evaluations: Map<string, PositionEval>) {
+  const index = new Map<string, number>();
+  const nodeByKey = new Map<string, PersonalOpeningTree["nodes"][number]>();
+  tree.nodes.forEach((node, i) => {
+    index.set(node.key, i);
+    nodeByKey.set(node.key, node);
+  });
+  return {
+    games: tree.games,
+    root: index.get(tree.rootKey) ?? 0,
+    nodes: tree.nodes.map((node) => ({
+      k: node.key,
+      p: node.ply,
+      g: node.games,
+      o: node.opportunities,
+      f: node.failures,
+      t: node.terminalGames,
+      x: node.transposition ? 1 : 0,
+      nm: node.name ?? undefined,
+    })),
+    edges: tree.edges.map((edge) => {
+      const parent = nodeByKey.get(edge.fromKey);
+      const child = nodeByKey.get(edge.toKey);
+      const parentEval = parent ? evaluations.get(parent.fen) : undefined;
+      const childEval = child ? evaluations.get(child.fen) : undefined;
+      return {
+        a: index.get(edge.fromKey)!,
+        b: index.get(edge.toKey)!,
+        u: edge.moveUci,
+        s: edge.moveSan,
+        g: edge.games,
+        sh: edge.sharePercent,
+        ac: edge.actor === "player" ? "p" : edge.actor === "opponent" ? "o" : "m",
+        op: edge.opportunities,
+        fa: edge.failures,
+        al: edge.failures > 0 ? edge.averageLossCp ?? undefined : undefined,
+        lb: edge.openingLabel ?? undefined,
+        // White-perspective eval of the resulting position (cp); client flips
+        // for a Black repertoire.
+        ev: childEval?.evalCp ?? undefined,
+        // 1 when this is the engine's best move at the parent position.
+        bm: parentEval?.best && parentEval.best === edge.moveUci ? 1 : undefined,
+      };
+    }),
+  };
+}
+
+/** Latest screening eval + best move for every analysed position, keyed by FEN. */
+async function positionEvaluations(): Promise<Map<string, PositionEval>> {
+  const rows = await client`
+    select distinct on (fen) fen, eval_cp, best_move_uci
+    from position_eval where profile_id = 'screening'
+    order by fen, computed_at desc`;
+  return new Map(
+    rows.map((row) => [
+      String(row.fen),
+      {
+        evalCp: row.eval_cp == null ? null : Number(row.eval_cp),
+        best: row.best_move_uci == null ? null : String(row.best_move_uci),
+      },
+    ]),
+  );
+}
 
 interface GameMoveRow extends Record<string, unknown> {
   user_id: string;
@@ -75,6 +184,8 @@ export interface ExplorerFilters {
   node?: string;
   from?: string;
   move?: string;
+  /** "0" omits the full position graph from the response. */
+  graph?: "0" | "1";
 }
 
 export interface OpeningFinding {
@@ -161,13 +272,18 @@ function chunks<T>(items: readonly T[], size: number): T[][] {
 }
 
 async function findUser(username: string): Promise<{ userId: string; username: string }> {
+  const key = normalizedUsername(username);
+  const cached = userCache.get(key);
+  if (cached) return cached;
   const rows = await client`
     select p.id as user_id, a.username
     from linked_accounts a join profiles p on p.id = a.user_id
-    where a.normalized_username = ${username.trim().toLowerCase()}
+    where a.normalized_username = ${key}
     order by a.created_at asc limit 1`;
   if (!rows[0]) throw new Error(`No imported account found for "${username}"`);
-  return { userId: String(rows[0].user_id), username: String(rows[0].username) };
+  const account = { userId: String(rows[0].user_id), username: String(rows[0].username) };
+  userCache.set(key, account);
+  return account;
 }
 
 export async function buildPlayerOpeningGraph(username: string): Promise<{
@@ -369,6 +485,9 @@ export async function buildPlayerOpeningGraph(username: string): Promise<{
     }
   });
 
+  // The graph changed — drop this user's cached explorer payloads so the next
+  // request recomputes from the fresh observations.
+  explorerCache.invalidate(`explorer:${normalizedUsername(username)}:`);
   return {
     userId: account.userId,
     games: new Set(moveRows.map((row) => String(row.game_id))).size,
@@ -450,6 +569,9 @@ export async function getOpeningExplorer(
   username: string,
   filters: ExplorerFilters = {},
 ): Promise<Record<string, unknown>> {
+  const cacheKey = `explorer:${normalizedUsername(username)}:${explorerFilterKey(filters)}`;
+  const cached = explorerCache.get<Record<string, unknown>>(cacheKey);
+  if (cached) return cached;
   const account = await findUser(username);
   let rows = await observationsForUser(account.userId);
   if (!rows.length) {
@@ -600,7 +722,7 @@ export async function getOpeningExplorer(
     edge.fromKey === (filters.from ?? selectedKey) && edge.moveUci === filters.move,
   ) ?? null;
 
-  return {
+  const result = {
     username: account.username,
     generatedAt: new Date().toISOString(),
     filters,
@@ -613,10 +735,15 @@ export async function getOpeningExplorer(
     selected,
     selectedMove,
     tree,
+    graph: fullTree && filters.graph !== "0"
+      ? compactGraph(fullTree, await positionEvaluations())
+      : null,
     children,
     failures,
     findings: findings.slice(0, 12),
   };
+  explorerCache.set(cacheKey, result);
+  return result;
 }
 
 export async function createOpeningDrill(

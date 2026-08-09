@@ -101,6 +101,67 @@ export interface PersonalOpeningTree {
   edges: OpeningTreeEdge[];
 }
 
+/**
+ * Compact, index-referenced encoding of the player's full opening tree. The
+ * whole thing ships once so the explorer can walk every branch without a
+ * refetch. `k` is the canonical position key, which is also a valid FEN prefix
+ * (`board turn castling ep`) for rendering the board.
+ */
+export interface OpeningGraphNode {
+  /** Canonical position key = FEN prefix (`board turn castling ep`). */
+  k: string;
+  /** Ply of this position (0 = start). */
+  p: number;
+  /** Games that reached this position. */
+  g: number;
+  /** Scored player decisions from here. */
+  o: number;
+  /** Costly player decisions from here. */
+  f: number;
+  /** Games that ended here (no stored continuation). */
+  t: number;
+  /** 1 when the position is reached by more than one move order. */
+  x: 0 | 1;
+  /** Opening name attached to this position, when known. */
+  nm?: string;
+}
+
+export interface OpeningGraphEdge {
+  /** Index of the source node in `nodes`. */
+  a: number;
+  /** Index of the destination node in `nodes`. */
+  b: number;
+  /** Move in UCI (e2e4, e7e8q). */
+  u: string;
+  /** Move in SAN (e4, Nf3, O-O). */
+  s: string;
+  /** Games that played this move. */
+  g: number;
+  /** Share of games from the parent that chose this move. */
+  sh: number;
+  /** Actor: (p)layer, (o)pponent, (m)ixed. */
+  ac: "p" | "o" | "m";
+  /** Scored player decisions on this move. */
+  op: number;
+  /** Costly player decisions on this move. */
+  fa: number;
+  /** Average evaluation loss (cp) when costly. */
+  al?: number | null;
+  /** Named opening this move introduces, when dominant. */
+  lb?: string;
+  /** Screening eval of the resulting position, White's perspective (cp). */
+  ev?: number;
+  /** 1 when this is the engine's best move at the parent position. */
+  bm?: 1;
+}
+
+export interface OpeningGraph {
+  games: number;
+  root: number;
+  nodes: OpeningGraphNode[];
+  edges: OpeningGraphEdge[];
+}
+
 export interface OpeningExplorerData {
   username: string;
   sample: { games: number; observations: number; scoredDecisions: number };
@@ -108,6 +169,7 @@ export interface OpeningExplorerData {
   selected: OpeningFinding | null;
   selectedMove: OpeningTreeEdge | null;
   tree: PersonalOpeningTree | null;
+  graph: OpeningGraph | null;
   failures: OpeningFailure[];
   findings: OpeningFinding[];
 }
