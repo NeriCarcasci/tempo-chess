@@ -89,6 +89,7 @@ export default function Login({ actionData }: Route.ComponentProps) {
   const [params] = useSearchParams();
   const busy = navigation.state === "submitting";
   const justSignedUp = params.get("confirmed") === "1";
+  const passwordReset = params.get("reset") === "success";
 
   return (
     <main className="auth-shell">
@@ -101,6 +102,9 @@ export default function Login({ actionData }: Route.ComponentProps) {
 
         {justSignedUp ? (
           <p className="auth-ok">Email confirmed. Sign in to continue.</p>
+        ) : null}
+        {passwordReset ? (
+          <p className="auth-ok">Password updated. Sign in with your new password.</p>
         ) : null}
         {!supabaseConfigured ? (
           <p className="auth-error">

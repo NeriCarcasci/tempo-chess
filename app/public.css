@@ -1,67 +1,95 @@
 /* ================================================================== */
 /* Public site: marketing shell, landing, pricing, features, legal,    */
 /* plus the auth and billing surfaces that sit between the two.        */
-/* Same graphite/amber system as the app, run wider and quieter.       */
+/*                                                                     */
+/* The page is one continuous surface. Sections are told apart by the  */
+/* colour they sit on and by the air around them — never by a rule     */
+/* drawn between them. The previous sheet ruled off the header, the    */
+/* statement, every feature point, every FAQ row and the footer, and   */
+/* the result read as a stack of separate pages rather than one        */
+/* argument.                                                           */
 /* ================================================================== */
 
 @layer components {
-  .public-shell { position: relative; z-index: 1; display: flex; min-height: 100dvh; flex-direction: column; }
+  .public-shell {
+    position: relative; z-index: 1; display: flex; min-height: 100dvh; flex-direction: column;
+    /* The vertical step every public section spaces itself by. Nothing on the
+       page is fenced off by a rule any more, so this standing space is the
+       only thing saying "a new idea starts here" — it is deliberately far
+       larger than mere separation would need, and each beat gets most of a
+       screen to itself. Sections carry it as padding-bottom only, so the gap
+       between any two is one value rather than two colliding. */
+    --section-y: clamp(7rem, 13vw, 13rem);
+    --section-y-lg: clamp(9rem, 17vw, 17rem);
+  }
   .public-shell > main { flex: 1; }
 
   /* -- identity ------------------------------------------------------ */
   .logo { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--color-ink); }
   .logo-mark { color: var(--color-accent); flex: 0 0 auto; }
   .logo-word {
-    font-size: 1.16rem; font-weight: 900; letter-spacing: -0.055em; line-height: 1;
+    font-size: 1.16rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
   }
 
-  /* -- nav ----------------------------------------------------------- */
+  /* -- nav -----------------------------------------------------------
+     No bottom border. The blur and the faint wash under it are enough to
+     say "this floats above the page", and they stop saying anything at
+     all when the page is scrolled to the top, which is correct. */
   .public-header {
     position: sticky; top: 0; z-index: 50;
-    border-bottom: 1px solid var(--color-line);
-    background: color-mix(in srgb, var(--color-bg) 86%, transparent);
-    -webkit-backdrop-filter: blur(14px);
-    backdrop-filter: blur(14px);
+    background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+    backdrop-filter: blur(16px) saturate(1.2);
   }
   .public-header-inner {
     position: relative;
     display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-    margin: 0 auto; max-width: 74rem; height: 68px; padding: 0 1.5rem;
+    margin: 0 auto; max-width: 74rem; height: 72px; padding: 0 1.5rem;
   }
-  .public-nav { display: flex; align-items: center; gap: 1.75rem; }
-  .public-nav a { font-size: 0.85rem; font-weight: 700; color: var(--color-ink-muted); transition: color 140ms ease; }
-  .public-nav a:hover, .public-nav a.is-active { color: var(--color-ink); }
-  .public-nav a.is-active {
-    text-decoration: underline; text-decoration-color: var(--color-accent);
-    text-decoration-thickness: 2px; text-underline-offset: 0.45rem;
+  .public-nav { display: flex; align-items: center; gap: 0.35rem; }
+  /* Scoped away from .public-cta: that one is a .primary-button and must keep
+     the button's own padding, weight and hover, not the nav link's. */
+  .public-nav a:not(.public-cta) {
+    border-radius: var(--radius-pill); padding: 0.5rem 0.85rem;
+    font-size: 0.85rem; font-weight: 600; color: var(--color-ink-muted);
+    transition: color 140ms ease, background 140ms ease;
+  }
+  .public-nav a:not(.public-cta):hover {
+    color: var(--color-ink); background: color-mix(in srgb, var(--color-ink) 5%, transparent);
+  }
+  /* The current page is marked by a soft accent chip rather than an
+     underline, so the nav carries no horizontal strokes at all. */
+  .public-nav a:not(.public-cta).is-active {
+    color: var(--color-accent); background: var(--color-accent-wash);
   }
   .public-signin { white-space: nowrap; }
-  .public-nav .public-cta, .public-nav .public-cta:hover { color: var(--color-accent-ink); }
   .public-burger {
-    display: none; width: 2.4rem; height: 2.4rem; place-items: center; gap: 5px;
-    border: 1px solid var(--color-line); border-radius: var(--radius-control);
+    display: none; width: 2.5rem; height: 2.5rem; place-items: center; gap: 5px;
+    border-radius: var(--radius-pill); background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
   }
   .public-burger span { display: block; width: 15px; height: 2px; border-radius: 2px; background: var(--color-ink); }
 
   /* -- shared page furniture ----------------------------------------- */
-  .btn-lg { min-height: 3.1rem; padding: 0 1.6rem; font-size: 0.86rem; }
+  .btn-lg { min-height: 3.25rem; padding: 0 1.75rem; font-size: 0.9rem; }
   .section-title {
-    max-width: 22ch; font-size: clamp(1.55rem, 3.2vw, 2.15rem);
-    font-weight: 850; letter-spacing: -0.038em; line-height: 1.08;
+    max-width: 22ch; font-size: clamp(1.65rem, 3.4vw, 2.35rem);
+    font-weight: 650; letter-spacing: -0.028em; line-height: 1.1;
   }
 
   /* -- hero: asymmetric split ---------------------------------------- */
   .hero {
     display: grid; align-items: center; gap: clamp(2rem, 5vw, 4.5rem);
-    margin: 0 auto; max-width: 74rem; padding: clamp(2.5rem, 5vw, 5rem) 1.5rem clamp(3rem, 6vw, 6rem);
+    margin: 0 auto; max-width: 74rem;
+    padding: clamp(3rem, 5vw, 5.5rem) 1.5rem var(--section-y);
     grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
   }
   .hero-copy h1 {
-    font-size: clamp(2.6rem, 6.2vw, 4.4rem); font-weight: 880;
-    letter-spacing: -0.05em; line-height: 0.98; text-wrap: balance;
+    font-family: var(--font-display); font-size: clamp(2.8rem, 6.5vw, 4.8rem); font-weight: 650;
+    letter-spacing: -0.03em; line-height: 0.98; text-wrap: balance;
   }
   .hero-copy h1 em {
-    font-style: normal; color: var(--color-accent);
+    font-style: italic; color: var(--color-accent);
     /* The one accent moment above the fold; the CTA repeats it below. */
   }
   .hero-copy > p {
@@ -85,8 +113,8 @@
   }
   .hb-board {
     position: relative; aspect-ratio: 1; width: 100%;
-    border-radius: 6px; overflow: hidden;
-    box-shadow: 0 5px 0 #d3d7dd, 0 26px 50px rgb(41 44 50 / 0.16);
+    border-radius: var(--radius-panel); overflow: hidden;
+    box-shadow: var(--shadow-float);
   }
   .hb-grid {
     position: absolute; inset: 0;
@@ -104,135 +132,441 @@
   .hb-slot { position: absolute; width: 12.5%; height: 12.5%; display: block; }
   .hb-piece { width: 100%; height: 100%; display: block; }
 
+  /* Painted under the pieces (see HeroBoard.tsx for the DOM order), so they no
+     longer have to be faded out to keep a knight readable. What is left of the
+     translucency is there to let the squares show through, which is what makes
+     the mark look drawn on the board rather than laid over a picture of one. */
   .hb-arrows { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .hb-arrow line { stroke-width: 1.9; stroke-linecap: round; }
-  .hb-arrow-bad { stroke: var(--hb-bad); fill: var(--hb-bad); }
-  .hb-arrow-good { stroke: var(--hb-good); fill: var(--hb-good); }
+  .hb-arrow line { stroke-width: 2.1; stroke-linecap: round; }
+  .hb-arrow polygon { stroke: none; }
+  .hb-arrow-bad { stroke: var(--hb-bad); fill: var(--hb-bad); opacity: 0.94; }
+  .hb-arrow-good { stroke: var(--hb-good); fill: var(--hb-good); opacity: 1; }
 
-  /* -- the engine read under the board ------------------------------- */
-  .hb-read { display: grid; gap: 0.7rem; }
-  .hb-read-game {
-    font: 700 0.63rem/1 var(--font-mono); letter-spacing: 0.1em;
-    text-transform: uppercase; color: var(--color-ink-faint);
+  /* -- the callout over the board ------------------------------------
+     Seated into the board's bottom-right corner rather than floating above it.
+     Its two outer edges are flush with the board's, so only the two inner
+     corners are rounded and the outer one takes the board's own radius — it
+     reads as a panel the board is holding rather than a card dropped on top of
+     it. The board clips it either way, which is what guarantees the corner can
+     never disagree. */
+  .hb-callout {
+    position: absolute; right: 0; bottom: 0; z-index: 2;
+    width: min(17rem, 66%);
+    border-radius: var(--radius-panel) 0 var(--radius-panel) 0;
+    background: var(--color-surface); padding: 0.9rem 1.05rem;
+    /* Only the top and left edges are visible, so the shadow only ever shows
+       where it should: lifting the panel off the squares behind it. */
+    box-shadow: -8px -8px 28px rgb(35 33 29 / 0.16);
+    animation: hb-rise 620ms 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  .hb-read-rows { display: grid; gap: 0; }
-  .hb-read-rows > div {
-    display: grid; align-items: baseline; gap: 0.7rem;
-    grid-template-columns: 0.5rem auto 1fr auto;
-    border-top: 1px solid var(--color-line); padding: 0.6rem 0;
+  .hb-callout p { font-size: 0.85rem; line-height: 1.5; color: var(--color-ink); text-wrap: pretty; }
+  .hb-callout p + p { margin-top: 0.45rem; }
+  .hb-callout b { font-weight: 700; color: var(--hb-bad); }
+  .hb-callout-fix { color: var(--color-ink-muted) !important; }
+  .hb-callout-fix b { color: color-mix(in srgb, var(--hb-good) 74%, var(--color-ink)); }
+
+  /* -- moves with the piece drawn in --------------------------------- */
+  /* No flex gap: it would space the move number off the glyph as well, and the
+     number belongs tight against the move it numbers. The one gap that is
+     wanted goes on the glyph. */
+  .move {
+    display: inline-flex; align-items: baseline; gap: 0;
+    font-family: var(--font-mono); font-weight: 700; letter-spacing: -0.02em;
+    white-space: nowrap;
   }
-  .hb-key { width: 0.5rem; height: 0.5rem; border-radius: 2px; }
-  .hb-read-rows .is-bad .hb-key { background: var(--hb-bad); }
-  .hb-read-rows .is-good .hb-key { background: var(--hb-good); }
-  .hb-read-rows b { font-size: 0.86rem; font-weight: 700; }
-  .hb-read-rows .is-bad b { color: var(--hb-bad); }
-  .hb-read-rows .is-good b { color: color-mix(in srgb, var(--hb-good) 72%, var(--color-ink)); }
-  .hb-read-rows span:not(.hb-key) { color: var(--color-ink-muted); font-size: 0.82rem; }
-  .hb-read-rows em {
-    font-style: normal; font-size: 0.82rem; font-weight: 700;
-    color: var(--color-ink-muted);
-  }
-  .hb-read-foot {
-    border-top: 1px solid var(--color-line); padding-top: 0.6rem;
-    color: var(--color-ink-faint); font-size: 0.7rem; line-height: 1.45;
+  .move-no { font-style: normal; font-weight: 600; opacity: 0.55; margin-right: 0.12em; }
+  /* Sized in em and nudged onto the baseline, so the glyph tracks the text it
+     sits in instead of needing a magic pixel height per place it is used. */
+  .move-glyph {
+    width: 1.35em; height: 1.35em; align-self: center; flex: 0 0 auto;
+    margin: 0 0.04em -0.28em -0.06em;
   }
 
-  @keyframes hb-in {
-    from { opacity: 0; transform: translateY(12px); }
-  }
+  .hb-caption { color: var(--color-ink-faint); font-size: 0.74rem; }
 
-  /* -- statement: one full-width sentence ---------------------------- */
-  .statement { border-block: 1px solid var(--color-line); background: var(--color-surface); }
+  @keyframes hb-in { from { opacity: 0; transform: translateY(12px); } }
+  @keyframes hb-rise { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
+
+  /* -- statement: one full-width sentence ----------------------------
+     Bare centred type on the page ground. It used to be a pale band fenced
+     off top and bottom by two rules, and briefly a dark block; both were a
+     container doing a job that scale and standing space do better. The
+     sentence gets the widest empty margins on the page instead, which is
+     what makes a reader slow down for it. */
+  .statement {
+    margin: 0 auto; max-width: 52rem;
+    padding: 0 1.5rem var(--section-y-lg);
+    text-align: center;
+  }
   .statement p {
-    margin: 0 auto; max-width: 46rem; padding: clamp(3rem, 6vw, 4.5rem) 1.5rem;
-    font-size: clamp(1.15rem, 2.4vw, 1.6rem); font-weight: 550;
-    line-height: 1.45; letter-spacing: -0.02em; text-wrap: balance;
+    color: var(--color-ink);
+    /* The floor stays modest: centred text on a phone measure runs to a lot
+       of short lines if the size does not come down with the column. */
+    font-size: clamp(1.22rem, 2.9vw, 2rem); font-weight: 500;
+    line-height: 1.45; letter-spacing: -0.024em; text-wrap: balance;
   }
-  .statement i { font-style: italic; color: var(--color-ink-muted); }
+  .statement i { font-style: italic; color: var(--color-accent); }
 
-  /* -- flow: three connected steps, not three cards ------------------ */
-  .flow { margin: 0 auto; max-width: 74rem; padding: clamp(4rem, 8vw, 7rem) 1.5rem; }
-  .flow-track {
-    display: grid; gap: 2.5rem; margin-top: 3rem;
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .flow-track > li { position: relative; padding-top: 2.6rem; }
-  /* The rule runs behind the markers and stops at the last step. */
-  .flow-track > li::before {
-    content: ""; position: absolute; top: 0.85rem; left: 0; right: -2.5rem; height: 1px;
-    background: var(--color-line);
-  }
-  .flow-track > li:last-child::before { right: 0; }
-  .flow-dot {
-    position: absolute; top: 0; left: 0;
-    display: grid; width: 1.7rem; height: 1.7rem; place-items: center;
-    border-radius: 50%; background: var(--color-accent); color: var(--color-accent-ink);
-    font-size: 0.72rem; font-weight: 800;
-  }
-  .flow-track h3 { font-size: 1.12rem; font-weight: 820; letter-spacing: -0.028em; }
-  .flow-track p { margin-top: 0.5rem; color: var(--color-ink-muted); font-size: 0.9rem; line-height: 1.6; }
+  /* -- scale: the reach band -----------------------------------------
+     The one inverted block on the site. Everything either side of it is warm
+     paper and white cards, so running this dark is what separates it — it is
+     the section that should be looked at rather than read past, and it is doing
+     that with a change of ground rather than with more structure.
 
-  /* -- bento: asymmetric, one tinted cell ---------------------------- */
-  .bento { margin: 0 auto; max-width: 74rem; padding: 0 1.5rem clamp(4rem, 8vw, 7rem); }
-  .bento-grid {
-    display: grid; gap: 1rem; margin-top: 1.75rem;
-    grid-template-columns: repeat(4, 1fr);
-  }
-  .bento-cell {
-    display: flex; flex-direction: column; justify-content: flex-end;
-    border: 1px solid var(--color-line); border-radius: var(--radius-panel);
-    background: var(--color-surface); padding: 1.6rem;
-    box-shadow: 0 3px 0 #e4e7eb;
-  }
-  .bento-cell h3 { font-size: 1.05rem; font-weight: 820; letter-spacing: -0.028em; line-height: 1.25; }
-  .bento-cell p { margin-top: 0.6rem; color: var(--color-ink-muted); font-size: 0.88rem; line-height: 1.6; }
-  .bento-cell .text-link { margin-top: 1.1rem; align-self: flex-start; }
-  .bento-lead { grid-column: span 2; grid-row: span 2; min-height: 15rem; }
-  .bento-lead h3 { font-size: clamp(1.25rem, 2.4vw, 1.7rem); max-width: 18ch; }
-  .bento-lead p { max-width: 42ch; font-size: 0.94rem; }
-  .bento-accent {
-    position: relative; overflow: hidden; grid-column: span 2; grid-row: span 2;
-    border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-line));
-    background: color-mix(in srgb, var(--color-accent) 9%, var(--color-surface));
-    box-shadow: 0 3px 0 color-mix(in srgb, var(--color-accent) 26%, #e4e7eb);
-  }
-  .bento-glyph {
-    position: absolute; top: -1.2rem; right: -1.2rem;
-    color: color-mix(in srgb, var(--color-accent) 34%, transparent);
-    pointer-events: none;
-  }
-  .bento-accent h3, .bento-accent p { position: relative; }
-  .bento-grid > .bento-cell:not(.bento-lead):not(.bento-accent) { grid-column: span 2; }
+     Compact on purpose: two figures, one line, one button. An earlier version
+     opened with a heading that restated the numbers in words, which is exactly
+     the sentence a reader skips. The figures are the headline now. */
+  .scale { margin: 0 auto; max-width: 74rem; padding: 0 1.5rem var(--section-y); }
 
-  /* -- refuse: definition pairs, no cards ---------------------------- */
-  .refuse {
-    margin: 0 auto; max-width: 74rem; padding: 0 1.5rem clamp(4rem, 8vw, 7rem);
+  .scale-band {
+    position: relative; isolation: isolate; overflow: hidden;
+    border-radius: var(--radius-xl);
+    background: var(--color-ink-block);
+    padding: clamp(2.5rem, 5vw, 3.75rem) clamp(1.5rem, 4vw, 3rem);
+    opacity: 0; transform: translateY(16px);
+    transition: opacity 620ms cubic-bezier(0.16, 1, 0.3, 1),
+                transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .refuse-list {
-    display: grid; gap: 0; margin-top: 2rem;
-    grid-template-columns: repeat(3, 1fr);
+  .scale-band.is-in { opacity: 1; transform: none; }
+
+  /* -- the drifting roster ------------------------------------------- */
+  .scale-wash {
+    position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    display: flex; flex-direction: column; justify-content: space-evenly;
+    font-size: clamp(0.82rem, 1.35vw, 1.02rem); font-weight: 600;
+    letter-spacing: -0.01em; white-space: nowrap;
+    color: #f3efe9;
   }
-  .refuse-list > div { border-top: 2px solid var(--color-ink); padding: 1.1rem 1.5rem 0 0; }
-  .refuse-list dt { font-size: 0.98rem; font-weight: 820; letter-spacing: -0.025em; }
-  .refuse-list dd { margin-top: 0.5rem; color: var(--color-ink-muted); font-size: 0.88rem; line-height: 1.6; }
+  .scale-wash-line { overflow: hidden; }
+  /* Rendered twice and travelling exactly -50%, so at the end of a lap the
+     second copy sits where the first began and the loop has no seam. */
+  .scale-wash-track {
+    display: flex; width: max-content;
+    animation: scale-drift var(--dur, 90s) linear infinite;
+    animation-direction: var(--dir, normal);
+  }
+  .scale-chip {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    padding: 0 clamp(0.75rem, 1.6vw, 1.35rem);
+  }
+  .scale-chip svg { flex: 0 0 auto; opacity: 0.85; }
+
+  /* Clears the middle so the figures read, and dissolves both ends so the rows
+     leave the band rather than being chopped at its edge. Painted in the band's
+     own colour, which is why this lives inside .scale-band. */
+  .scale-wash::after {
+    content: ""; position: absolute; inset: 0;
+    background:
+      radial-gradient(46% 64% at 50% 50%, var(--color-ink-block) 38%, transparent 78%),
+      linear-gradient(90deg, var(--color-ink-block), transparent 18% 82%, var(--color-ink-block));
+  }
+
+  @keyframes scale-drift { to { transform: translateX(-50%); } }
+
+  /* -- the figures ---------------------------------------------------- */
+  .scale-fore {
+    position: relative; z-index: 1;
+    display: grid; justify-items: center; gap: 0;
+    margin: 0 auto; max-width: 40rem; text-align: center;
+  }
+  /* Present for the accessible name and for anyone reading with the page
+     linearised; the visual heading is the pair of numbers. */
+  .scale-sr {
+    position: absolute; width: 1px; height: 1px;
+    clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+  }
+
+  .scale-figures {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    gap: clamp(2.5rem, 8vw, 5.5rem);
+  }
+  .scale-stat { display: grid; gap: 0.3rem; }
+  /* Tabular figures, so a digit rolling from 9 to 0 does not shuffle the ones
+     beside it. This is the whole reason the count-up reads as a counter rather
+     than as a glitch. */
+  .scale-figure {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: clamp(2.4rem, 6vw, 3.9rem); font-weight: 700;
+    letter-spacing: -0.05em; line-height: 1; color: #fffdfa;
+  }
+  .scale-label {
+    font: 700 0.66rem/1 var(--font-mono); letter-spacing: 0.1em;
+    text-transform: uppercase; color: color-mix(in srgb, #f3efe9 55%, transparent);
+  }
+  .scale-lede {
+    margin-top: 1.5rem; max-width: 40ch;
+    color: color-mix(in srgb, #f3efe9 68%, transparent);
+    font-size: 0.88rem; line-height: 1.6;
+    /* Balanced, so the second line is never a single orphaned word under a
+       centred first line. */
+    text-wrap: balance;
+  }
+  .scale-cta { margin-top: 1.75rem; }
+
+  /* -- the beta signup sheet -----------------------------------------
+     A real <dialog>, so the focus trap, Escape, the top layer and inert-ing
+     the page behind it all come from the platform rather than from us
+     reimplementing them slightly wrong. */
+  /* Centred explicitly. A dialog inherits centring from the UA sheet via
+     inset:0 + margin:auto, but that is a default we would rather state than
+     rely on — anything that touches inset or margin later silently un-centres
+     it, and the failure is a modal wedged against a corner. */
+  .sheet {
+    position: fixed; inset: 0; margin: auto;
+    width: min(38rem, calc(100vw - 2rem));
+    max-height: min(46rem, calc(100dvh - 2rem));
+    border: 0; border-radius: var(--radius-xl); padding: 0;
+    background: var(--color-surface); color: var(--color-ink);
+    box-shadow: var(--shadow-float);
+    overflow: visible;
+  }
+  .sheet::backdrop {
+    background: rgb(29 27 25 / 0.42);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+  }
+  .sheet[open] { animation: sheet-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .sheet[open]::backdrop { animation: sheet-fade 260ms ease both; }
+  .sheet-body {
+    position: relative; overflow-y: auto;
+    max-height: inherit; border-radius: inherit;
+    padding: clamp(1.6rem, 4vw, 2.4rem);
+  }
+  .sheet-close {
+    position: absolute; top: 0.85rem; right: 0.9rem;
+    display: grid; width: 2.2rem; height: 2.2rem; place-items: center;
+    border-radius: var(--radius-pill); background: var(--color-surface-2);
+    color: var(--color-ink-muted); font-size: 1.25rem; line-height: 1;
+    transition: background 130ms ease, color 130ms ease;
+  }
+  .sheet-close:hover { background: var(--color-surface-3); color: var(--color-ink); }
+
+  .sheet-form { display: grid; gap: 1.1rem; }
+  .sheet-form h2 {
+    max-width: 18ch; font-size: clamp(1.45rem, 3.4vw, 1.9rem);
+    font-weight: 650; letter-spacing: -0.028em; line-height: 1.1;
+  }
+  .sheet-lede {
+    margin-top: -0.6rem; max-width: 44ch;
+    color: var(--color-ink-muted); font-size: 0.88rem; line-height: 1.6;
+  }
+  .field-row {
+    display: grid; gap: 0.9rem; grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .field { display: grid; gap: 0.4rem; min-width: 0; border: 0; padding: 0; }
+  .field > span, .field > legend {
+    font-size: 0.75rem; font-weight: 700; color: var(--color-ink-muted);
+  }
+  .field > span i, .field > legend i {
+    font-style: normal; font-weight: 600; color: var(--color-ink-faint);
+  }
+  .field input {
+    height: 2.85rem; border: 0; border-radius: var(--radius-control);
+    background: var(--color-surface-2); color: var(--color-ink);
+    padding: 0 0.9rem; font: inherit; font-size: 0.9rem;
+    box-shadow: var(--shadow-flat);
+    transition: background 130ms ease, box-shadow 130ms ease;
+  }
+  .field input:focus {
+    outline: 0; background: var(--color-surface);
+    box-shadow: 0 0 0 2px var(--color-accent);
+  }
+
+  /* Radio groups drawn as chips: one tap, and the whole set is readable at a
+     glance, which is what makes the form feel like thirty seconds. */
+  .choice-set > legend { margin-bottom: 0.5rem; }
+  .choices { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+  .choice {
+    display: inline-flex; align-items: center;
+    border-radius: var(--radius-pill); background: var(--color-surface-2);
+    padding: 0.55rem 0.95rem; cursor: pointer;
+    font-size: 0.85rem; font-weight: 620; color: var(--color-ink-muted);
+    transition: background 130ms ease, color 130ms ease;
+  }
+  .choice:hover { background: var(--color-surface-3); color: var(--color-ink); }
+  .choice.is-on { background: var(--color-accent); color: var(--color-accent-ink); }
+  /* The input stays in the DOM for keyboard and screen readers; only its own
+     box is hidden, so arrow keys still move through the group. */
+  .choice input {
+    position: absolute; width: 1px; height: 1px;
+    clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+  }
+  .choice:has(input:focus-visible) { outline: 2px solid var(--color-ink); outline-offset: 2px; }
+
+  .sheet-submit { width: 100%; margin-top: 0.2rem; }
+  .sheet-error {
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--color-loss) 12%, transparent);
+    padding: 0.65rem 0.8rem; color: #b3382f; font-size: 0.82rem; line-height: 1.5;
+  }
+  .sheet-fine {
+    margin-top: -0.35rem; text-align: center;
+    color: var(--color-ink-faint); font-size: 0.72rem; line-height: 1.5;
+  }
+
+  .sheet-done { display: grid; justify-items: center; gap: 0.9rem; text-align: center; padding: 1.5rem 0 0.5rem; }
+  .sheet-tick {
+    display: grid; width: 3.2rem; height: 3.2rem; place-items: center;
+    border-radius: 50%; background: color-mix(in srgb, var(--color-win) 15%, var(--color-surface));
+    color: var(--color-win); font-size: 1.5rem; font-weight: 800;
+  }
+  .sheet-done h2 { font-size: 1.55rem; font-weight: 650; letter-spacing: -0.028em; }
+  .sheet-done p { max-width: 38ch; color: var(--color-ink-muted); font-size: 0.9rem; line-height: 1.6; }
+  .sheet-done .primary-button { margin-top: 0.5rem; }
+
+  @keyframes sheet-in { from { opacity: 0; transform: translateY(14px) scale(0.985); } }
+  @keyframes sheet-fade { from { opacity: 0; } }
+
+  /* -- showcase: heading, one line, then a scene --------------------- */
+  .sc { margin: 0 auto; max-width: 74rem; padding: 0 1.5rem var(--section-y); }
+  .sc-grid {
+    display: grid; gap: 1.15rem; margin-top: 2.75rem;
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .sc-card {
+    display: flex; flex-direction: column; overflow: hidden;
+    border-radius: var(--radius-xl);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
+    opacity: 0; transform: translateY(18px);
+    transition: opacity 620ms cubic-bezier(0.16, 1, 0.3, 1),
+                transform 620ms cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 260ms ease;
+  }
+  .sc-card.is-in { opacity: 1; transform: none; }
+  .sc-card:hover { box-shadow: var(--shadow-lift); }
+  /* The wide card is the only one that lets anything out of it: the mark sits
+     on its bottom edge, half over the card and half over the two below. It
+     needs a stacking context above its siblings or the later grid items paint
+     over the half that hangs. */
+  .sc-card.is-wide {
+    grid-column: span 2;
+    position: relative; z-index: 2; overflow: visible;
+  }
+  /* No margin override: the well is framed in white on all four sides like the
+     two cards below it, because a card that is inset on three sides and bled on
+     the fourth reads as a mistake. The mark still bridges the two — it overlaps
+     the bottom of the well on its way over the card edge. */
+  .sc-card > header { padding: 1.8rem 1.8rem 0; }
+  .sc-card h3 { font-size: 1.2rem; font-weight: 650; letter-spacing: -0.022em; }
+  .sc-card header p {
+    margin-top: 0.5rem; max-width: 46ch;
+    color: var(--color-ink-muted); font-size: 0.9rem; line-height: 1.55;
+  }
+  /* The scene is a recessed well inside the card. It used to be drawn as a
+     bordered box filled with a ruled grid — around forty visible strokes per
+     card, three cards to the section — and then, briefly, as three pastel
+     wells, one per card. Both were the container asking for attention. The
+     three scenes are told apart by what is in them; the ground is the same
+     warm surface as everything else, so the only colours left in this section
+     are the accent and the mistake red, and both of those mean something. */
+  .sc-scene {
+    position: relative; flex: 1; margin: 1.5rem; margin-top: 1.3rem;
+    border-radius: var(--radius-panel);
+    background: var(--tint, var(--color-surface-2));
+    overflow: hidden;
+  }
+  /* Connect carries a hint of the accent because the mark sits on its edge and
+     the two should read as one object. Five percent is barely a colour; it is a
+     warmth. The other two take the plain ground. */
+  .sc-card.is-wide .sc-scene {
+    --tint: color-mix(in srgb, var(--color-accent) 3%, var(--color-surface-2));
+  }
+  /* A soft light from the top-left keeps the well from reading as a flat
+     swatch, in place of the grid it replaces. */
+  .sc-scene::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(88% 68% at 20% 0%, rgb(255 255 255 / 0.4), transparent 66%);
+  }
+
+  /* -- shared scenes inside a showcase well ---------------------------
+     Patterns and Openings are defined once in Scenes.tsx and rendered both on
+     the features page (on white) and here (in a tinted well). These are the
+     only differences that ground needs.
+
+     Kept out of the scene rules on purpose: they were written inside that block
+     once and a later rewrite of it took them with it. */
+  .sc-scene .fx {
+    padding: 1.4rem 1.3rem; height: 100%; align-content: center;
+  }
+  .sc-scene .fx-grid { gap: 0.28rem; }
+  /* A white floor, or the light end of the ramp disappears into the tint. */
+  .sc-scene .fx-game { background: var(--color-surface); }
+  .sc-scene .fx-game[data-level="1"] { background: color-mix(in srgb, var(--color-accent) 30%, var(--color-surface)); }
+  .sc-scene .fx-game[data-level="2"] { background: color-mix(in srgb, var(--color-accent) 60%, var(--color-surface)); }
+  .sc-scene .fx-game[data-level="3"] { background: color-mix(in srgb, var(--color-accent) 88%, var(--color-surface)); }
+  .sc-scene .fx-rate { background: var(--color-surface-2); }
+
+  /* 1. Connect: two platforms, one hub, wires drawn centre to centre --- */
+  .sc-hub { position: relative; height: 13.5rem; }
+  .sc-wires { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .sc-wires path {
+    fill: none; stroke: var(--color-accent); stroke-width: 2;
+    vector-effect: non-scaling-stroke; opacity: 0.75;
+    stroke-dasharray: 3 7; stroke-linecap: round;
+    animation: sc-flow 3.2s linear infinite;
+  }
+  /* Nodes sit above the wires and are opaque, so each wire is masked exactly
+     where it meets its tile instead of stopping short of one. */
+  .sc-node {
+    position: absolute; z-index: 1; top: 27%; transform: translate(-50%, -50%);
+    display: flex; align-items: center; gap: 0.6rem;
+    background: var(--color-surface); padding: 0.6rem 0.95rem 0.6rem 0.7rem;
+    white-space: nowrap; border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-lift);
+  }
+  .sc-node-mark {
+    display: grid; width: 1.9rem; height: 1.9rem; flex: 0 0 auto; place-items: center;
+    border-radius: 9px; background: var(--color-bg); color: var(--color-ink);
+  }
+  .sc-node-text { display: grid; gap: 0.1rem; }
+  .sc-node-text b {
+    font-size: 0.82rem; font-weight: 800; letter-spacing: -0.02em; color: var(--color-ink);
+  }
+  .sc-node-text i {
+    font-style: normal; font-family: var(--font-mono);
+    font-size: 0.62rem; color: var(--color-ink-faint);
+  }
+  .sc-node-glyph { width: 100%; height: 100%; }
+  /* Centred on the card's bottom edge: half on the sky well, half over the
+     page and the tops of the two cards below. No ring — it straddles two
+     different backgrounds, so any ring would be wrong against one of them.
+     The shadow alone is what lifts it off both. */
+  .sc-core {
+    position: absolute; z-index: 3; left: 50%; bottom: 0;
+    transform: translate(-50%, 50%);
+    display: grid; width: 5.4rem; height: 5.4rem; place-items: center;
+    border-radius: 22px;
+    background: var(--color-accent); color: var(--color-accent-ink);
+    box-shadow:
+      0 14px 34px rgb(207 87 48 / 0.34),
+      0 3px 10px rgb(35 33 29 / 0.14);
+  }
+
+  @keyframes sc-flow { to { stroke-dashoffset: -20; } }
 
   /* -- closer -------------------------------------------------------- */
   .closer {
     margin: 0 auto; max-width: 42rem;
-    padding: clamp(4rem, 8vw, 6.5rem) 1.5rem clamp(5rem, 9vw, 8rem);
+    padding: var(--section-y) 1.5rem var(--section-y-lg);
     text-align: center;
   }
   .closer h2 {
-    font-size: clamp(1.6rem, 3.6vw, 2.4rem); font-weight: 860;
-    letter-spacing: -0.04em; line-height: 1.1; text-wrap: balance;
+    font-size: clamp(1.75rem, 3.8vw, 2.6rem); font-weight: 620;
+    letter-spacing: -0.03em; line-height: 1.12; text-wrap: balance;
   }
-  .closer .primary-button { margin-top: 2rem; }
+  .closer .primary-button { margin-top: 2.4rem; }
   .closer > p { margin-top: 1rem; color: var(--color-ink-faint); font-size: 0.8rem; }
 
-  /* -- footer -------------------------------------------------------- */
-  .public-footer { border-top: 1px solid var(--color-line); background: var(--color-surface); }
+  /* -- footer --------------------------------------------------------
+     The footer arrives as a change of surface with a rounded shoulder,
+     not as a rule across the page. */
+  .public-footer {
+    margin-top: auto; border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    background: var(--color-surface);
+  }
   .public-footer-inner {
-    display: grid; gap: 2.5rem; margin: 0 auto; max-width: 74rem; padding: 3.5rem 1.5rem 2.5rem;
+    display: grid; gap: 2.5rem; margin: 0 auto; max-width: 74rem; padding: 3.75rem 1.5rem 2.5rem;
     grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
   }
   .public-footer-brand p {
@@ -248,8 +582,8 @@
   .public-footer nav a:hover { color: var(--color-accent); }
   .public-footer-base {
     display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.8rem;
-    margin: 0 auto; max-width: 74rem; border-top: 1px solid var(--color-line);
-    padding: 1.2rem 1.5rem 2rem; color: var(--color-ink-faint); font-size: 0.72rem;
+    margin: 0 auto; max-width: 74rem;
+    padding: 1.6rem 1.5rem 2.25rem; color: var(--color-ink-faint); font-size: 0.72rem;
   }
   .public-footer-base a { text-decoration: underline; text-underline-offset: 0.2rem; }
 
@@ -260,7 +594,7 @@
   }
   .page-head h1 {
     max-width: 18ch; font-size: clamp(2.2rem, 5vw, 3.4rem);
-    font-weight: 870; letter-spacing: -0.048em; line-height: 1.02;
+    font-weight: 640; letter-spacing: -0.03em; line-height: 1.02;
   }
   .page-head > p {
     margin-top: 1.2rem; max-width: 46ch;
@@ -272,28 +606,44 @@
   /* -- pricing ------------------------------------------------------- */
   .price-cancelled { margin-top: 1.2rem; color: var(--color-mistake); font-size: 0.85rem; font-weight: 650; }
   .price-toggle {
-    display: inline-flex; gap: 0.25rem; margin-top: 2rem; padding: 0.25rem;
-    border: 1px solid var(--color-line); border-radius: 999px; background: var(--color-surface);
+    display: inline-flex; gap: 0.25rem; margin-top: 2rem; padding: 0.3rem;
+    border-radius: var(--radius-pill); background: var(--color-surface-2);
   }
   .price-toggle button {
     border-radius: 999px; padding: 0.5rem 1.2rem;
     color: var(--color-ink-muted); font-size: 0.78rem; font-weight: 750;
     transition: background 140ms ease, color 140ms ease;
   }
-  .price-toggle button.is-active { background: var(--color-ink); color: var(--color-bg); }
+  .price-toggle button.is-active {
+    background: var(--color-surface); color: var(--color-ink); box-shadow: var(--shadow-soft);
+  }
 
+  /* Both plans share one set of row lines, so name, price, button, note and
+     feature list start at the same height in each card. Without this the two
+     cards lay out to their own content and nothing across them agrees. */
   .price-grid {
-    display: grid; gap: 1.25rem; margin: 0 auto; max-width: 54rem;
-    padding: 0 1.5rem; grid-template-columns: repeat(2, 1fr); align-items: start;
+    display: grid; margin: 0 auto; max-width: 54rem; padding: 0 1.5rem;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: auto auto auto auto auto;
+    column-gap: 1.25rem; row-gap: 1.15rem;
   }
   .price-card {
-    position: relative; border: 1px solid var(--color-line); border-radius: var(--radius-panel);
+    position: relative; display: grid; grid-row: span 5;
+    grid-template-rows: subgrid;
+    border-radius: var(--radius-panel);
     background: var(--color-surface); padding: 1.9rem 1.6rem;
-    box-shadow: 0 3px 0 #e4e7eb;
+    box-shadow: var(--shadow-soft);
+  }
+  .price-region { min-width: 0; }
+  /* Older engines without subgrid still get equal-height cards with the feature
+     list pinned to the bottom, which keeps the comparison readable. */
+  @supports not (grid-template-rows: subgrid) {
+    .price-grid { grid-template-rows: none; align-items: stretch; }
+    .price-card { display: flex; flex-direction: column; gap: 1.15rem; }
+    .price-features { margin-top: auto; }
   }
   .price-card.is-featured {
-    border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-line));
-    box-shadow: 0 4px 0 color-mix(in srgb, var(--color-accent) 30%, #e4e7eb);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-accent) 55%, transparent), var(--shadow-lift);
   }
   .price-flag {
     position: absolute; top: -0.7rem; left: 1.6rem;
@@ -301,80 +651,383 @@
     padding: 0.25rem 0.7rem; font: 800 0.63rem/1.4 var(--font-mono);
     letter-spacing: 0.07em; text-transform: uppercase;
   }
-  .price-card h2 { font-size: 1.25rem; font-weight: 850; letter-spacing: -0.03em; }
+  .price-card h2 { font-size: 1.25rem; font-weight: 650; letter-spacing: -0.03em; }
   .price-tagline { margin-top: 0.4rem; color: var(--color-ink-muted); font-size: 0.84rem; line-height: 1.5; }
+  .price-money { align-self: end; }
   .price-amount {
-    display: flex; align-items: baseline; gap: 0.3rem; margin-top: 1.3rem;
-    font-size: 2.6rem; font-weight: 800; letter-spacing: -0.045em;
+    display: flex; align-items: baseline; gap: 0.3rem;
+    font-size: 2.6rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
   }
   .price-amount small { color: var(--color-ink-faint); font-size: 0.8rem; font-weight: 650; }
-  .price-saving { margin-top: 0.35rem; color: var(--color-win); font-size: 0.75rem; font-weight: 750; }
-  .price-cta { width: 100%; margin-top: 1.4rem; }
+  /* Always rendered, even when empty, so both cards' buttons sit on one line. */
+  .price-saving {
+    min-height: 1.1rem; margin-top: 0.4rem;
+    color: var(--color-win); font-size: 0.75rem; font-weight: 750;
+  }
+  .price-cta { width: 100%; }
   .price-current {
-    display: block; margin-top: 1.4rem; border: 1px dashed var(--color-line-strong);
-    border-radius: var(--radius-control); padding: 0.7rem; text-align: center;
+    display: grid; min-height: 3.1rem; place-items: center;
+    border-radius: var(--radius-pill); background: var(--color-surface-2);
     color: var(--color-ink-muted); font-size: 0.78rem; font-weight: 700;
   }
-  .price-note { margin-top: 0.8rem; color: var(--color-ink-faint); font-size: 0.74rem; line-height: 1.55; }
+  .price-note { color: var(--color-ink-faint); font-size: 0.74rem; line-height: 1.55; }
   .price-features {
-    display: grid; gap: 0.6rem; margin-top: 1.6rem;
-    border-top: 1px solid var(--color-line); padding-top: 1.4rem;
+    display: grid; gap: 0.65rem; align-content: start;
+    border-radius: var(--radius-panel); background: var(--color-bg);
+    padding: 1.15rem 1.15rem 1.25rem;
   }
-  .price-features li { display: flex; gap: 0.6rem; color: var(--color-ink-muted); font-size: 0.84rem; line-height: 1.45; }
-  .price-features li > span:first-child { color: var(--color-win); font-weight: 800; }
+  .price-features li {
+    display: grid; grid-template-columns: 1rem 1fr; gap: 0.6rem; align-items: start;
+    color: var(--color-ink-muted); font-size: 0.84rem; line-height: 1.45;
+  }
+  .price-tick { font-weight: 800; text-align: center; color: var(--color-win); }
   .price-features li.is-excluded { color: var(--color-ink-faint); }
-  .price-features li.is-excluded > span:first-child { color: var(--color-line-strong); }
+  .price-features li.is-excluded .price-tick { color: var(--color-line-strong); }
 
   .price-faq {
-    display: grid; gap: 0; margin: 0 auto; max-width: 54rem;
+    display: grid; gap: 0.9rem; margin: 0 auto; max-width: 54rem;
     padding: clamp(3.5rem, 7vw, 5.5rem) 1.5rem;
     grid-template-columns: repeat(2, 1fr);
   }
-  .price-faq > div { border-top: 1px solid var(--color-line); padding: 1.4rem 2rem 1.4rem 0; }
-  .price-faq dt { font-size: 0.94rem; font-weight: 800; letter-spacing: -0.02em; }
+  .price-faq > div {
+    border-radius: var(--radius-panel); background: var(--color-surface);
+    padding: 1.35rem 1.4rem; box-shadow: var(--shadow-soft);
+  }
+  .price-faq dt { font-size: 0.94rem; font-weight: 680; letter-spacing: -0.015em; }
   .price-faq dd { margin-top: 0.5rem; color: var(--color-ink-muted); font-size: 0.86rem; line-height: 1.6; }
 
-  /* -- features ------------------------------------------------------ */
-  .feature-section {
-    margin: 0 auto; max-width: 74rem; padding: clamp(3rem, 6vw, 4.5rem) 1.5rem;
-    border-top: 1px solid var(--color-line); scroll-margin-top: 5rem;
+  /* -- features ------------------------------------------------------
+     Four sections that alternate which side the diagram lands on. Each is a
+     piece, a title, one line, and the picture — the bullet lists are gone,
+     because three points a section made twelve claims on the page and the
+     diagram beside them was already making the same one better. */
+  .feature {
+    margin: 0 auto; max-width: 74rem;
+    padding: clamp(3rem, 6vw, 5rem) 1.5rem;
+    scroll-margin-top: 5rem;
   }
-  .feature-row {
-    display: grid; gap: clamp(1.5rem, 4vw, 3.5rem);
-    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); align-items: start;
+  .feature-inner {
+    display: grid; align-items: center;
+    gap: clamp(2rem, 5vw, 4.5rem);
+    /* The diagram takes the larger share now that the copy is two lines. */
+    grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
   }
-  .feature-row h2 {
-    font-size: clamp(1.4rem, 2.9vw, 1.95rem); font-weight: 850;
-    letter-spacing: -0.038em; line-height: 1.12; text-wrap: balance;
+  /* Driven by a class from the map index, not by :nth-child — the page header
+     is a sibling, so nth-child counts from the wrong parity and inverts the
+     whole page the moment anything is added above the list. Reorders rather
+     than re-sources, so the copy stays first in the DOM for a screen reader. */
+  .feature.is-flipped .feature-copy { order: 2; }
+  /* Swap the track sizes with the order. Reordering alone moves the diagram
+     into column one, which is the *narrow* track — so every flipped section
+     quietly gave its picture less room than the unflipped ones. */
+  .feature.is-flipped .feature-inner {
+    grid-template-columns: minmax(0, 1.22fr) minmax(0, 0.78fr);
   }
-  .feature-row > div > p {
-    margin-top: 0.9rem; max-width: 34ch; color: var(--color-ink-muted);
-    font-size: 0.94rem; line-height: 1.65;
+
+  /* Pawn, knight, bishop, rook. Still ordinal, still counts to four, and it
+     belongs to this product rather than to every startup page ever made. */
+  .feature-piece {
+    display: block; width: 2.5rem; height: 2.5rem; margin-bottom: 1.1rem;
+    opacity: 0.9;
   }
-  .feature-points { display: grid; gap: 0; }
-  .feature-points > div { border-top: 1px solid var(--color-line); padding: 1.15rem 0; }
-  .feature-points > div:first-child { border-top: 0; padding-top: 0; }
-  .feature-points strong { font-size: 0.94rem; font-weight: 800; letter-spacing: -0.02em; }
-  .feature-points p { margin-top: 0.35rem; color: var(--color-ink-muted); font-size: 0.87rem; line-height: 1.6; }
+  .feature-copy h2 {
+    font-size: clamp(1.55rem, 3.2vw, 2.25rem); font-weight: 650;
+    letter-spacing: -0.03em; line-height: 1.12; text-wrap: balance;
+  }
+  .feature-lede {
+    margin-top: 0.85rem; max-width: 34ch;
+    color: var(--color-ink-muted); font-size: 1rem; line-height: 1.6;
+  }
+
+  /* -- the archive, opening the page ----------------------------------
+     Auto-fill rather than a fixed column count: the cells keep their size and
+     the row count adapts, so the same band works from a phone to a wide
+     monitor without a breakpoint deciding how many weeks fit. */
+  .feature-hero { padding-bottom: clamp(2.5rem, 5vw, 4rem); }
+  .fx-hero {
+    display: grid; gap: 0.3rem; margin-top: clamp(2.5rem, 5vw, 3.5rem);
+    grid-template-columns: repeat(auto-fill, minmax(1.05rem, 1fr));
+    /* Fades into the page instead of stopping at a hard edge, so it reads as a
+       history that continues rather than a chart that ends. */
+    -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent);
+    mask-image: linear-gradient(180deg, #000 62%, transparent);
+  }
+  .fx-hero .fx-game { border-radius: 3.5px; }
+
+  /* -- the diagrams --------------------------------------------------- */
+  .feature-visual {
+    display: grid; align-content: center;
+    min-height: 12rem;
+    border-radius: var(--radius-xl); background: var(--color-surface);
+    padding: clamp(1.6rem, 3.2vw, 2.4rem);
+    box-shadow: var(--shadow-lift);
+  }
+  .fx { display: grid; }
+  /* Isolated so the cards' z-indexes order the stack and nothing else. */
+  .fx-stack { isolation: isolate; }
+
+  /* one square per game, shaded by what we found in it -----------------
+     A contribution-graph read, on purpose: the eye finds the clusters before
+     it finds any single square, and the clusters are the point. */
+  .fx-grid {
+    display: grid; gap: 0.34rem;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+  .fx-game { aspect-ratio: 1; border-radius: 3px; background: var(--color-surface-2); }
+  /* One ramp, one hue. Reading intensity is reading depth, not colour. */
+  .fx-game[data-level="1"] { background: color-mix(in srgb, var(--color-accent) 30%, var(--color-surface-2)); }
+  .fx-game[data-level="2"] { background: color-mix(in srgb, var(--color-accent) 60%, var(--color-surface-2)); }
+  .fx-game[data-level="3"] { background: color-mix(in srgb, var(--color-accent) 88%, var(--color-surface-2)); }
+  /* Past the accent at the top of the ramp, so the busiest squares actually
+     read as the darkest rather than flattening out at brand orange. */
+  .fx-game[data-level="4"] { background: color-mix(in srgb, var(--color-accent) 82%, var(--color-ink)); }
+
+  /* a family and its variations ---------------------------------------
+     A stack, not a tree. Three dashed curves fanning out of a box was
+     decoration pretending to be information; overlapping the rows says the
+     same thing (these belong to that) and buys depth for nothing.
+
+     Worst line on top, in focus. The two you are fine in sit behind it, inset
+     and faded — visible, but not competing with the one that is costing you.
+     That ordering is the product's own rule, drawn. */
+  .fx-openings { display: grid; gap: 1.1rem; }
+
+  /* No box. The dark pill was the only dark thing in the card and it fought
+     the stack under it for attention — which is backwards, since the stack is
+     the answer and this is just its label. Type and space do the job. */
+  .fx-family {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 1rem; width: 100%; padding: 0 0.15rem;
+  }
+  .fx-family-name { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
+  .fx-family-name b {
+    font-size: 1.05rem; font-weight: 680; letter-spacing: -0.025em; color: var(--color-ink);
+  }
+  .fx-family-name i {
+    font-style: normal; font-family: var(--font-mono); font-size: 0.66rem;
+    color: var(--color-ink-faint); white-space: nowrap;
+  }
+  /* The score the model actually produces for an opening, 0-100. */
+  .fx-mastery { display: flex; align-items: baseline; gap: 0.4rem; white-space: nowrap; }
+  .fx-mastery i {
+    font-style: normal; font: 700 0.6rem/1 var(--font-mono); letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--color-ink-faint);
+  }
+  .fx-mastery b {
+    font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.03em; color: var(--color-ink);
+  }
+
+  .fx-stack { display: grid; width: 100%; }
+  .fx-var {
+    display: grid; align-items: center; gap: 0.7rem;
+    grid-template-columns: minmax(5.5rem, auto) minmax(2.5rem, 1fr) auto;
+    border-radius: var(--radius-control); background: var(--color-surface);
+    padding: 0.6rem 0.85rem;
+  }
+  /* Each card behind the one above: pulled up so they overlap, inset so the
+     stack has visible edges, and dimmed so the front one keeps the eye. */
+  .fx-var:nth-child(1) { z-index: 3; box-shadow: var(--shadow-lift); }
+  .fx-var:nth-child(2) {
+    z-index: 2; margin: -0.5rem 0.75rem 0; opacity: 0.66;
+    box-shadow: var(--shadow-soft);
+  }
+  .fx-var:nth-child(3) {
+    z-index: 1; margin: -0.5rem 1.5rem 0; opacity: 0.42;
+    box-shadow: var(--shadow-soft);
+  }
+  .fx-var b { font-size: 0.86rem; font-weight: 650; letter-spacing: -0.015em; white-space: nowrap; }
+  /* The bar is the record; the number beside it is the same fact exactly. */
+  .fx-rate {
+    display: block; height: 5px; border-radius: 999px;
+    background: var(--color-surface-2); overflow: hidden;
+  }
+  .fx-rate i { display: block; height: 100%; border-radius: inherit; background: var(--color-win); }
+  .fx-var em {
+    font-style: normal; font-family: var(--font-mono); font-size: 0.72rem;
+    font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-ink-muted);
+  }
+  .fx-var.is-weak {
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-loss) 42%, transparent),
+                var(--shadow-lift);
+  }
+  .fx-var.is-weak .fx-rate i { background: var(--color-loss); }
+  .fx-var.is-weak em { color: var(--color-loss); }
+
+  /* the move, the better move, and why --------------------------------- */
+  .fx-compare { display: grid; gap: 0.6rem; }
+  .fx-side {
+    display: grid; align-items: center; gap: 0.85rem;
+    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+    border-radius: var(--radius-control); padding: 0.65rem 0.85rem;
+  }
+  .fx-side i {
+    font-style: normal; font: 700 0.6rem/1.4 var(--font-mono);
+    letter-spacing: 0.07em; text-transform: uppercase;
+  }
+  .fx-side b { font-size: 0.95rem; }
+  .fx-side em {
+    font-style: normal; font-family: var(--font-mono); font-weight: 700;
+    font-size: 0.85rem; font-variant-numeric: tabular-nums;
+  }
+  .fx-side.is-yours { background: color-mix(in srgb, var(--color-loss) 11%, var(--color-surface)); }
+  .fx-side.is-yours i, .fx-side.is-yours em { color: #a8302a; }
+  .fx-side.is-best { background: var(--color-accent-wash); }
+  .fx-side.is-best i, .fx-side.is-best em { color: var(--color-accent); }
+  .fx-why {
+    margin-top: 1.2rem; color: var(--color-ink-muted);
+    font-size: 0.88rem; line-height: 1.7; text-wrap: pretty;
+  }
+  /* Inline with the sentence rather than on its own row: the severity is part
+     of the statement, not a label filed above it. */
+  .fx-sev {
+    display: inline-block; margin-right: 0.5rem; vertical-align: 0.05em;
+    border-radius: var(--radius-pill); padding: 0.2rem 0.55rem;
+    background: color-mix(in srgb, var(--color-loss) 16%, var(--color-surface));
+    color: #a8302a; font: 700 0.58rem/1.4 var(--font-mono);
+    letter-spacing: 0.07em; text-transform: uppercase;
+  }
+
+  /* stockfish on every move -------------------------------------------
+     The bar is the evaluation itself, so reading the picture and reading the
+     number are the same act.
+
+     Kept below the openings rules, not above them: this block has twice been
+     written between two other scenes and twice been swallowed by a rewrite of
+     the one before it. */
+  .fx-plies { display: grid; gap: 0.3rem; }
+  .fx-ply {
+    display: grid; align-items: center; gap: 0.85rem;
+    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+    border-radius: var(--radius-control); padding: 0.45rem 0.7rem;
+  }
+  .fx-ply b { font-size: 0.84rem; color: var(--color-ink-muted); }
+  .fx-ply em {
+    font-style: normal; font-family: var(--font-mono); font-weight: 700;
+    font-size: 0.76rem; font-variant-numeric: tabular-nums; color: var(--color-ink-muted);
+  }
+  .fx-bar {
+    display: block; height: 6px; border-radius: 999px;
+    background: var(--color-surface-2); overflow: hidden;
+  }
+  .fx-bar i {
+    display: block; height: 100%; border-radius: inherit;
+    background: color-mix(in srgb, var(--color-ink) 30%, transparent);
+  }
+  .fx-ply.is-flagged { background: color-mix(in srgb, var(--color-loss) 11%, var(--color-surface)); }
+  .fx-ply.is-flagged b, .fx-ply.is-flagged em { color: #a8302a; }
+  .fx-ply.is-flagged .fx-bar i { background: #b3382f; }
+
+  /* the line, up to the move you have to find -------------------------- */
+  .fx-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; }
+  .fx-step {
+    display: inline-flex; align-items: center;
+    border-radius: var(--radius-control); background: var(--color-surface-2);
+    padding: 0.45rem 0.7rem; font-size: 0.88rem;
+  }
+  .fx-step.is-asking {
+    gap: 0.2rem; background: var(--color-accent-wash); color: var(--color-accent);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-accent) 40%, transparent);
+  }
+  .fx-ghost { width: 1.2em; height: 1.2em; opacity: 0.35; }
+  .fx-step.is-asking i { font-style: normal; font-weight: 800; }
+  .fx-trainer-foot {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 0.75rem 1rem; margin-top: 1.6rem;
+  }
+  .fx-progress {
+    font-family: var(--font-mono); font-size: 0.72rem;
+    font-variant-numeric: tabular-nums; color: var(--color-ink-faint);
+  }
+  .fx-progress b { color: var(--color-ink); font-weight: 700; }
+  .fx-progress i { font-style: normal; color: var(--color-line-strong); }
+  .fx-depths { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .fx-depth {
+    border-radius: var(--radius-pill); padding: 0.3rem 0.7rem;
+    font: 700 0.62rem/1.4 var(--font-mono); letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--color-ink-faint);
+    background: var(--color-surface-2);
+  }
+  .fx-depth.is-on { background: var(--color-ink); color: var(--color-bg); }
+
+  /* the tree your own games made ---------------------------------------
+     Two numbers a row: your record, and the engine's view of the same move.
+     The explorer exists because those can disagree. */
+  .fx-explorer { gap: 1.1rem; }
+  .fx-walked { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .fx-candidates { display: grid; gap: 0.45rem; }
+  .fx-candidates li {
+    display: grid; align-items: center; gap: 0.75rem;
+    grid-template-columns: 4.2rem minmax(2.5rem, 1fr) 2.6rem 3rem;
+    border-radius: var(--radius-control); background: var(--color-surface);
+    padding: 0.5rem 0.75rem; box-shadow: var(--shadow-soft);
+  }
+  .fx-candidates b { font-size: 0.86rem; }
+  .fx-candidates em {
+    font-style: normal; font-family: var(--font-mono); font-size: 0.72rem;
+    font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-ink-muted);
+    text-align: right;
+  }
+  /* The engine's own figure, set apart so it never reads as part of your record. */
+  .fx-eval {
+    font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700;
+    font-variant-numeric: tabular-nums; text-align: right;
+    color: var(--color-signal);
+  }
+  .fx-candidates li.is-weak {
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-loss) 40%, transparent),
+                var(--shadow-soft);
+  }
+  .fx-candidates li.is-weak .fx-rate i { background: var(--color-loss); }
+  .fx-candidates li.is-weak em, .fx-candidates li.is-weak .fx-eval { color: var(--color-loss); }
+
+  /* the queue of your own mistakes -------------------------------------
+     Ordered by frequency times severity, which is why the repeat count sits
+     beside the cost rather than under it. */
+  .fx-queue ul { display: grid; gap: 0.45rem; }
+  .fx-queue li {
+    display: grid; align-items: center; gap: 0.7rem;
+    grid-template-columns: 3.6rem auto 1fr auto;
+    border-radius: var(--radius-control); background: var(--color-surface);
+    padding: 0.55rem 0.8rem; box-shadow: var(--shadow-soft);
+  }
+  .fx-queue b { font-size: 0.88rem; }
+  .fx-seen {
+    font-family: var(--font-mono); font-size: 0.68rem;
+    font-variant-numeric: tabular-nums; color: var(--color-ink-faint);
+  }
+  .fx-queue em {
+    font-style: normal; font-family: var(--font-mono); font-size: 0.76rem;
+    font-weight: 700; font-variant-numeric: tabular-nums; color: var(--color-ink-muted);
+  }
+  /* The one at the front of the queue is the one you would be given next. */
+  .fx-queue li.is-next {
+    background: var(--color-accent-wash);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-accent) 38%, transparent);
+  }
+  .fx-queue li.is-next em { color: var(--color-accent); }
+  .fx-sev.is-blunder { background: color-mix(in srgb, var(--color-loss) 16%, var(--color-surface)); color: #a8302a; }
+  .fx-sev.is-mistake { background: color-mix(in srgb, var(--color-mistake) 22%, var(--color-surface)); color: #8a5115; }
+  .fx-sev.is-inaccuracy { background: var(--color-surface-2); color: var(--color-ink-muted); }
+  .fx-queue .fx-sev { margin-right: 0; }
 
   /* -- legal --------------------------------------------------------- */
   .legal { margin: 0 auto; max-width: 42rem; padding: clamp(3rem, 6vw, 4.5rem) 1.5rem 5rem; }
-  .legal h1 { font-size: clamp(1.9rem, 4vw, 2.5rem); font-weight: 860; letter-spacing: -0.045em; }
+  .legal h1 { font-size: clamp(1.9rem, 4vw, 2.5rem); font-weight: 640; letter-spacing: -0.03em; }
   .legal-meta { margin-top: 0.6rem; color: var(--color-ink-faint); font-size: 0.78rem; }
   .legal-notice {
-    margin-top: 1.8rem; border: 1px solid color-mix(in srgb, var(--color-mistake) 55%, var(--color-line));
-    border-radius: var(--radius-panel);
+    margin-top: 1.8rem; border-radius: var(--radius-panel);
     background: color-mix(in srgb, var(--color-mistake) 8%, var(--color-surface));
     padding: 1rem 1.2rem; color: var(--color-ink-muted); font-size: 0.84rem; line-height: 1.6;
   }
   .legal-notice strong { color: var(--color-ink); }
-  .legal h2 { margin-top: 2.6rem; font-size: 1.08rem; font-weight: 820; letter-spacing: -0.025em; }
+  .legal h2 { margin-top: 2.6rem; font-size: 1.08rem; font-weight: 660; letter-spacing: -0.025em; }
   .legal h3 { margin-top: 1.6rem; font-size: 0.94rem; font-weight: 780; }
   .legal p, .legal li { margin-top: 0.85rem; color: var(--color-ink-muted); font-size: 0.9rem; line-height: 1.7; }
   .legal ul { margin-top: 0.4rem; padding-left: 1.2rem; list-style: disc; }
   .legal li { margin-top: 0.45rem; }
   .legal a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 0.2rem; }
-  .legal-foot { margin-top: 3rem; border-top: 1px solid var(--color-line); padding-top: 1.2rem; font-size: 0.84rem; }
+  .legal-foot { margin-top: 3.5rem; color: var(--color-ink-faint); font-size: 0.84rem; }
 
   /* -- auth additions ------------------------------------------------ */
   .auth-card-wide { width: min(30rem, 100%); }
@@ -395,25 +1048,30 @@
   }
   .auth-inline-link:hover { color: var(--color-accent); }
   .auth-reset {
-    display: grid; gap: 0.7rem; margin-top: 1.2rem;
-    border-top: 1px solid var(--color-line); padding-top: 1.2rem;
+    display: grid; gap: 0.7rem; margin-top: 1.6rem;
   }
   .auth-reset label { display: grid; gap: 0.35rem; }
   .auth-reset label span { font-size: 0.72rem; font-weight: 700; color: var(--color-ink-muted); }
+  /* Inputs are the one place an edge is genuinely load-bearing: it says
+     "type here". They get it as a recessed fill plus a ring, which is the
+     same language as the panels rather than a competing one. */
   .auth-reset input {
-    height: 2.6rem; border: 1px solid var(--color-line); border-radius: var(--radius-control);
-    background: var(--color-surface); color: var(--color-ink); padding: 0 0.8rem; font-size: 0.88rem;
+    height: 2.8rem; border: 0; border-radius: var(--radius-control);
+    background: var(--color-surface-2); color: var(--color-ink);
+    padding: 0 0.85rem; font-size: 0.88rem;
+    box-shadow: var(--shadow-flat);
   }
-  .auth-choice { display: flex; gap: 0.6rem; border: 0; padding: 0; }
+  .auth-reset input:focus { outline: 0; background: var(--color-surface); box-shadow: 0 0 0 2px var(--color-accent); }
+  .auth-choice { display: flex; gap: 0.5rem; border: 0; padding: 0; }
   .auth-choice legend { margin-bottom: 0.45rem; font-size: 0.72rem; font-weight: 700; color: var(--color-ink-muted); }
   .auth-choice label {
     display: inline-flex; align-items: center; gap: 0.45rem; flex: 1;
-    border: 1px solid var(--color-line); border-radius: var(--radius-control);
-    padding: 0.6rem 0.8rem; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+    border-radius: var(--radius-control); background: var(--color-surface-2);
+    padding: 0.65rem 0.85rem; font-size: 0.85rem; font-weight: 650; cursor: pointer;
+    transition: background 130ms ease, color 130ms ease;
   }
   .auth-choice label:has(input:checked) {
-    border-color: var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+    background: var(--color-accent-wash); color: var(--color-accent);
   }
   .auth-choice input { accent-color: var(--color-accent); }
   .auth-note a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 0.2rem; }
@@ -421,12 +1079,12 @@
   /* -- account: billing + identity ----------------------------------- */
   .account-billing, .account-identity {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.5rem;
-    border: 1px solid var(--color-line); border-radius: var(--radius-panel);
-    background: var(--color-surface); padding: 1.4rem 1.5rem;
+    border-radius: var(--radius-panel); background: var(--color-surface);
+    padding: 1.5rem 1.6rem; box-shadow: var(--shadow-soft);
   }
   .account-identity { margin-top: 1rem; }
   .account-billing-main strong, .account-identity strong {
-    display: block; margin-top: 0.4rem; font-size: 1.15rem; font-weight: 850; letter-spacing: -0.03em;
+    display: block; margin-top: 0.4rem; font-size: 1.15rem; font-weight: 650; letter-spacing: -0.03em;
   }
   .account-plan-note { color: var(--color-ink-faint); font-size: 0.75rem; font-style: normal; font-weight: 600; }
   .account-billing-main > p, .account-identity > div > p {
@@ -437,9 +1095,18 @@
   .account-signout { color: var(--color-loss); }
 }
 
-/* The board's entrance is the page's one authored moment; nothing else moves. */
+/* Motion is welcome, but it always has a job and it always has an off switch. */
 @media (prefers-reduced-motion: reduce) {
-  .hb-board, .hb-verdict { animation: none; }
+  .hb, .hb-callout, .sc-card { animation: none; transition: none; }
+  .sc-card { opacity: 1; transform: none; }
+  .sc-wires path { animation: none; }
+  /* The band still arrives; it just does not travel. useCountUp jumps to the
+     value in this mode, so nothing is lost but the movement. */
+  .scale-band { transition: none; transform: none; }
+  /* The drift is the one thing on the page that moves forever, so it is the
+     first thing to stop. The roster is still there, just still. */
+  .scale-wash-track { animation: none; }
+  .sheet[open], .sheet[open]::backdrop { animation: none; }
 }
 
 @media (max-width: 1000px) {
@@ -449,27 +1116,69 @@
 }
 
 @media (max-width: 860px) {
-  .flow-track { grid-template-columns: 1fr; gap: 1.75rem; }
-  .flow-track > li::before { right: 0; }
-  .refuse-list { grid-template-columns: 1fr; }
-  .refuse-list > div { padding-right: 0; }
-  .bento-grid { grid-template-columns: repeat(2, 1fr); }
-  .bento-lead, .bento-accent, .bento-grid > .bento-cell { grid-column: span 2; grid-row: auto; }
-  .feature-row { grid-template-columns: 1fr; }
-  .price-grid, .price-faq { grid-template-columns: 1fr; }
-  .price-faq > div { padding-right: 0; }
+  .sc-grid { grid-template-columns: 1fr; }
+  .sc-card.is-wide { grid-column: span 1; }
+  /* Stacked, so the alternation has nothing left to alternate: the diagram
+     always follows its copy rather than sometimes preceding it. */
+  .feature-inner { grid-template-columns: 1fr; }
+  .feature.is-flipped .feature-copy { order: 0; }
+  .fx-grid { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+  /* Less inset on a narrow card, or the third row loses its numbers. */
+  .fx-var:nth-child(2) { margin-inline: 0.45rem; }
+  .fx-var:nth-child(3) { margin-inline: 0.9rem; }
+  .fx-var { grid-template-columns: minmax(4.5rem, auto) minmax(1.5rem, 1fr) auto; gap: 0.5rem; }
+  /* Same cell size, far fewer columns: without trimming, the band becomes
+     twenty-odd rows and stops being a header. */
+  .fx-hero { gap: 0.25rem; grid-template-columns: repeat(auto-fill, minmax(0.85rem, 1fr)); }
+  .fx-hero .fx-game:nth-child(n + 145) { display: none; }
+  .fx-candidates li { grid-template-columns: 3.4rem minmax(1.5rem, 1fr) 2.4rem 2.6rem; gap: 0.45rem; }
+  .fx-queue li { grid-template-columns: 3rem auto 1fr auto; gap: 0.45rem; }
+  .fx-seen { font-size: 0.62rem; }
+  .fx-side { grid-template-columns: 4.2rem minmax(0, 1fr) auto; gap: 0.55rem; }
+  /* Stacked, so there is nothing left to align against: drop the shared row
+     lines and let each card size itself. */
+  .price-grid {
+    grid-template-columns: 1fr; grid-template-rows: none; row-gap: 1.25rem;
+  }
+  .price-card { display: flex; flex-direction: column; gap: 1.15rem; grid-row: auto; }
+  .price-faq { grid-template-columns: 1fr; }
   .public-footer-inner { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 720px) {
+  /* Two big figures side by side stop being readable well before the phone
+     breakpoint; they stack, and the roster thins to match. */
+  .scale-figures { flex-direction: column; gap: 1.6rem; }
+  .scale-wash-line:nth-child(n + 3) { display: none; }
+  .field-row { grid-template-columns: 1fr; }
+  /* On a phone the sheet is a bottom sheet: reachable, and it does not float
+     in the middle of a screen it nearly fills anyway. */
+  /* Pinned with inset rather than an auto top margin. The margin version
+     relies on the dialog box resolving against the same height that dvh
+     resolves to, and with a collapsing mobile URL bar those are not the same
+     number — the sheet hung ~28px below the fold with its submit button off
+     screen. Pinned edges cannot drift. */
+  .sheet {
+    position: fixed; inset: auto 0 0 0; margin: 0;
+    width: 100%; max-width: none; max-height: 92dvh;
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  }
+  @keyframes sheet-in { from { opacity: 0; transform: translateY(28px); } }
   .public-burger { display: grid; }
   .public-nav {
     position: absolute; top: 100%; right: 0; left: 0; display: none;
     flex-direction: column; align-items: stretch; gap: 0.9rem;
-    border-bottom: 1px solid var(--color-line); background: var(--color-surface);
-    padding: 1.2rem 1.5rem 1.5rem;
+    border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+    background: var(--color-surface); box-shadow: var(--shadow-float);
+    padding: 1rem 1.1rem 1.3rem;
   }
   .public-nav.is-open { display: flex; }
   .public-footer-inner { grid-template-columns: 1fr; gap: 1.8rem; }
+  /* Too narrow for two labelled tiles either side of the hub, so the nodes
+     drop to their mark. The card's own sentence names both platforms. */
+  .sc-hub { height: 9rem; }
+  .sc-node { padding: 0.55rem; border-radius: 999px; gap: 0; }
+  .sc-node-text { display: none; }
+  .sc-core { width: 3rem; height: 3rem; }
   .account-billing, .account-identity { flex-direction: column; align-items: flex-start; }
 }

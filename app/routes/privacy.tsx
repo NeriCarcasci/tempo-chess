@@ -20,7 +20,6 @@ export default function Privacy() {
   return (
     <PublicPage>
       <article className="legal">
-        <p className="eyebrow">Legal</p>
         <h1>Privacy policy</h1>
         <p className="legal-meta">Last updated {UPDATED}</p>
 

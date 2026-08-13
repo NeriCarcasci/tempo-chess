@@ -51,13 +51,15 @@ const IMPORT_SELECT = `
   from analysis_imports i
   join linked_accounts a on a.id = i.account_id`;
 
-export async function listImports(limit = 20): Promise<ImportProgress[]> {
-  const rows = await client.unsafe(`${IMPORT_SELECT} order by i.created_at desc limit $1`, [limit]);
+export async function listImports(userId: string, limit = 20): Promise<ImportProgress[]> {
+  const rows = await client.unsafe(`${IMPORT_SELECT} where i.user_id = $1 order by i.created_at desc limit $2`, [userId, limit]);
   return rows.map((row) => mapImport(row as Record<string, unknown>));
 }
 
-export async function getImport(id: string): Promise<ImportProgress | null> {
-  const rows = await client.unsafe(`${IMPORT_SELECT} where i.id = $1`, [id]);
+export async function getImport(id: string, userId?: string): Promise<ImportProgress | null> {
+  const rows = userId
+    ? await client.unsafe(`${IMPORT_SELECT} where i.id = $1 and i.user_id = $2`, [id, userId])
+    : await client.unsafe(`${IMPORT_SELECT} where i.id = $1`, [id]);
   return rows[0] ? mapImport(rows[0] as Record<string, unknown>) : null;
 }
 
@@ -72,8 +74,16 @@ export interface PlayerCoverage {
   importLimit: number;
 }
 
-async function ensureAccount(username: string): Promise<{ userId: string; accountId: string }> {
+async function ensureAccount(username: string, ownerId?: string): Promise<{ userId: string; accountId: string }> {
   const normalized = normalizeProviderUsername(username);
+  if (ownerId) {
+    const rows = await client`
+      select id from linked_accounts
+      where user_id = ${ownerId} and platform = 'lichess' and normalized_username = ${normalized}
+      limit 1`;
+    if (!rows[0]) throw new Error(`"${username}" is not linked to this account`);
+    return { userId: ownerId, accountId: String(rows[0].id) };
+  }
   return client.begin(async (sql) => {
     let profiles = await sql`select id from profiles where email = ${DEMO_EMAIL} limit 1`;
     if (!profiles[0]) {
@@ -119,8 +129,8 @@ async function getLichessAvailableGames(username: string): Promise<number | null
   }
 }
 
-export async function getLichessCoverage(username: string): Promise<PlayerCoverage> {
-  const { userId, accountId } = await ensureAccount(username);
+export async function getLichessCoverage(username: string, ownerId?: string): Promise<PlayerCoverage> {
+  const { userId, accountId } = await ensureAccount(username, ownerId);
   const [availableGamesRaw, storedRows, analyzedRows, activeRows, latestRows] = await Promise.all([
     getLichessAvailableGames(username),
     client`select count(*)::int as count from games
@@ -164,8 +174,8 @@ export async function getLichessCoverage(username: string): Promise<PlayerCovera
   };
 }
 
-export async function createLichessImport(username: string, requestedGames: number): Promise<ImportProgress> {
-  const { userId, accountId } = await ensureAccount(username);
+export async function createLichessImport(username: string, requestedGames: number, ownerId?: string): Promise<ImportProgress> {
+  const { userId, accountId } = await ensureAccount(username, ownerId);
   const active = await client.unsafe(`${IMPORT_SELECT} where i.account_id = $1
     and i.status in ('queued', 'ingesting', 'analyzing')
     order by i.created_at desc limit 1`, [accountId]);
@@ -184,13 +194,16 @@ export async function createLichessImport(username: string, requestedGames: numb
   return (await getImport(id))!;
 }
 
-export async function cancelImport(id: string): Promise<ImportProgress | null> {
+export async function cancelImport(id: string, userId?: string): Promise<ImportProgress | null> {
   await client`update analysis_imports set cancel_requested = true, updated_at = now()
-    where id = ${id} and status in ('queued', 'ingesting', 'analyzing')`;
+    where id = ${id} and (${userId ?? null}::uuid is null or user_id = ${userId ?? null})
+      and status in ('queued', 'ingesting', 'analyzing')`;
   await client`update analysis_tasks set status = 'cancelled', completed_at = now(), updated_at = now()
-    where import_id = ${id} and status = 'queued'`;
+    where import_id = ${id} and status = 'queued'
+      and exists (select 1 from analysis_imports i where i.id = ${id}
+        and (${userId ?? null}::uuid is null or i.user_id = ${userId ?? null}))`;
   await refreshImport(id);
-  return getImport(id);
+  return getImport(id, userId);
 }
 
 async function failImport(id: string, error: unknown): Promise<void> {

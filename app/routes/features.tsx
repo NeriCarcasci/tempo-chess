@@ -1,5 +1,14 @@
 import { Link } from "react-router";
 import { PublicPage } from "../components/PublicShell";
+import { PieceGlyph } from "../components/PieceGlyph";
+import {
+  ArchiveHero,
+  EngineScene,
+  ExplorerScene,
+  QueueScene,
+  ReasonScene,
+  TrainerScene,
+} from "../components/Scenes";
 
 export function meta() {
   return [
@@ -7,87 +16,93 @@ export function meta() {
     {
       name: "description",
       content:
-        "Whole-history engine analysis, a repertoire map built from your own games, mistakes explained in words, and drills made from your errors.",
+        "Connect a Lichess or Chess.com account and Tempo prices every move you have played, maps your openings, explains each mistake, and turns the expensive ones into drills.",
     },
   ];
 }
 
 interface Section {
   id: string;
+  /** An ascending piece instead of a number. */
+  piece: string;
   title: string;
   lede: string;
-  points: Array<[string, string]>;
+  scene: React.ReactNode;
 }
 
+/**
+ * What you can actually do, in the order you would do it: connect, look,
+ * understand, practise. Each one is a surface that exists — the explorer, the
+ * game review, the drill queue, the repertoire trainer — not a capability
+ * invented for a marketing page.
+ */
 const SECTIONS: Section[] = [
   {
-    id: "analysis",
-    title: "Every game read as one body of evidence",
-    lede: "Single-game review answers what went wrong in this game. That is a different question from what keeps going wrong.",
-    points: [
-      ["Stockfish on every move", "Each decision gets an evaluation before and after, so the cost of a move is measured rather than guessed."],
-      ["Mistakes stored, not counted", "The position, your move, the engine's move, and the damage. That is what makes it re-servable as practice."],
-      ["Small samples stay honest", "Win rates carry confidence intervals and get shrunk toward your baseline, so five games cannot masquerade as a weakness."],
-    ],
+    id: "connect",
+    piece: "p",
+    scene: <EngineScene />,
+    title: "Point it at your username",
+    lede: "Your Lichess or Chess.com archive comes back priced move by move, however far back it goes. Nothing to upload.",
+  },
+  {
+    id: "explorer",
+    piece: "n",
+    scene: <ExplorerScene />,
+    title: "Walk the tree your own games made",
+    lede: "Every position you have reached, your record at each move from it, and what the engine makes of the same choice.",
+  },
+  {
+    id: "review",
+    piece: "b",
+    scene: <ReasonScene />,
+    title: "Find out why, not just what",
+    lede: "Each finding names the idea you missed and what allowing it cost, next to the move the engine wanted.",
+  },
+  {
+    id: "drills",
+    piece: "r",
+    scene: <QueueScene />,
+    title: "Drill the mistakes you actually made",
+    lede: "Your own positions come back as puzzles, ordered by how often the mistake repeats and what it costs.",
   },
   {
     id: "repertoire",
-    title: "An opening map drawn from your games",
-    lede: "Opening books tell you what strong players do. Your map tells you where your own preparation stops working.",
-    points: [
-      ["Your own position tree", "Every position you have reached, linked by the moves you actually played, with your record at each branch."],
-      ["The worst line opens first", "Tempo ranks your openings by what they cost you. You do not have to know where to look."],
-      ["Lines you chose on purpose", "Mark the moves you intend to play, and departures from your own repertoire become findings."],
-    ],
-  },
-  {
-    id: "mistakes",
-    title: "Explained in words, then put back on the board",
-    lede: "A centipawn number tells you that you were wrong. It does not tell you what you failed to see.",
-    points: [
-      ["The idea you missed", "Each mistake carries a plain-language reason: the tactic that was there, the threat you allowed."],
-      ["Where your vision ends", "Tempo records how deep the winning idea was. Missing two-move ideas is a different problem from missing five-move ones."],
-      ["Ranked by damage", "The drill queue is ordered by frequency times severity, so you practise the expensive habit first."],
-    ],
-  },
-  {
-    id: "training",
-    title: "Somewhere to put the work",
-    lede: "Diagnosis without practice is a nicer way to lose.",
-    points: [
-      ["Thirteen guided lessons", "Openings taught move by move with the reason behind each one, every line validated on a real board."],
-      ["Line trainer", "Drill a line from your own repertoire at quick, standard, or deep length, with reveals when you are stuck."],
-      ["Play it out", "Reached a position you do not understand? Play it against an engine capped near your rating."],
-    ],
+    piece: "q",
+    scene: <TrainerScene />,
+    title: "Rehearse the lines you chose",
+    lede: "Mark the moves you mean to play and drill them at three depths. Or play the position out against a bot capped near your rating.",
   },
 ];
 
 export default function Features() {
   return (
     <PublicPage>
-      <header className="page-head">
-        <h1>What Tempo actually does</h1>
+      {/* The archive itself opens the page. It is the one picture that says
+          what the product is before a word of it is read. */}
+      <header className="page-head feature-hero">
+        <h1>Everything you have played, in one pass</h1>
         <p>
-          Four surfaces, one idea: measure everything you have played, find the
-          failures that repeat, and give you somewhere to fix them.
+          Connect an account and Tempo reads the lot: what you play, where it
+          goes wrong, and what to practise about it.
         </p>
+        <ArchiveHero />
       </header>
 
-      {SECTIONS.map((section) => (
-        <section key={section.id} id={section.id} className="feature-section">
-          <div className="feature-row">
-            <div>
+      {/* Sections alternate which side the diagram falls on. Identical rows
+          read as a form to fill in; alternating them reads as a page. */}
+      {SECTIONS.map((section, i) => (
+        <section
+          key={section.id}
+          id={section.id}
+          className={`feature ${i % 2 === 1 ? "is-flipped" : ""}`}
+        >
+          <div className="feature-inner">
+            <div className="feature-copy">
+              <PieceGlyph letter={section.piece} white={false} className="feature-piece" />
               <h2>{section.title}</h2>
-              <p>{section.lede}</p>
+              <p className="feature-lede">{section.lede}</p>
             </div>
-            <div className="feature-points">
-              {section.points.map(([title, body]) => (
-                <div key={title}>
-                  <strong>{title}</strong>
-                  <p>{body}</p>
-                </div>
-              ))}
-            </div>
+            <div className="feature-visual">{section.scene}</div>
           </div>
         </section>
       ))}

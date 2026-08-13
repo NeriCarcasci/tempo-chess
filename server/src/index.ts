@@ -37,6 +37,7 @@ import {
   type AuthUser,
 } from "./auth.js";
 import { getPlayerSummarySource } from "./players/summary.js";
+import { getPublicReach } from "./players/reach.js";
 import { PLAN_LIST, PLANS } from "./billing/plans.js";
 import {
   billingConfigured,
@@ -45,6 +46,8 @@ import {
   getSubscription,
   handleWebhook,
 } from "./billing/service.js";
+import { getDailyDrillUsage, getUsageSummary, recordUsage } from "./usage.js";
+import { betaSignupSchema, rateLimit, recordBetaSignup } from "./beta.js";
 
 const app = new Hono<{ Variables: { user: AuthUser } }>();
 
@@ -74,6 +77,47 @@ function fail(c: Context, error: unknown) {
 app.get("/health", (c) =>
   c.json({ status: "ok", service: "tempo-chess-api", ts: Date.now() }),
 );
+
+/**
+ * How many players' games we have analysed. The landing page quotes this, so it
+ * has to be reachable without a session. Deliberately not under `/players/*`,
+ * which is behind `requireAuth`.
+ */
+app.get("/stats/reach", async (c) => {
+  const reach = await getPublicReach();
+  c.header("Cache-Control", "public, max-age=300");
+  return c.json(reach);
+});
+
+/**
+ * The landing page's "join beta testing" form. Public by necessity: the people
+ * filling it in do not have accounts yet, which is the point.
+ *
+ * Rate limited by client address, and the response never distinguishes a new
+ * signup from a repeat one to the caller beyond `created` — there is no way to
+ * probe this endpoint to find out whether a given address is on the list.
+ */
+app.post("/beta-signups", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = betaSignupSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "expected { name, email, platform, username?, rating?, goal? }" }, 400);
+  }
+  const from =
+    c.req.header("cf-connecting-ip") ??
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown";
+  if (!rateLimit(from)) {
+    return c.json({ error: "Too many signups from here. Try again later." }, 429);
+  }
+  try {
+    const result = await recordBetaSignup(parsed.data);
+    return c.json(result, result.created ? 201 : 200);
+  } catch (error) {
+    console.error("beta signup failed", error);
+    return c.json({ error: "Could not save that. Try again in a moment." }, 500);
+  }
+});
 
 /** The pricing page is public, so the plan catalogue has to be too. */
 app.get("/billing/plans", (c) => c.json({ plans: PLAN_LIST, configured: billingConfigured }));
@@ -109,15 +153,17 @@ app.use("/engine/*", requireAuth);
 
 app.get("/me", async (c) => {
   const user = currentUser(c);
-  const [accounts, subscription] = await Promise.all([
+  const [accounts, subscription, usage] = await Promise.all([
     listLinkedAccounts(user.id),
     getSubscription(user.id),
+    getUsageSummary(user.id),
   ]);
   return c.json({
     user: { id: user.id, email: user.email },
     accounts,
     subscription,
     limits: PLANS[subscription.plan].limits,
+    usage,
   });
 });
 
@@ -182,10 +228,10 @@ app.post("/billing/portal", async (c) => {
 
 // --- imports --------------------------------------------------------------
 
-app.get("/imports", async (c) => c.json({ imports: await listImports() }));
+app.get("/imports", async (c) => c.json({ imports: await listImports(currentUser(c).id) }));
 
 app.get("/imports/:id", async (c) => {
-  const item = await getImport(c.req.param("id"));
+  const item = await getImport(c.req.param("id"), currentUser(c).id);
   return item ? c.json({ import: item }) : c.json({ error: "Import not found" }, 404);
 });
 
@@ -198,11 +244,17 @@ app.post("/imports/lichess", async (c) => {
   if (!parsed.success) return c.json({ error: "expected { username?, games?: \"all\" | 1..500 }" }, 400);
   try {
     const username = await requireAccountUsername(currentUser(c).id, parsed.data.username);
-    const coverage = await getLichessCoverage(username);
+    const user = currentUser(c);
+    const coverage = await getLichessCoverage(username, user.id);
+    const planLimit = PLANS[user.plan].limits.analysedGames;
+    const importLimit = Math.min(coverage.importLimit, planLimit ?? coverage.importLimit);
     const games = parsed.data.games === "all"
-      ? Math.min(coverage.availableGames, coverage.importLimit)
-      : parsed.data.games;
-    return c.json({ import: await createLichessImport(username, games), coverage }, 202);
+      ? Math.min(coverage.availableGames, importLimit)
+      : Math.min(parsed.data.games, importLimit);
+    return c.json({
+      import: await createLichessImport(username, games, user.id),
+      coverage: { ...coverage, importLimit },
+    }, 202);
   } catch (error) {
     return fail(c, error);
   }
@@ -211,14 +263,17 @@ app.post("/imports/lichess", async (c) => {
 app.get("/players/:username/coverage", async (c) => {
   try {
     const username = await requireAccountUsername(currentUser(c).id, c.req.param("username"));
-    return c.json(await getLichessCoverage(username));
+    const user = currentUser(c);
+    const coverage = await getLichessCoverage(username, user.id);
+    const planLimit = PLANS[user.plan].limits.analysedGames;
+    return c.json({ ...coverage, importLimit: Math.min(coverage.importLimit, planLimit ?? coverage.importLimit) });
   } catch (error) {
     return fail(c, error);
   }
 });
 
 app.post("/imports/:id/cancel", async (c) => {
-  const item = await cancelImport(c.req.param("id"));
+  const item = await cancelImport(c.req.param("id"), currentUser(c).id);
   return item ? c.json({ import: item }) : c.json({ error: "Import not found" }, 404);
 });
 
@@ -243,7 +298,7 @@ app.get("/opening-explorer", async (c) => {
   if (!parsed.success) return c.json({ error: "Invalid opening explorer filters" }, 400);
   try {
     const username = await requireAccountUsername(currentUser(c).id, parsed.data.username);
-    const data = await getOpeningExplorer(username, parsed.data);
+    const data = await getOpeningExplorer(username, parsed.data, currentUser(c).id);
     // Per-user data, but safe to reuse briefly within a browsing session; this also
     // covers the explorer's direct (non-loader) lazy position lookups.
     c.header("Cache-Control", "private, max-age=30");
@@ -259,7 +314,7 @@ app.post("/opening-explorer/rebuild", async (c) => {
   if (!parsed.success) return c.json({ error: "expected { username? }" }, 400);
   try {
     const username = await requireAccountUsername(currentUser(c).id, parsed.data.username);
-    return c.json(await buildPlayerOpeningGraph(username));
+    return c.json(await buildPlayerOpeningGraph(username, currentUser(c).id));
   } catch (error) {
     return fail(c, error);
   }
@@ -278,7 +333,7 @@ app.post("/opening-explorer/drills", async (c) => {
   if (!parsed.success) return c.json({ error: "expected { positionKey, username? }" }, 400);
   try {
     const username = await requireAccountUsername(currentUser(c).id, parsed.data.username);
-    return c.json({ drill: await createOpeningDrill(username, parsed.data.positionKey) }, 201);
+    return c.json({ drill: await createOpeningDrill(username, parsed.data.positionKey, currentUser(c).id) }, 201);
   } catch (error) {
     return fail(c, error);
   }
@@ -302,8 +357,9 @@ app.post("/opening-explorer/repertoire", async (c) => {
       parsed.data.positionKey,
       parsed.data.moveUci,
       parsed.data.enabled,
+      currentUser(c).id,
     );
-    await buildPlayerOpeningGraph(username);
+    await buildPlayerOpeningGraph(username, currentUser(c).id);
     return c.json({ repertoireMove: result });
   } catch (error) {
     return fail(c, error);
@@ -315,7 +371,7 @@ app.post("/opening-explorer/repertoire", async (c) => {
 app.get("/repertoire", async (c) => {
   try {
     const username = await requireAccountUsername(currentUser(c).id, c.req.query("username"));
-    return c.json(await listRepertoire(username));
+    return c.json(await listRepertoire(currentUser(c).id));
   } catch (error) {
     return fail(c, error);
   }
@@ -332,7 +388,7 @@ app.post("/repertoire", async (c) => {
   if (!parsed.success) return c.json({ error: "expected { color, family, enabled?, username? }" }, 400);
   try {
     const username = await requireAccountUsername(currentUser(c).id, parsed.data.username);
-    return c.json(await setRepertoireOpening(username, parsed.data.color, parsed.data.family, parsed.data.enabled));
+    return c.json(await setRepertoireOpening(currentUser(c).id, parsed.data.color, parsed.data.family, parsed.data.enabled));
   } catch (error) {
     return fail(c, error);
   }
@@ -352,8 +408,13 @@ app.post("/training/results", async (c) => {
   if (!parsed.success) return c.json({ error: "expected { color, lineUci, correct, total, reveals? }" }, 400);
   try {
     const d = parsed.data;
-    const username = await requireAccountUsername(currentUser(c).id, d.username);
-    return c.json(await recordTrainingResult(username, {
+    const user = currentUser(c);
+    await requireAccountUsername(user.id, d.username);
+    const dailyLimit = PLANS[user.plan].limits.dailyDrills;
+    if (dailyLimit != null && await getDailyDrillUsage(user.id) >= dailyLimit) {
+      return c.json({ error: `Daily drill limit reached (${dailyLimit})` }, 429);
+    }
+    return c.json(await recordTrainingResult(user.id, {
       color: d.color, family: d.family, lineUci: d.lineUci, correct: d.correct, total: d.total, reveals: d.reveals,
     }), 201);
   } catch (error) {
@@ -364,7 +425,7 @@ app.post("/training/results", async (c) => {
 app.get("/training/activity", async (c) => {
   try {
     const username = await requireAccountUsername(currentUser(c).id, c.req.query("username"));
-    return c.json(await getPracticeActivity(username));
+    return c.json(await getPracticeActivity(currentUser(c).id));
   } catch (error) {
     return fail(c, error);
   }
@@ -376,7 +437,7 @@ app.get("/training/mistakes", async (c) => {
     const username = await requireAccountUsername(currentUser(c).id, c.req.query("username"));
     // Free accounts get a capped drill queue; Pro gets the whole backlog.
     const limit = PLANS[currentUser(c).plan].limits.dailyDrills ?? 50;
-    return c.json({ drills: await getMistakeDrills(username, color, Math.min(limit, 50)) });
+    return c.json({ drills: await getMistakeDrills(currentUser(c).id, color, Math.min(limit, 50)) });
   } catch (error) {
     return fail(c, error);
   }
@@ -385,7 +446,7 @@ app.get("/training/mistakes", async (c) => {
 app.get("/lessons/progress", async (c) => {
   try {
     const username = await requireAccountUsername(currentUser(c).id, c.req.query("username"));
-    return c.json({ progress: await listLessonProgress(username) });
+    return c.json({ progress: await listLessonProgress(currentUser(c).id) });
   } catch (error) {
     return fail(c, error);
   }
@@ -404,7 +465,7 @@ app.post("/lessons/progress", async (c) => {
   if (!parsed.success) return c.json({ error: "expected { slug, completedSteps, totalSteps, bestScore, completed? }" }, 400);
   try {
     const username = await requireAccountUsername(currentUser(c).id, parsed.data.username);
-    return c.json(await saveLessonProgress(username, parsed.data));
+    return c.json(await saveLessonProgress(currentUser(c).id, parsed.data));
   } catch (error) {
     return fail(c, error);
   }
@@ -426,6 +487,12 @@ app.post("/analyze", async (c) => {
     return c.json({ error: "expected { fens: string[], depth?: number, multipv?: number }" }, 400);
   }
   const results = await analyzeFens(parsed.data.fens, parsed.data.depth ?? 12, parsed.data.multipv ?? 1);
+  await recordUsage({
+    userId: currentUser(c).id,
+    kind: "engine_positions",
+    units: parsed.data.fens.length,
+    metadata: { depth: parsed.data.depth ?? 12, multipv: parsed.data.multipv ?? 1 },
+  });
   return c.json({ results });
 });
 
@@ -442,6 +509,7 @@ app.post("/engine/play", async (c) => {
   if (!parsed.success) return c.json({ error: "expected { fen, elo?, movetimeMs? }" }, 400);
   try {
     const move = await botMove(parsed.data.fen, parsed.data.elo, parsed.data.movetimeMs ?? 350);
+    await recordUsage({ userId: currentUser(c).id, kind: "engine_play", units: 1 });
     return c.json({ move: move ?? null });
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

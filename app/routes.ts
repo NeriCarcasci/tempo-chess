@@ -11,6 +11,7 @@ export default [
   // --- auth ------------------------------------------------------------
   route("login", "routes/login.tsx"),
   route("signup", "routes/signup.tsx"),
+  route("reset-password", "routes/reset-password.tsx"),
   route("account/connect", "routes/connect.tsx"),
 
   // --- product: everything below needs a session -----------------------

@@ -15,6 +15,7 @@
     "ingest:identity:test": "tsx src/ingest/canonical.test.ts",
     "ingest:test": "tsx src/ingest/canonical.test.ts && tsx src/ingest/pgn.test.ts && tsx src/ingest/providers.test.ts && tsx src/ingest/sync.test.ts && tsx src/analysis/phase.test.ts",
     "pipeline:test": "tsx src/pipeline/state.test.ts",
+    "cohort": "node --env-file=.env --import tsx src/players/run-cohort.ts",
     "openings:import": "tsx src/openings/import-catalogue.ts",
     "openings:test": "tsx src/openings/model.test.ts && tsx src/openings/tree.test.ts"
   },

@@ -271,14 +271,15 @@ function chunks<T>(items: readonly T[], size: number): T[][] {
   return output;
 }
 
-async function findUser(username: string): Promise<{ userId: string; username: string }> {
-  const key = normalizedUsername(username);
+async function findUser(username: string, ownerId?: string): Promise<{ userId: string; username: string }> {
+  const key = `${ownerId ?? "any"}:${normalizedUsername(username)}`;
   const cached = userCache.get(key);
   if (cached) return cached;
   const rows = await client`
     select p.id as user_id, a.username
     from linked_accounts a join profiles p on p.id = a.user_id
-    where a.normalized_username = ${key}
+    where a.normalized_username = ${normalizedUsername(username)}
+      and (${ownerId ?? null}::uuid is null or p.id = ${ownerId ?? null})
     order by a.created_at asc limit 1`;
   if (!rows[0]) throw new Error(`No imported account found for "${username}"`);
   const account = { userId: String(rows[0].user_id), username: String(rows[0].username) };
@@ -286,13 +287,13 @@ async function findUser(username: string): Promise<{ userId: string; username: s
   return account;
 }
 
-export async function buildPlayerOpeningGraph(username: string): Promise<{
+export async function buildPlayerOpeningGraph(username: string, ownerId?: string): Promise<{
   userId: string;
   games: number;
   observations: number;
 }> {
   await ensureOpeningCatalogue();
-  const account = await findUser(username);
+  const account = await findUser(username, ownerId);
   const [catalogueRows, edgeRows, evaluationRows, repertoireRows, moveRows] = await Promise.all([
     client`select position_key, fen, eco, opening_name, family, variation, ply,
       representative_line_uci, representative_line_san, source_revision, source_license
@@ -568,14 +569,15 @@ async function observationsForUser(userId: string): Promise<ObservationRow[]> {
 export async function getOpeningExplorer(
   username: string,
   filters: ExplorerFilters = {},
+  ownerId?: string,
 ): Promise<Record<string, unknown>> {
-  const cacheKey = `explorer:${normalizedUsername(username)}:${explorerFilterKey(filters)}`;
+  const cacheKey = `explorer:${ownerId ?? "any"}:${normalizedUsername(username)}:${explorerFilterKey(filters)}`;
   const cached = explorerCache.get<Record<string, unknown>>(cacheKey);
   if (cached) return cached;
-  const account = await findUser(username);
+  const account = await findUser(username, ownerId);
   let rows = await observationsForUser(account.userId);
   if (!rows.length) {
-    await buildPlayerOpeningGraph(username);
+    await buildPlayerOpeningGraph(username, ownerId);
     rows = await observationsForUser(account.userId);
   }
   const filtered = rows.filter((row) => passes(row, filters));
@@ -749,8 +751,9 @@ export async function getOpeningExplorer(
 export async function createOpeningDrill(
   username: string,
   positionKey: string,
+  ownerId?: string,
 ): Promise<Record<string, unknown>> {
-  const account = await findUser(username);
+  const account = await findUser(username, ownerId);
   const rows = await client`
     select o.game_id, o.position_key, pe.best_move_uci
     from player_opening_observations o
@@ -778,8 +781,9 @@ export async function setOpeningRepertoireMove(
   positionKey: string,
   moveUci: string,
   enabled = true,
+  ownerId?: string,
 ): Promise<Record<string, unknown>> {
-  const account = await findUser(username);
+  const account = await findUser(username, ownerId);
   const edge = await client`
     select 1 from opening_edges
     where from_key = ${positionKey} and move_uci = ${moveUci}

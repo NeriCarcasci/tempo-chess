@@ -1,19 +1,16 @@
 /**
- * Tempo's identity: a rook drawn as a single closed outline, plus the wordmark.
+ * Tempo's identity: the crown of a rook, plus the wordmark.
  *
- * The rook is the piece that only matters once the position opens up, which is
- * the product's argument about your games. It is drawn on a 24 grid with real
- * piece anatomy (three merlons, a collar, a flared plinth) so it stays legible
- * at 20px in the nav and holds up at 200px on the hero.
+ * The turret only, three merlons over a tapered wall on a flared plinth. A whole
+ * rook has to shrink its own body to fit a 20px nav, which reads as a squashed
+ * piece; the crown is the part that identifies a rook anyway, and it gives the
+ * mark a wide, stable stance at any size.
  */
+const TURRET =
+  "M3 6 H7.4 V9.8 H9.8 V6 H14.2 V9.8 H16.6 V6 H21 L19.4 16 H4.6 Z";
 
-const ROOK_PATH =
-  "M4 20.6 L20 20.6 L20 18.3 L18.3 18.3 L17.4 11.8 L18.6 11.8 L18.6 6.6 " +
-  "L15.9 6.6 L15.9 8.5 L13.5 8.5 L13.5 6.6 L10.5 6.6 L10.5 8.5 L8.1 8.5 " +
-  "L8.1 6.6 L5.4 6.6 L5.4 11.8 L6.6 11.8 L5.7 18.3 L4 18.3 Z";
-
-/** The collar and plinth, drawn as separate strokes so the silhouette reads. */
-const ROOK_DETAIL = "M6.6 11.8 H17.4 M5.7 18.3 H18.3";
+/** The flared plinth, sharing the turret's bottom edge so the two read as one. */
+const PLINTH = "M3.2 16 H20.8 V19.6 H3.2 Z";
 
 export function RookMark({
   size = 24,
@@ -40,8 +37,8 @@ export function RookMark({
       strokeLinejoin="round"
       strokeLinecap="round"
     >
-      <path d={ROOK_PATH} />
-      <path d={ROOK_DETAIL} opacity={0.55} />
+      <path d={TURRET} />
+      <path d={PLINTH} />
     </svg>
   );
 }

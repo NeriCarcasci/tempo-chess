@@ -1,4 +1,5 @@
-import { PIECE_SETS } from "../lib/pieceSets";
+import { PieceGlyph } from "./PieceGlyph";
+import { Move } from "./Move";
 
 /**
  * The hero's board: a real position from a real game, drawn flat with the same
@@ -22,7 +23,6 @@ const FILES = "abcdefgh";
 const CELL = 12.5;
 /** Black is the side to move, so the board is shown from Black's seat. */
 const FLIP = true;
-const set = PIECE_SETS[0]!; // Cburnett, the app's default
 
 interface Placed {
   square: string;
@@ -96,29 +96,6 @@ function arrow(from: string, to: string) {
   };
 }
 
-function Piece({ letter, white }: { letter: string; white: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 45 45"
-      className="hb-piece"
-      aria-hidden="true"
-      style={{
-        ["--pc-fill" as string]: white ? set.whiteFill : set.blackFill,
-        ["--pc-line" as string]: white ? set.whiteStroke : set.blackStroke,
-      }}
-    >
-      <g
-        fill="var(--pc-fill)"
-        stroke="var(--pc-line)"
-        strokeWidth={1.5}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        dangerouslySetInnerHTML={{ __html: set.svg?.[letter] ?? "" }}
-      />
-    </svg>
-  );
-}
-
 export function HeroBoard() {
   const pieces = parse(FEN);
   const played = arrow(PLAYED.from, PLAYED.to);
@@ -147,16 +124,9 @@ export function HeroBoard() {
           })}
         </div>
 
-        {pieces.map((p) => (
-          <span
-            key={p.square}
-            className="hb-slot"
-            style={{ left: `${p.col * CELL}%`, top: `${p.row * CELL}%` }}
-          >
-            <Piece letter={p.letter} white={p.white} />
-          </span>
-        ))}
-
+        {/* Before the pieces on purpose, so the men sit on top of the arrows.
+            An arrow drawn over a knight looks stuck to the screen; the same
+            arrow passing behind it looks drawn on the board. */}
         <svg className="hb-arrows" viewBox="0 0 100 100" aria-hidden="true">
           <g className="hb-arrow hb-arrow-bad">
             <line {...played.shaft} />
@@ -167,29 +137,33 @@ export function HeroBoard() {
             <polygon points={better.head} />
           </g>
         </svg>
+
+        {pieces.map((p) => (
+          <span
+            key={p.square}
+            className="hb-slot"
+            style={{ left: `${p.col * CELL}%`, top: `${p.row * CELL}%` }}
+          >
+            <PieceGlyph letter={p.letter} white={p.white} className="hb-piece" />
+          </span>
+        ))}
+
+        {/* Kasparov was Black here, so h6 and Bd6 are his and Nxe6 is the
+            machine's. Getting a colour wrong would put a white knight on a
+            black move, which is the sort of detail this audience checks. */}
+        <div className="hb-callout">
+          <p>
+            <b><Move san="h6" white={false} /></b> allows{" "}
+            <Move san="8.Nxe6" white /> and the position is gone.
+          </p>
+          <p className="hb-callout-fix">
+            The engine wants <b><Move san="Bd6" white={false} /></b>.
+          </p>
+        </div>
       </div>
 
-      <figcaption className="hb-read">
-        <p className="hb-read-game">Kasparov vs Deep Blue, 1997</p>
-        <div className="hb-read-rows">
-          <div className="is-bad">
-            <span className="hb-key" aria-hidden="true" />
-            <b className="metric">7...h6</b>
-            <span>allows 8.Nxe6</span>
-            <em className="metric">+1.0</em>
-          </div>
-          <div className="is-good">
-            <span className="hb-key" aria-hidden="true" />
-            <b className="metric">7...Bd6</b>
-            <span>engine&rsquo;s move</span>
-            <em className="metric">+0.5</em>
-          </div>
-        </div>
-        {/* State the convention: a bigger number is worse here, because Black
-            is the side to move and evaluations are given from White's side. */}
-        <p className="hb-read-foot">
-          Stockfish, depth 18. Higher favours White, and Black is to move.
-        </p>
+      <figcaption className="hb-caption">
+        Kasparov vs Deep Blue, New York 1997, game 6.
       </figcaption>
     </figure>
   );

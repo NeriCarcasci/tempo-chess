@@ -24,6 +24,31 @@ export interface Subscription {
   comped: boolean;
 }
 
+export interface PlanLimits {
+  analysedGames: number | null;
+  dailyDrills: number | null;
+  explorerDepth: number;
+  deepEngineAnalysis: boolean;
+  fullRepertoireMap: boolean;
+}
+
+export interface UsageSummary {
+  gamesStored: number;
+  gamesAnalyzed: number;
+  positionsAnalyzed: number;
+  drillsToday: number;
+  drillsAllTime: number;
+  lessonsCompleted: number;
+  enginePositionsToday: number;
+  byAccount: Array<{
+    accountId: string;
+    platform: "lichess" | "chesscom";
+    username: string;
+    gamesStored: number;
+    gamesAnalyzed: number;
+  }>;
+}
+
 export interface Session {
   userId: string;
   email: string | null;
@@ -31,6 +56,8 @@ export interface Session {
   username: string;
   accounts: LinkedAccount[];
   subscription: Subscription;
+  limits: PlanLimits;
+  usage: UsageSummary;
 }
 
 const API = import.meta.env.DEV
@@ -54,9 +81,43 @@ export async function getAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
+const DEV_EMAIL = import.meta.env.VITE_DEV_AUTOLOGIN_EMAIL as string | undefined;
+const DEV_PASSWORD = import.meta.env.VITE_DEV_AUTOLOGIN_PASSWORD as string | undefined;
+
+/**
+ * Local convenience: start `npm run dev` already signed in.
+ *
+ * This is not an auth bypass. It performs an ordinary password sign-in against
+ * Supabase, so the token is real and the API still verifies it exactly as it
+ * would for anyone else. Two guards keep it out of production: the whole branch
+ * sits behind `import.meta.env.DEV`, which Vite folds to `false` and then
+ * tree-shakes out of a build, and it does nothing at all unless both env vars
+ * are set. Only ever point it at a throwaway local account.
+ */
+let devSignInTried = false;
+
+async function devAutoSignIn(): Promise<boolean> {
+  if (!import.meta.env.DEV) return false;
+  if (!DEV_EMAIL || !DEV_PASSWORD || devSignInTried) return false;
+  devSignInTried = true; // one attempt per page load, so a bad password cannot loop
+  const { error } = await getSupabase().auth.signInWithPassword({
+    email: DEV_EMAIL,
+    password: DEV_PASSWORD,
+  });
+  if (error) {
+    console.warn(`[dev] auto sign-in as ${DEV_EMAIL} failed: ${error.message}`);
+    return false;
+  }
+  console.info(`[dev] signed in automatically as ${DEV_EMAIL}`);
+  return true;
+}
+
 async function loadSession(): Promise<Session | null> {
   if (!supabaseConfigured) return null;
-  const { data } = await getSupabase().auth.getSession();
+  let { data } = await getSupabase().auth.getSession();
+  if (!data.session && (await devAutoSignIn())) {
+    ({ data } = await getSupabase().auth.getSession());
+  }
   const authUser = data.session?.user;
   if (!authUser) {
     current = null;
@@ -77,6 +138,8 @@ async function loadSession(): Promise<Session | null> {
     user: { id: string; email: string | null };
     accounts: LinkedAccount[];
     subscription: Subscription;
+    limits: PlanLimits;
+    usage: UsageSummary;
   };
 
   current = {
@@ -85,6 +148,8 @@ async function loadSession(): Promise<Session | null> {
     username: body.accounts[0]?.username ?? "",
     accounts: body.accounts,
     subscription: body.subscription,
+    limits: body.limits,
+    usage: body.usage,
   };
   return current;
 }
@@ -134,7 +199,11 @@ export async function signUpWithPassword(
   email: string,
   password: string,
 ): Promise<{ needsConfirmation: boolean }> {
-  const { data, error } = await getSupabase().auth.signUp({ email, password });
+  const { data, error } = await getSupabase().auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: `${location.origin}/login?confirmed=1` },
+  });
   if (error) throw new Error(error.message);
   current = null;
   // With "confirm email" on, Supabase returns a user but no session.
@@ -143,9 +212,16 @@ export async function signUpWithPassword(
 
 export async function sendPasswordReset(email: string): Promise<void> {
   const { error } = await getSupabase().auth.resetPasswordForEmail(email, {
-    redirectTo: `${location.origin}/account`,
+    redirectTo: `${location.origin}/reset-password`,
   });
   if (error) throw new Error(error.message);
+}
+
+export async function updatePassword(password: string): Promise<void> {
+  const { error } = await getSupabase().auth.updateUser({ password });
+  if (error) throw new Error(error.message);
+  current = null;
+  await getSupabase().auth.signOut();
 }
 
 export async function signOut(): Promise<void> {

@@ -20,7 +20,6 @@ export default function Terms() {
   return (
     <PublicPage>
       <article className="legal">
-        <p className="eyebrow">Legal</p>
         <h1>Terms of service</h1>
         <p className="legal-meta">Last updated {UPDATED}</p>
 

@@ -2,30 +2,10 @@ import { client } from "../db/client.js";
 
 /**
  * Repertoire selection, training results, and lesson progress — the data behind
- * the account page. Everything is keyed to a user's profile id, resolved from the
- * chess username the client holds in its session.
+ * the account page. Everything is keyed directly to the authenticated profile id.
  */
 
 type Color = "white" | "black";
-
-// Profile ids are immutable, so username -> id resolves once and stays valid; this
-// saves a DB round-trip on every account/training/lessons request.
-const userIdCache = new Map<string, string>();
-
-async function resolveUserId(username: string): Promise<string> {
-  const key = username.trim().toLowerCase();
-  const cached = userIdCache.get(key);
-  if (cached) return cached;
-  const rows = await client`
-    select p.id as user_id
-    from linked_accounts a join profiles p on p.id = a.user_id
-    where a.normalized_username = ${key}
-    order by a.created_at asc limit 1`;
-  if (!rows[0]) throw new Error(`No imported account found for "${username}"`);
-  const userId = String(rows[0].user_id);
-  userIdCache.set(key, userId);
-  return userId;
-}
 
 export interface RepertoireSummary {
   openings: Array<{ color: Color; family: string; addedAt: string }>;
@@ -41,8 +21,7 @@ export interface RepertoireSummary {
   }>;
 }
 
-export async function listRepertoire(username: string): Promise<RepertoireSummary> {
-  const userId = await resolveUserId(username);
+export async function listRepertoire(userId: string): Promise<RepertoireSummary> {
   const [openings, stats] = await Promise.all([
     client`
       select color, family, created_at
@@ -83,12 +62,11 @@ export async function listRepertoire(username: string): Promise<RepertoireSummar
 }
 
 export async function setRepertoireOpening(
-  username: string,
+  userId: string,
   color: Color,
   family: string,
   enabled: boolean,
 ): Promise<{ color: Color; family: string; enabled: boolean }> {
-  const userId = await resolveUserId(username);
   if (enabled) {
     await client`
       insert into repertoire_openings (user_id, color, family)
@@ -103,10 +81,9 @@ export async function setRepertoireOpening(
 }
 
 export async function recordTrainingResult(
-  username: string,
+  userId: string,
   input: { color: Color; family: string | null; lineUci: string; correct: number; total: number; reveals: number },
 ): Promise<{ id: string; completedAt: string }> {
-  const userId = await resolveUserId(username);
   const rows = await client`
     insert into opening_training_results
       (user_id, color, family, line_uci, moves_correct, moves_total, reveals)
@@ -124,8 +101,7 @@ export interface PracticeActivity {
 }
 
 /** Current daily practice streak + recent activity, from drill and lesson timestamps. */
-export async function getPracticeActivity(username: string): Promise<PracticeActivity> {
-  const userId = await resolveUserId(username);
+export async function getPracticeActivity(userId: string): Promise<PracticeActivity> {
   const rows = await client`
     select distinct (d at time zone 'UTC')::date as day from (
       select completed_at as d from opening_training_results where user_id = ${userId} and completed_at is not null
@@ -168,8 +144,7 @@ export interface MistakeDrill {
  * on — deduplicated to the single worst instance per position, ordered by how much
  * eval was lost. The raw material for a "fix your mistakes" drill.
  */
-export async function getMistakeDrills(username: string, color: Color, limit = 15): Promise<MistakeDrill[]> {
-  const userId = await resolveUserId(username);
+export async function getMistakeDrills(userId: string, color: Color, limit = 15): Promise<MistakeDrill[]> {
   const rows = await client`
     select * from (
       select distinct on (o.position_key)
@@ -209,8 +184,7 @@ export interface LessonProgressRow {
   completedAt: string | null;
 }
 
-export async function listLessonProgress(username: string): Promise<LessonProgressRow[]> {
-  const userId = await resolveUserId(username);
+export async function listLessonProgress(userId: string): Promise<LessonProgressRow[]> {
   const rows = await client`
     select lesson_slug, completed_steps, total_steps, best_score, completed_at
     from lesson_progress where user_id = ${userId}`;
@@ -224,10 +198,9 @@ export async function listLessonProgress(username: string): Promise<LessonProgre
 }
 
 export async function saveLessonProgress(
-  username: string,
+  userId: string,
   input: { slug: string; completedSteps: number; totalSteps: number; bestScore: number; completed: boolean },
 ): Promise<{ ok: true }> {
-  const userId = await resolveUserId(username);
   const completedAt = input.completed ? new Date().toISOString() : null;
   await client`
     insert into lesson_progress

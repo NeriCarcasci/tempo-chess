@@ -583,6 +583,31 @@ export const openingDrills = pgTable(
 ).enableRLS();
 
 // ---------------------------------------------------------------------------
+// usage_events — metered API work that is not already represented by a durable
+// game/import/training row. Ownership is always the authenticated profile.
+// ---------------------------------------------------------------------------
+export const usageEvents = pgTable(
+  "usage_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").references(() => linkedAccounts.id, {
+      onDelete: "set null",
+    }),
+    kind: text("kind").notNull(),
+    units: integer("units").notNull().default(1),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("usage_events_user_created_idx").on(t.userId, t.createdAt),
+    index("usage_events_account_created_idx").on(t.accountId, t.createdAt),
+  ],
+).enableRLS();
+
+// ---------------------------------------------------------------------------
 // player_opening_stats — precomputed per-user/per-opening aggregates
 // ---------------------------------------------------------------------------
 export const playerOpeningStats = pgTable(
@@ -689,4 +714,36 @@ export const lessonProgress = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("lesson_progress_user_lesson_uq").on(t.userId, t.lessonSlug)],
+).enableRLS();
+
+// ---------------------------------------------------------------------------
+// beta_signups — the landing page's "join beta testing" form.
+//
+// The only table anyone can write to without an account, so it is deliberately
+// dull: five short answers, no free-form essay, nothing joined to a profile.
+// A signup is not a user — these people have not authenticated and may never
+// sign up — so it stands alone rather than hanging off `profiles`.
+//
+// RLS is on and the API writes as the table owner, which is how every other
+// table here works: the anon key cannot read this list, so nobody can scrape
+// the email addresses of people who asked to test.
+// ---------------------------------------------------------------------------
+export const betaSignups = pgTable(
+  "beta_signups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    /** Stored lower-cased and trimmed so the unique index actually dedupes. */
+    email: text("email").notNull(),
+    /** lichess | chesscom | both | otb — free text, validated at the edge. */
+    platform: text("platform").notNull(),
+    /** Their handle on that platform. Optional: we can chase it later. */
+    username: text("username"),
+    /** A band ("1400-1600"), not a number: nobody knows their exact rating across sites. */
+    rating: text("rating"),
+    /** What they want Tempo to fix. Optional, and the most useful field we have. */
+    goal: text("goal"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("beta_signups_email_uq").on(t.email)],
 ).enableRLS();

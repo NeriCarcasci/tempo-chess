@@ -95,6 +95,10 @@ function BillingPanel({
   const plan = session.subscription.plan;
   const pro = plans.find((p) => p.id === "pro");
   const isPro = plan === "pro";
+  const gameLimit = session.limits.analysedGames;
+  const drillLimit = session.limits.dailyDrills;
+  const gamePercent = gameLimit == null ? 0 : Math.min(100, (session.usage.gamesAnalyzed / gameLimit) * 100);
+  const drillPercent = drillLimit == null ? 0 : Math.min(100, (session.usage.drillsToday / drillLimit) * 100);
 
   async function act() {
     setBusy(true);
@@ -129,8 +133,8 @@ function BillingPanel({
           {message ? <p className="account-billing-msg">{message}</p> : null}
           {!configured && !message ? (
             <p className="account-billing-msg">
-              Billing isn't switched on yet, so nothing is charged and every
-              feature is open.
+              Billing isn't switched on yet, so nothing is charged. Usage is
+              still recorded against the free plan.
             </p>
           ) : null}
         </div>
@@ -140,6 +144,36 @@ function BillingPanel({
           </button>
           <Link to="/pricing" className="text-link">Compare plans</Link>
         </div>
+      </div>
+
+      <div className="account-usage" aria-label="Account usage">
+        <div className="account-usage-head">
+          <div>
+            <p className="eyebrow">Usage attached to this account</p>
+            <strong>{session.usage.positionsAnalyzed.toLocaleString()} positions analysed</strong>
+          </div>
+          <span>{session.usage.gamesStored.toLocaleString()} games stored</span>
+        </div>
+        <div className="account-usage-grid">
+          <div className="account-meter">
+            <div><span>Analysed games</span><b>{session.usage.gamesAnalyzed} / {gameLimit ?? "∞"}</b></div>
+            <span className="account-meter-track"><i style={{ width: gameLimit == null ? "100%" : `${gamePercent}%` }} /></span>
+          </div>
+          <div className="account-meter">
+            <div><span>Drills today</span><b>{session.usage.drillsToday} / {drillLimit ?? "∞"}</b></div>
+            <span className="account-meter-track"><i style={{ width: drillLimit == null ? "100%" : `${drillPercent}%` }} /></span>
+          </div>
+        </div>
+        {session.usage.byAccount.length ? (
+          <ul className="account-usage-accounts">
+            {session.usage.byAccount.map((account) => (
+              <li key={account.accountId}>
+                <span><b>{account.username}</b><small>{account.platform === "chesscom" ? "Chess.com" : "Lichess"}</small></span>
+                <span>{account.gamesAnalyzed} analysed · {account.gamesStored} stored</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
 
       <div className="account-identity">

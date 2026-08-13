@@ -90,47 +90,61 @@ function PlanCard({
     }
   }
 
+  const note = message
+    ?? (!configured && isPro
+      ? "Billing is not switched on yet, so Pro features are open to everyone in the meantime."
+      : null);
+
+  // Five regions in a fixed order. The grid outside puts every card's regions on
+  // the same row lines, so the two plans stay comparable rather than each one
+  // laying itself out to its own content height.
   return (
     <article className={`price-card ${isPro ? "is-featured" : ""}`}>
       {isPro ? <span className="price-flag">Most useful</span> : null}
-      <h2>{plan.name}</h2>
-      <p className="price-tagline">{plan.tagline}</p>
-      <p className="price-amount metric">
-        {price === 0 ? "Free" : formatPrice(price)}
-        {price === 0 ? null : <small>{per}</small>}
-      </p>
-      {isPro && interval === "yearly" && yearlySaving(plan) > 0 ? (
-        <p className="price-saving">Saves {yearlySaving(plan)}% versus monthly</p>
-      ) : null}
 
-      {current ? (
-        <span className="price-current">Your current plan</span>
-      ) : plan.id === "free" ? (
-        <Link to={signedIn ? "/dashboard" : "/signup"} className="secondary-button price-cta">
-          {signedIn ? "Go to dashboard" : "Start free"}
-        </Link>
-      ) : signedIn ? (
-        <button type="button" className="primary-button price-cta" onClick={subscribe} disabled={busy}>
-          {busy ? "Starting…" : "Upgrade to Pro"}
-        </button>
-      ) : (
-        <Link to="/signup?plan=pro" className="primary-button price-cta">
-          Start free, upgrade later
-        </Link>
-      )}
+      <header className="price-region">
+        <h2>{plan.name}</h2>
+        <p className="price-tagline">{plan.tagline}</p>
+      </header>
 
-      {message ? <p className="price-note">{message}</p> : null}
-      {!configured && isPro && !message ? (
-        <p className="price-note">
-          Billing is not switched on yet, so Pro features are open to everyone in
-          the meantime.
+      <div className="price-region price-money">
+        <p className="price-amount metric">
+          {price === 0 ? "Free" : formatPrice(price)}
+          {price === 0 ? null : <small>{per}</small>}
         </p>
-      ) : null}
+        <p className="price-saving">
+          {isPro && interval === "yearly" && yearlySaving(plan) > 0
+            ? `Saves ${yearlySaving(plan)}% versus monthly`
+            : " "}
+        </p>
+      </div>
 
-      <ul className="price-features">
+      <div className="price-region">
+        {current ? (
+          <span className="price-current">Your current plan</span>
+        ) : plan.id === "free" ? (
+          <Link to={signedIn ? "/dashboard" : "/signup"} className="secondary-button price-cta">
+            {signedIn ? "Go to dashboard" : "Start free"}
+          </Link>
+        ) : signedIn ? (
+          <button type="button" className="primary-button price-cta" onClick={subscribe} disabled={busy}>
+            {busy ? "Starting…" : "Upgrade to Pro"}
+          </button>
+        ) : (
+          <Link to="/signup?plan=pro" className="primary-button price-cta">
+            Start free, upgrade later
+          </Link>
+        )}
+      </div>
+
+      <div className="price-region">
+        {note ? <p className="price-note">{note}</p> : null}
+      </div>
+
+      <ul className="price-region price-features">
         {plan.features.map((feature) => (
           <li key={feature.label} className={feature.included ? "" : "is-excluded"}>
-            <span aria-hidden="true">{feature.included ? "✓" : "✕"}</span>
+            <span className="price-tick" aria-hidden="true">{feature.included ? "✓" : "✕"}</span>
             <span>{feature.label}</span>
           </li>
         ))}
