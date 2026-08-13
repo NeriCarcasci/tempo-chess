@@ -78,9 +78,18 @@ const PLINTH_POINTS: Point[] = [
   [3.2, 19.6],
 ];
 
-/** Enough to take the edge off without the merlons turning into bobbles. */
-const TURRET_RADIUS = 0.9;
-const PLINTH_RADIUS = 1;
+/**
+ * Soft, and near the limit of what the shape will take.
+ *
+ * The binding edge is the notch floor between merlons, only 2.4 wide, so the cap
+ * in roundedPolygon holds those corners at 1.2 however high this goes: past that
+ * the notches are already smooth curves and the radius only keeps eating the
+ * merlon tops. At 1.6 a merlon still has ~1.2 of flat left, which is what stops
+ * the crown reading as three bumps. Much beyond 2 and it does.
+ */
+const TURRET_RADIUS = 1.6;
+/** Lower than the turret's: at the turret's radius this 3.6-tall bar goes pill. */
+const PLINTH_RADIUS = 1.4;
 
 const TURRET = roundedPolygon(TURRET_POINTS, TURRET_RADIUS);
 const PLINTH = roundedPolygon(PLINTH_POINTS, PLINTH_RADIUS);
