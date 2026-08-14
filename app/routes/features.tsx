@@ -110,7 +110,6 @@ export default function Features() {
       <section className="closer">
         <h2>It is already sitting in your game history.</h2>
         <Link to="/signup" className="primary-button btn-lg">Start free</Link>
-        <p>Your last 50 games, no card needed.</p>
       </section>
     </PublicPage>
   );

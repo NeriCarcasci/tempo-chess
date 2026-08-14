@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 350" width="280" height="350" fill="none">
+  <title>Rook mascot</title>
+
+  <rect id="background" x="0" y="0" width="280" height="350" fill="#F4F2EE"/>
+
+  <g id="rook-mascot">
+
+    <g id="body">
+      <path id="body-fill" d="M80 172 L68 272 L212 272 L200 172 Z" fill="#FBE9E1"/>
+      <path id="body-shade" d="M80 172 L68 272 L108 272 L108 172 Z" fill="#F3D0C1"/>
+      <path id="body-outline" d="M80 172 L68 272 L212 272 L200 172 Z"
+        stroke="#23211D" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+
+    <g id="base">
+      <path id="base-fill"
+        d="M61 268 L219 268 A9 9 0 0 1 228 277 L228 304 A12 12 0 0 1 216 316 L64 316 A12 12 0 0 1 52 304 L52 277 A9 9 0 0 1 61 268 Z"
+        fill="#CBBFA6"/>
+      <path id="base-shade"
+        d="M61 268 A9 9 0 0 0 52 277 L52 304 A12 12 0 0 0 64 316 L108 316 L108 268 Z"
+        fill="#B1A184"/>
+      <path id="base-outline"
+        d="M61 268 L219 268 A9 9 0 0 1 228 277 L228 304 A12 12 0 0 1 216 316 L64 316 A12 12 0 0 1 52 304 L52 277 A9 9 0 0 1 61 268 Z"
+        stroke="#23211D" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+    </g>
+
+    <!-- The crown, painted in three passes so a merlon can be lifted away
+         cleanly. The block's top edge goes down first and each merlon's fill
+         covers the stretch it stands on, which is why that line only shows in
+         the notches — and why it is already in place if a merlon leaves. The
+         block's two side edges go down last, because the merlon fills overlap
+         them and would otherwise eat their inner half. -->
+    <g id="crown">
+      <rect id="crown-block-fill" x="72" y="94" width="136" height="58" fill="#FBE9E1"/>
+      <rect id="crown-block-shade" x="72" y="94" width="36" height="58" fill="#F3D0C1"/>
+      <path id="crown-block-top" d="M72 94 L208 94"
+        stroke="#23211D" stroke-width="9" stroke-linecap="butt"/>
+
+      <g id="merlon-left">
+        <path id="merlon-left-fill"
+          d="M72 100 L72 69 A5 5 0 0 1 77 64 L103 64 A5 5 0 0 1 108 69 L108 100 Z"
+          fill="#F3D0C1"/>
+        <path id="merlon-left-outline"
+          d="M72 98.5 L72 69 A5 5 0 0 1 77 64 L103 64 A5 5 0 0 1 108 69 L108 98.5"
+          stroke="#23211D" stroke-width="9" stroke-linejoin="round" stroke-linecap="butt"/>
+      </g>
+
+      <g id="merlon-middle">
+        <path id="merlon-middle-fill"
+          d="M122 100 L122 69 A5 5 0 0 1 127 64 L153 64 A5 5 0 0 1 158 69 L158 100 Z"
+          fill="#FBE9E1"/>
+        <path id="merlon-middle-outline"
+          d="M122 98.5 L122 69 A5 5 0 0 1 127 64 L153 64 A5 5 0 0 1 158 69 L158 98.5"
+          stroke="#23211D" stroke-width="9" stroke-linejoin="round" stroke-linecap="butt"/>
+      </g>
+
+      <g id="merlon-right">
+        <path id="merlon-right-fill"
+          d="M172 100 L172 69 A5 5 0 0 1 177 64 L203 64 A5 5 0 0 1 208 69 L208 100 Z"
+          fill="#FBE9E1"/>
+        <path id="merlon-right-outline"
+          d="M172 98.5 L172 69 A5 5 0 0 1 177 64 L203 64 A5 5 0 0 1 208 69 L208 98.5"
+          stroke="#23211D" stroke-width="9" stroke-linejoin="round" stroke-linecap="butt"/>
+      </g>
+
+      <path id="crown-block-sides" d="M72 94 L72 152 M208 94 L208 152"
+        stroke="#23211D" stroke-width="9" stroke-linecap="butt"/>
+    </g>
+
+    <g id="collar">
+      <rect id="collar-fill" x="60" y="144" width="160" height="34" rx="10" fill="#CF5730"/>
+      <path id="collar-shade"
+        d="M108 178 L70 178 A10 10 0 0 1 60 168 L60 154 A10 10 0 0 1 70 144 L108 144 Z"
+        fill="#AD4520"/>
+      <rect id="collar-outline" x="60" y="144" width="160" height="34" rx="10"
+        stroke="#23211D" stroke-width="9" stroke-linejoin="round"/>
+    </g>
+
+  </g>
+</svg>

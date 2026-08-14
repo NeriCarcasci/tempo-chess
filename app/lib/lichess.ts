@@ -4,6 +4,7 @@
 
 import { Chess } from "chess.js";
 import { wilson, shrink, confidence } from "./stats.js";
+import { OTHER_FAMILY, openingFamilyOrOther } from "./openingFamily";
 
 export type Speed = "bullet" | "blitz" | "rapid" | "classical";
 export type Result = "win" | "loss" | "draw";
@@ -142,6 +143,11 @@ export interface OpeningStat {
   ciLo: number;
   ciHi: number;
   conf: "low" | "medium" | "high";
+  /**
+   * The individual openings inside this row, when it is the "Other" bucket.
+   * Empty for a real family — there is nothing to unfold.
+   */
+  members?: Array<{ name: string; games: number }>;
 }
 
 export interface ColorStat {
@@ -179,9 +185,22 @@ export interface Summary {
   byColor: { white: ColorStat; black: ColorStat };
   recent: GameLite[];
   board: RecentPosition | null;
+  days: PlayDay[];
+}
+
+/** One calendar day of play, for the activity grid. */
+export interface PlayDay {
+  /** Local calendar day, `YYYY-MM-DD`. */
+  date: string;
+  games: number;
+  win: number;
+  draw: number;
+  loss: number;
 }
 
 export interface RecentPosition {
+  /** The game it came from, so the panel can link into the review. */
+  id: string;
   fen: string;
   ply: number;
   moveNumber: number;
@@ -224,6 +243,7 @@ function recentPosition(games: GameLite[]): RecentPosition | null {
     }
   }
   return {
+    id: g.id,
     fen: chess.fen(),
     ply: played,
     moveNumber: Math.max(1, Math.ceil(played / 2)),
@@ -233,6 +253,29 @@ function recentPosition(games: GameLite[]): RecentPosition | null {
     opening: g.opening,
     url: g.url,
   };
+}
+
+/**
+ * Games folded onto the calendar they were played on.
+ *
+ * The day key is built from the local date parts rather than by slicing an ISO
+ * string: `toISOString()` is UTC, so anything played after 7pm in Dublin — or
+ * before 7am in Los Angeles — lands on the neighbouring day and the grid
+ * disagrees with the clock the player was actually looking at.
+ */
+function playDays(games: GameLite[]): PlayDay[] {
+  const byDay = new Map<string, PlayDay>();
+  for (const g of games) {
+    const d = new Date(g.createdAt);
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate(),
+    ).padStart(2, "0")}`;
+    const day = byDay.get(date) ?? { date, games: 0, win: 0, draw: 0, loss: 0 };
+    day.games++;
+    day[g.result]++;
+    byDay.set(date, day);
+  }
+  return [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export function aggregate(profile: Profile, games: GameLite[]): Summary {
@@ -301,23 +344,45 @@ export function aggregate(profile: Profile, games: GameLite[]): Summary {
     loss: number;
     draw: number;
   };
+  // Keyed by family, not by the full opening name. Grouping by name gave a row
+  // per variation, so two Caro-Kanns and a Van 't Kruijs read as three
+  // unrelated openings — which is not how anyone thinks about their results.
   const byOpening = new Map<string, OpeningAcc>();
+  const members = new Map<string, Map<string, number>>();
   for (const g of games) {
     const name = g.opening ?? "Unknown opening";
+    const key = openingFamilyOrOther(g.opening);
     const o =
-      byOpening.get(name) ??
-      { eco: g.eco, name, games: 0, win: 0, loss: 0, draw: 0 };
+      byOpening.get(key) ??
+      { eco: g.eco, name: key, games: 0, win: 0, loss: 0, draw: 0 };
     o.games++;
     o[g.result]++;
-    byOpening.set(name, o);
+    // A family spans ECO codes — a Sicilian is B20 through B99 — so the code
+    // only survives while every game in the row agrees on it. Keeping the
+    // first game's would label the whole row with one variation's code.
+    if (o.eco !== g.eco) o.eco = undefined;
+    byOpening.set(key, o);
+    // Only the catch-all needs its contents listed; a family row is already
+    // named after everything in it.
+    if (key === OTHER_FAMILY) {
+      const inner = members.get(key) ?? new Map<string, number>();
+      inner.set(name, (inner.get(name) ?? 0) + 1);
+      members.set(key, inner);
+    }
   }
   // Prior for shrinkage = the player's overall win rate over this sample.
   const sampleWins = games.filter((g) => g.result === "win").length;
   const priorMean = games.length ? sampleWins / games.length : 0.5;
   const allOpenings: OpeningStat[] = [...byOpening.values()].map((o) => {
     const ci = wilson(o.win, o.games);
+    const inner = members.get(o.name);
     return {
       ...o,
+      members: inner
+        ? [...inner.entries()]
+            .map(([name, games]) => ({ name, games }))
+            .sort((a, b) => b.games - a.games)
+        : undefined,
       winRate: o.games ? o.win / o.games : 0,
       adjWinRate: shrink(o.win, o.games, priorMean),
       ciLo: ci.lo,
@@ -326,10 +391,18 @@ export function aggregate(profile: Profile, games: GameLite[]): Summary {
     };
   });
   const openings = [...allOpenings]
-    .sort((a, b) => b.games - a.games)
+    .sort((a, b) => {
+      // Other always sits at the bottom: it is a leftovers row, not a result.
+      if (a.name === OTHER_FAMILY) return 1;
+      if (b.name === OTHER_FAMILY) return -1;
+      return b.games - a.games;
+    })
     .slice(0, 6);
   // Rank weak lines by the adjusted (shrunk) rate, not the raw one.
   const toughOpenings = [...allOpenings]
+    // "Other" is a bucket of unrelated openings, so calling it a weak line
+    // would be meaningless — there is no single thing to go and fix.
+    .filter((o) => o.name !== OTHER_FAMILY)
     .filter((o) => o.games >= 3)
     .sort((a, b) => a.adjWinRate - b.adjWinRate)
     .slice(0, 5);
@@ -364,5 +437,6 @@ export function aggregate(profile: Profile, games: GameLite[]): Summary {
     },
     recent: games.slice(0, 12),
     board: recentPosition(games),
+    days: playDays(games),
   };
 }

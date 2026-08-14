@@ -24,8 +24,10 @@ interface DashboardData {
   opening: OpeningExplorerData | null;
   coverage: PlayerCoverage | null;
   username: string;
-  /** False when live Lichess data was unavailable and ratings are DB-derived. */
+  /** False when live platform data was unavailable and ratings are DB-derived. */
   live: boolean;
+  /** Which site the linked account is on, so the chrome can name it correctly. */
+  platform: "lichess" | "chesscom";
 }
 
 export function meta() {
@@ -70,13 +72,17 @@ function pickGames(dbGames: GameLite[], liveGames: GameLite[] | null): GameLite[
 export async function clientLoader(): Promise<DashboardData> {
   const session = await requireSession();
   const user = session.username;
+  const platform = session.platform;
 
   const cacheKey = `dashboard:${user}`;
   const cached = getCached<DashboardData>(cacheKey, 60_000);
   if (cached) return cached;
 
   const [source, opening0, coverage] = await Promise.all([
-    api<SummarySource>("/me/summary"),
+    // Named, not implied. Without the username the API falls back to the
+    // first-linked account, so switching accounts left the summary showing the
+    // other one's record.
+    api<SummarySource>(`/me/summary?username=${encodeURIComponent(user)}`),
     apiMaybe<OpeningExplorerData>(`/opening-explorer?username=${encodeURIComponent(user)}`),
     apiMaybe<PlayerCoverage>(`/players/${encodeURIComponent(user)}/coverage`),
   ]);
@@ -96,17 +102,23 @@ export async function clientLoader(): Promise<DashboardData> {
   let profile = source.profile;
   let liveGames: GameLite[] | null = null;
   let live = false;
-  try {
-    const signal = AbortSignal.timeout(4000);
-    const [liveProfile, games] = await Promise.all([
-      fetchProfile(user, signal),
-      fetchGames(user, 100, signal),
-    ]);
-    profile = overlayLiveProfile(source.profile, liveProfile);
-    liveGames = games;
-    live = true;
-  } catch {
-    live = false;
+  // Only for Lichess accounts. The overlay reads lichess.org by username, and a
+  // Chess.com name is not a claim on the same name there — running it anyway
+  // silently dressed the hub in a stranger's ratings whenever the name happened
+  // to be taken.
+  if (platform === "lichess") {
+    try {
+      const signal = AbortSignal.timeout(4000);
+      const [liveProfile, games] = await Promise.all([
+        fetchProfile(user, signal),
+        fetchGames(user, 100, signal),
+      ]);
+      profile = overlayLiveProfile(source.profile, liveProfile);
+      liveGames = games;
+      live = true;
+    } catch {
+      live = false;
+    }
   }
 
   const data: DashboardData = {
@@ -115,13 +127,18 @@ export async function clientLoader(): Promise<DashboardData> {
     coverage,
     username: user,
     live,
+    platform,
   };
   setCached(cacheKey, data);
   return data;
 }
 
 export async function clientAction() {
-  const response = await apiFetch("/imports/lichess", { json: { games: "all" } });
+  // Sync the account being looked at, not whichever was linked first.
+  const session = await requireSession();
+  const response = await apiFetch("/imports/lichess", {
+    json: { username: session.username, platform: session.platform, games: "all" },
+  });
   const data = await response.json().catch(() => null) as
     | { import?: { requestedGames: number }; error?: string }
     | null;
@@ -129,7 +146,8 @@ export async function clientAction() {
   // the whole client cache so post-action revalidation reflects the sync.
   invalidateCache();
   if (!response.ok) return { ok: false, message: data?.error ?? "Could not sync games." };
-  return { ok: true, message: `Syncing ${data?.import?.requestedGames ?? 0} games from Lichess.` };
+  const site = session.platform === "chesscom" ? "Chess.com" : "Lichess";
+  return { ok: true, message: `Syncing ${data?.import?.requestedGames ?? 0} games from ${site}.` };
 }
 
 export function ErrorBoundary() {
@@ -150,6 +168,14 @@ export function ErrorBoundary() {
 }
 
 export default function DashboardRoute() {
-  const { summary, opening, coverage, live } = useLoaderData() as DashboardData;
-  return <Dashboard summary={summary} opening={opening} coverage={coverage} live={live} />;
+  const { summary, opening, coverage, live, platform } = useLoaderData() as DashboardData;
+  return (
+    <Dashboard
+      summary={summary}
+      opening={opening}
+      coverage={coverage}
+      live={live}
+      platform={platform}
+    />
+  );
 }

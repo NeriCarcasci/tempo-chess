@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { peekSession, signOut } from "../lib/session";
+import { peekSession, setActiveAccount, signOut } from "../lib/session";
 import { Logo } from "./Logo";
+import { LichessMark, ChessComMark } from "./PlatformMarks";
 import {
   BOARD_THEMES,
   loadBoardTheme,
@@ -187,8 +188,45 @@ function AccountMenu() {
             <strong>{name}</strong>
             {session?.email ? <span>{session.email}</span> : <span>Signed in</span>}
           </div>
+
+          {/* One sign-in can own several chess accounts — a Lichess and a
+              Chess.com one, or two names on the same site. Every page reads the
+              one ticked here. A full navigation rather than a client one,
+              because the choice changes the answer of every loader on the
+              page and this is a rare, deliberate action. */}
+          {session && session.accounts.length > 1 ? (
+            <>
+              <div className="nav-menu-label">Chess accounts</div>
+              {session.accounts.map((account) => {
+                const active = account.id === session.activeAccount?.id;
+                return (
+                  <button
+                    key={account.id}
+                    type="button"
+                    className={`nav-menu-item ${active ? "is-active" : ""}`}
+                    onClick={() => {
+                      if (active) return setOpen(false);
+                      setActiveAccount(session.userId, account.id);
+                      location.href = "/dashboard";
+                    }}
+                  >
+                    <span className="nav-menu-mark" aria-hidden="true">
+                      {account.platform === "chesscom" ? <ChessComMark size={15} /> : <LichessMark size={15} />}
+                    </span>
+                    {account.username}
+                    {active && <span className="tick" aria-hidden="true">✓</span>}
+                  </button>
+                );
+              })}
+            </>
+          ) : null}
+
+          <div className="nav-menu-label">Account</div>
           <Link to="/account" className="nav-menu-item">
             Your account &amp; progress
+          </Link>
+          <Link to="/account/connect" className="nav-menu-item">
+            Link another chess account
           </Link>
           <button
             type="button"

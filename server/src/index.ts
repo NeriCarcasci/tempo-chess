@@ -5,7 +5,7 @@ import { z } from "zod";
 import { analyzeFens, botMove } from "./engine/stockfish.js";
 import {
   cancelImport,
-  createLichessImport,
+  createImport,
   getImport,
   getLichessCoverage,
   listImports,
@@ -38,6 +38,7 @@ import {
 } from "./auth.js";
 import { getPlayerSummarySource } from "./players/summary.js";
 import { getPublicReach } from "./players/reach.js";
+import { LookupUnavailable, lookupPlatformAccount } from "./players/lookup.js";
 import { PLAN_LIST, PLANS } from "./billing/plans.js";
 import {
   billingConfigured,
@@ -141,6 +142,7 @@ app.use("/billing/subscription", requireAuth);
 app.use("/imports", requireAuth);
 app.use("/imports/*", requireAuth);
 app.use("/players/*", requireAuth);
+app.use("/platform-accounts/*", requireAuth);
 app.use("/opening-explorer", requireAuth);
 app.use("/opening-explorer/*", requireAuth);
 app.use("/repertoire", requireAuth);
@@ -150,6 +152,35 @@ app.use("/analyze", requireAuth);
 app.use("/engine/*", requireAuth);
 
 // --- me: identity, linked accounts, hub data ------------------------------
+
+/**
+ * Look a username up on its platform, so the connect form can ask "is this
+ * you?" before anything is linked or imported. Behind auth because only a
+ * signed-in user has any business running lookups through us.
+ */
+app.get("/platform-accounts/:platform/:username", async (c) => {
+  const platform = c.req.param("platform");
+  const username = c.req.param("username");
+  if (platform !== "lichess" && platform !== "chesscom") {
+    return c.json({ error: "platform must be lichess or chesscom" }, 400);
+  }
+  if (!username || username.length < 2 || username.length > 40) {
+    return c.json({ error: "username must be 2-40 characters" }, 400);
+  }
+  try {
+    const account = await lookupPlatformAccount(platform, username);
+    if (!account) return c.json({ found: false }, 200);
+    return c.json({ found: true, account }, 200);
+  } catch (error) {
+    // "We could not check" is a different answer from "no such player", and the
+    // form says so rather than telling someone their account does not exist
+    // because the platform was down.
+    if (error instanceof LookupUnavailable) {
+      return c.json({ error: `${platform} did not respond. Try again in a moment.` }, 503);
+    }
+    return fail(c, error);
+  }
+});
 
 app.get("/me", async (c) => {
   const user = currentUser(c);
@@ -239,22 +270,26 @@ app.post("/imports/lichess", async (c) => {
   const body = await c.req.json().catch(() => null);
   const parsed = z.object({
     username: z.string().trim().min(2).max(40).optional(),
-    games: z.union([z.literal("all"), z.number().int().min(1).max(500)]).default("all"),
-  }).safeParse(body);
-  if (!parsed.success) return c.json({ error: "expected { username?, games?: \"all\" | 1..500 }" }, 400);
+    platform: z.enum(["lichess", "chesscom"]).optional(),
+    games: z.union([z.number().int().positive(), z.literal("all")]).default(50),
+  }).safeParse(body ?? {});
+  if (!parsed.success) return c.json({ error: "expected { username?, platform?, games? }" }, 400);
+  const user = currentUser(c);
   try {
-    const username = await requireAccountUsername(currentUser(c).id, parsed.data.username);
-    const user = currentUser(c);
-    const coverage = await getLichessCoverage(username, user.id);
-    const planLimit = PLANS[user.plan].limits.analysedGames;
-    const importLimit = Math.min(coverage.importLimit, planLimit ?? coverage.importLimit);
-    const games = parsed.data.games === "all"
-      ? Math.min(coverage.availableGames, importLimit)
-      : Math.min(parsed.data.games, importLimit);
+    // Platform comes from the linked account unless the caller names one. The
+    // route used to assume Lichess for everybody, so a linked Chess.com account
+    // was looked up under the wrong platform and the import died before it
+    // started.
+    const accounts = await listLinkedAccounts(user.id);
+    const username = await requireAccountUsername(user.id, parsed.data.username);
+    const linked = accounts.find(
+      (a) => a.username.toLowerCase() === username.toLowerCase(),
+    );
+    const platform = parsed.data.platform ?? linked?.platform ?? "lichess";
+    const games = parsed.data.games === "all" ? 10_000 : parsed.data.games;
     return c.json({
-      import: await createLichessImport(username, games, user.id),
-      coverage: { ...coverage, importLimit },
-    }, 202);
+      import: await createImport(username, games, user.id, platform),
+    }, 201);
   } catch (error) {
     return fail(c, error);
   }
@@ -262,9 +297,12 @@ app.post("/imports/lichess", async (c) => {
 
 app.get("/players/:username/coverage", async (c) => {
   try {
-    const username = await requireAccountUsername(currentUser(c).id, c.req.param("username"));
     const user = currentUser(c);
-    const coverage = await getLichessCoverage(username, user.id);
+    const accounts = await listLinkedAccounts(user.id);
+    const username = await requireAccountUsername(user.id, c.req.param("username"));
+    const platform =
+      accounts.find((a) => a.username.toLowerCase() === username.toLowerCase())?.platform ?? "lichess";
+    const coverage = await getLichessCoverage(username, user.id, platform);
     const planLimit = PLANS[user.plan].limits.analysedGames;
     return c.json({ ...coverage, importLimit: Math.min(coverage.importLimit, planLimit ?? coverage.importLimit) });
   } catch (error) {

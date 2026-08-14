@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { OTHER_FAMILY } from "../lib/openingFamily";
 import type { OpeningStat } from "../lib/lichess";
 import { pct } from "../lib/format";
 
@@ -179,22 +180,27 @@ export function ProportionBar({
  * both. Win/loss are the validated diverging poles; the center is neutral.
  */
 export function DivergingOpenings({ openings }: { openings: OpeningStat[] }) {
-  const rows = [...openings].sort((a, b) => b.adjWinRate - a.adjWinRate);
+  const rows = [...openings].sort((a, b) => {
+    // "Other" is leftovers, so it stays at the foot of the list however well
+    // the openings inside it happened to score.
+    if (a.name === OTHER_FAMILY) return 1;
+    if (b.name === OTHER_FAMILY) return -1;
+    return b.adjWinRate - a.adjWinRate;
+  });
   const TRACK = 148; // px; center at TRACK/2
   const half = TRACK / 2;
   const posOf = (rate: number) => half + (rate - 0.5) * TRACK;
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <span className="cap" style={{ color: "var(--color-loss)" }}>
-          weaker
-        </span>
-        <span className="cap">even</span>
-        <span className="cap" style={{ color: "var(--color-win)" }}>
-          stronger
-        </span>
+      {/* The axis names the two directions once, quietly. It used to shout them
+          in tracked-out uppercase, which read as three labels rather than as a
+          scale. */}
+      <div className="mb-4 flex items-center justify-between text-xs">
+        <span style={{ color: "var(--color-loss)" }}>weaker</span>
+        <span className="text-ink-faint">even</span>
+        <span style={{ color: "var(--color-win)" }}>stronger</span>
       </div>
-      <div className="divide-y divide-line">
+      <div>
         {rows.map((o) => {
           const dev = o.adjWinRate - 0.5; // adjusted, de-noised
           const len = Math.abs(dev) * TRACK;
@@ -204,15 +210,40 @@ export function DivergingOpenings({ openings }: { openings: OpeningStat[] }) {
           return (
             <div
               key={o.name}
-              className={`flex items-center gap-3 py-2 ${low ? "opacity-70" : ""}`}
+              className={`flex items-center gap-4 py-2.5 ${low ? "opacity-70" : ""}`}
             >
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm text-ink" title={o.name}>
-                  {o.name}
-                </div>
-                <div className="cap mt-0.5">
-                  {o.eco ? `${o.eco} · ` : ""}
-                  {o.games}g · {pct(o.winRate)} raw
+                {/* "Other" is a bucket, so it says what is in it — closed, because
+                    the whole reason those openings were bucketed is that they are
+                    not worth a row each. Everything else is already named after
+                    its contents and needs no disclosure. */}
+                {o.name === OTHER_FAMILY && o.members?.length ? (
+                  <details className="other-row">
+                    <summary>
+                      <span className="text-sm text-ink">Other</span>
+                      <span className="text-xs text-ink-faint">
+                        {o.members.length} opening{o.members.length === 1 ? "" : "s"}
+                      </span>
+                    </summary>
+                    <ul>
+                      {o.members.map((m) => (
+                        <li key={m.name}>
+                          <span className="truncate" title={m.name}>
+                            {m.name}
+                          </span>
+                          <i>{m.games}g</i>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : (
+                  <div className="truncate text-sm text-ink" title={o.name}>
+                    {o.name}
+                  </div>
+                )}
+                <div className="mt-1 text-xs text-ink-faint">
+                  {o.eco && o.name !== OTHER_FAMILY ? `${o.eco} · ` : ""}
+                  {o.games} game{o.games === 1 ? "" : "s"}
                 </div>
               </div>
               <div className="relative shrink-0" style={{ width: TRACK, height: 18 }}>

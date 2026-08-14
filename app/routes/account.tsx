@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import type { Route } from "./+types/account";
 import { TopNav } from "../components/TopNav";
-import { requireSession, signOut, type Session } from "../lib/session";
+import { requireSession, setActiveAccount, signOut, type Session } from "../lib/session";
+import { LichessMark, ChessComMark } from "../components/PlatformMarks";
 import { fetchRepertoire, fetchLessonProgress, fetchMistakes, fetchActivity, type RepertoireData, type LessonProgress } from "../lib/account";
 import { getCached, setCached } from "../lib/loaderCache";
 import { LESSONS } from "../lib/lessons";
@@ -180,10 +181,43 @@ function BillingPanel({
         <div>
           <p className="eyebrow">Signed in as</p>
           <strong>{session.email ?? "—"}</strong>
-          <p>
-            Chess {session.accounts.length === 1 ? "account" : "accounts"}:{" "}
-            {session.accounts.map((a) => `${a.username} (${a.platform})`).join(", ") || "none linked"}
-          </p>
+          {/* Linked accounts are a list you act on, not a sentence. Until this
+              was one, a second account could be linked and imported with no
+              way to point the product at it. */}
+          {session.accounts.length ? (
+            <ul className="account-linked">
+              {session.accounts.map((account) => {
+                const active = account.id === session.activeAccount?.id;
+                return (
+                  <li key={account.id} className={active ? "is-active" : ""}>
+                    <span className="account-linked-mark" aria-hidden="true">
+                      {account.platform === "chesscom" ? <ChessComMark size={16} /> : <LichessMark size={16} />}
+                    </span>
+                    <span className="account-linked-who">
+                      <b>{account.username}</b>
+                      <small>{account.platform === "chesscom" ? "Chess.com" : "Lichess"}</small>
+                    </span>
+                    {active ? (
+                      <span className="account-linked-badge">In use</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="chip-btn"
+                        onClick={() => {
+                          setActiveAccount(session.userId, account.id);
+                          location.href = "/dashboard";
+                        }}
+                      >
+                        Use this
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p>No chess account linked yet.</p>
+          )}
         </div>
         <div className="account-billing-actions">
           <Link to="/account/connect" className="secondary-button">Link another account</Link>

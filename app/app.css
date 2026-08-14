@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./public.css";
+@import "./rook.css";
 
 /* ------------------------------------------------------------------ */
 /* Tempo Chess — warm analysis desk.                                   */
@@ -101,10 +102,18 @@
     position: fixed;
     inset: 0;
     pointer-events: none;
-    z-index: 0;
-    background:
-      radial-gradient(60% 42% at 84% -10%, rgb(207 87 48 / 0.08), transparent 70%),
-      radial-gradient(48% 34% at 6% -6%, rgb(120 140 170 / 0.07), transparent 72%);
+    /* Behind everything, not merely early in the source.
+       At z-index 0 this is a *positioned* box, and positioned boxes paint after
+       all non-positioned in-flow content — so an opaque backdrop at 0 buries
+       any page that has not lifted itself out with its own layer. Every product
+       route carries `relative z-10` and the marketing shell sets z-index 1 for
+       exactly that reason; the auth pages did not, and rendered as a blank
+       sheet of --color-bg with only their absolutely-positioned bits showing
+       through. A negative index paints above the canvas background and below
+       all content, which is what a backdrop wants, and no future page has to
+       know this rule exists. */
+    z-index: -1;
+    background: var(--color-bg);
   }
   ::selection {
     background: color-mix(in oklch, var(--color-accent) 30%, transparent);
@@ -263,7 +272,7 @@
     display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
     gap: clamp(1.5rem, 4vw, 4rem); margin-top: 2.25rem;
     border-radius: var(--radius-panel);
-    background: linear-gradient(135deg, #fff8e9, #fff); padding: clamp(1.5rem, 4vw, 2.5rem);
+    background: var(--color-surface); padding: clamp(1.5rem, 4vw, 2.5rem);
     box-shadow: var(--shadow-lift);
   }
   .opening-teaching h2 {
@@ -325,6 +334,35 @@
   .evidence-cost strong { color: oklch(0.74 0.09 30); font: 700 0.78rem/1 var(--font-mono); }
   .empty-evidence,
   .empty-opening-review { margin-top: 1rem; border: 1px solid var(--color-line); padding: 2rem; color: var(--color-ink-muted); }
+  /* The "Other" bucket on the results chart: closed by default, because the
+     openings inside it were bucketed precisely for not being worth a row. */
+  .other-row > summary {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    cursor: pointer; list-style: none;
+  }
+  .other-row > summary::-webkit-details-marker { display: none; }
+  /* A caret that turns, rather than the platform triangle, which sits on its
+     own line and cannot be aligned with the label beside it. */
+  .other-row > summary::after {
+    content: ""; width: 0.4rem; height: 0.4rem; flex: 0 0 auto;
+    border-right: 1.5px solid var(--color-ink-faint);
+    border-bottom: 1.5px solid var(--color-ink-faint);
+    transform: rotate(45deg) translate(-1px, -1px);
+    transition: transform 140ms ease;
+  }
+  .other-row[open] > summary::after { transform: rotate(-135deg) translate(-1px, -1px); }
+  .other-row > ul {
+    display: grid; gap: 0.3rem; margin-top: 0.5rem; padding-left: 0.1rem;
+  }
+  .other-row > ul li {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem;
+    font-size: 0.78rem; color: var(--color-ink-muted); min-width: 0;
+  }
+  .other-row > ul li i {
+    font-style: normal; font-family: var(--font-mono); font-size: 0.68rem;
+    color: var(--color-ink-faint); flex: 0 0 auto;
+  }
+
   .info-tip { position: relative; display: inline-flex; flex: 0 0 auto; }
   .info-tip-button {
     display: grid; width: 1.15rem; height: 1.15rem; place-items: center;
@@ -348,16 +386,546 @@
   .dashboard-main {
     display: grid; gap: 1.25rem; padding-top: 1.25rem;
   }
-  .dashboard-main > .rise {
-    overflow: hidden; border-radius: var(--radius-panel); background: var(--color-surface);
-    padding: clamp(1.5rem, 4vw, 3rem);
+
+  /* -- the action band --------------------------------------------------
+     The single thing the product wants you to do, given its own surface in
+     the accent so it cannot be mistaken for another panel of numbers. */
+  .dash-action {
+    border-radius: var(--radius-panel);
+    padding: clamp(1.75rem, 4vw, 3.25rem);
+    background: color-mix(in oklch, var(--color-accent) 9%, var(--color-surface));
     box-shadow: var(--shadow-lift);
   }
-  .dashboard-main > .rise:first-child {
-    background:
-      radial-gradient(circle at 88% 10%, rgb(255 159 47 / 0.14), transparent 32%),
-      var(--color-surface);
+
+  /* Text and board side by side; the board drops under on small screens. */
+  .line-lead {
+    display: flex; flex-wrap: wrap; align-items: flex-start;
+    justify-content: space-between; gap: 2.5rem 4rem;
   }
+  .line-board { flex: 0 0 auto; }
+
+  /* -- the line ---------------------------------------------------------
+     The product's centrepiece: the moves as a walk, ending at the player's
+     decision. Tiles, not prose, because a line is something you look down. */
+  .line-walk {
+    display: flex; flex-wrap: wrap; align-items: center;
+    gap: 0.4rem; margin-top: 1.5rem;
+  }
+  .line-cut { color: var(--color-ink-faint); font-size: 0.9rem; }
+  .line-step {
+    display: inline-flex; align-items: center;
+    padding: 0.4rem 0.6rem; border-radius: var(--radius-control);
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+    font-family: var(--font-mono); font-size: 0.88rem; color: var(--color-ink);
+  }
+  /* Where the line stops being theory and becomes your problem. */
+  .line-here {
+    display: inline-flex; align-items: center;
+    padding: 0.4rem 0.7rem; border-radius: var(--radius-control);
+    background: var(--color-accent); color: #fff;
+    font-size: 0.78rem; font-weight: 650; letter-spacing: 0.01em;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .tsheet-page {
+    max-width: 1160px; margin: 0 auto; padding: clamp(2rem, 5vw, 3.5rem) 1.5rem 7rem;
+  }
+  .tsheet-page-head { margin-bottom: clamp(2rem, 4vw, 3rem); }
+  .tsheet-page-head h1 {
+    font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 650; letter-spacing: -0.03em;
+  }
+  .tsheet-page-head p {
+    max-width: 46ch; margin-top: 0.9rem; color: var(--color-ink-muted); line-height: 1.6;
+  }
+  .tsheet-page .side-tiles { margin-top: 2.5rem; }
+
+  /* -- the tear sheet ---------------------------------------------------
+     Rows are repertoire lines, columns are the player's own move number.
+     The whole thing is one instrument: the only accent on it is the single
+     marker, so the eye lands on the one square worth starting from. */
+  .tsheet-section + .tsheet-section { margin-top: clamp(2rem, 4vw, 3rem); }
+  .tsheet-section-head {
+    font-family: var(--font-serif); font-size: 1.35rem; color: var(--color-ink);
+    margin-bottom: 1rem;
+  }
+  /* The sheet scrolls inside its own box; the page never moves sideways. */
+  .tsheet-scroll { overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 0.4rem; }
+  /* Squares on a warm panel, the same instrument as the archive grid on the
+     public site — so a player meets one visual idea across the product rather
+     than a marketing picture and an unrelated chart. */
+  .tsheet-grid {
+    display: grid;
+    /* Cells take whatever width is going and their height follows, so they are
+       genuinely square at any page width — the archive grid's proportion, not
+       a row of flattened bars. */
+    grid-template-columns: 11rem repeat(var(--cols), minmax(1.85rem, 1fr)) 3.25rem;
+    gap: 8px; align-items: center; min-width: 38rem;
+    border-radius: var(--radius-panel);
+    background: var(--color-surface-2);
+    padding: clamp(1rem, 2.2vw, 1.5rem);
+  }
+
+  .tsheet-corner {
+    font-size: 0.68rem; color: var(--color-ink-faint); line-height: 1.2;
+  }
+  .tsheet-corner-end { text-align: right; }
+  /* The crosshair: pointing at a square tells you which move number and which
+     line it belongs to, without the eye travelling to the edges and back. */
+  .tsheet-colhead {
+    text-align: center; font-size: 0.7rem; color: var(--color-ink-faint);
+    font-family: var(--font-mono);
+    transition: color 130ms ease, transform 130ms ease;
+  }
+  .tsheet-colhead.is-lit { font-weight: 700; transform: translateY(-1px); }
+  .tsheet-rowhead {
+    min-width: 0; font-size: 0.86rem; color: var(--color-ink-muted);
+    padding-right: 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    transition: color 130ms ease, transform 130ms ease;
+  }
+  .tsheet-rowhead.is-lit { color: var(--color-ink); transform: translateX(2px); }
+  .tsheet-rowhead.is-variation {
+    padding-left: 0.9rem; font-size: 0.78rem; color: var(--color-ink-muted);
+  }
+  .tsheet-rowgames {
+    text-align: right; font-family: var(--font-mono);
+    font-size: 0.7rem; color: var(--color-ink-faint);
+  }
+  .tsheet-rowgames.is-variation { opacity: 0.75; }
+
+  /* A caret that turns, rather than the platform triangle. */
+  .tsheet-unfold {
+    display: inline-flex; align-items: center; gap: 0.4rem; max-width: 100%;
+    font-size: inherit; color: inherit; text-align: left;
+  }
+  .tsheet-unfold::before {
+    content: ""; width: 0.36rem; height: 0.36rem; flex: 0 0 auto;
+    border-right: 1.5px solid var(--color-ink-faint);
+    border-bottom: 1.5px solid var(--color-ink-faint);
+    transform: rotate(-45deg); transition: transform 140ms ease;
+  }
+  .tsheet-unfold.is-open::before { transform: rotate(45deg); }
+
+  .tsheet-cell {
+    position: relative; aspect-ratio: 1; border-radius: 7px; padding: 0;
+    background: var(--color-surface);
+    /* The bottom rim is what makes a square read as a key you could press
+       rather than paint on paper — the same idiom as the primary button. */
+    box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.13), 0 1px 2px rgb(35 33 29 / 0.05);
+    transition: transform 120ms cubic-bezier(0.2, 0.9, 0.3, 1), box-shadow 120ms ease;
+    animation: tsheet-in 320ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+  }
+  .tsheet-cell:not(:disabled):hover,
+  .tsheet-cell:not(:disabled):focus-visible {
+    transform: translateY(-2px) scale(1.12);
+    box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.13), 0 6px 14px rgb(35 33 29 / 0.16);
+    z-index: 2;
+  }
+  /* The press: the tile drops and its rim collapses. */
+  .tsheet-cell:not(:disabled):active {
+    transform: translateY(1px) scale(1.02);
+    box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.1), 0 1px 2px rgb(35 33 29 / 0.08);
+  }
+  .tsheet-cell.is-picked {
+    box-shadow: 0 0 0 2px var(--color-ink), inset 0 -2px 0 rgb(0 0 0 / 0.13);
+  }
+  /* Where the row's book runs out: a terminus node in the gap after the last
+     scored square, so each line reads as a path with an end you can push. */
+  .tsheet-cell.is-edge::after {
+    content: ""; position: absolute; top: 50%; right: -7px;
+    width: 6px; height: 6px; border-radius: 999px;
+    background: var(--color-ink-faint); transform: translateY(-50%);
+  }
+
+  /* The count rides inside the square and only shows up on approach, so the
+     sheet is a picture at rest and a readout under the cursor. */
+  .tsheet-count {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font-family: var(--font-mono); font-size: 0.72rem; font-weight: 600;
+    color: var(--color-ink); opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .tsheet-cell:hover .tsheet-count,
+  .tsheet-cell:focus-visible .tsheet-count { opacity: 0.72; }
+  .tsheet-cell[data-heat="tears"] .tsheet-count { color: var(--color-bg); }
+  /* Before the line exists there is nothing to say — the square is simply not
+     there. An outlined square is reserved for "past your book", so an outline
+     keeps one meaning wherever it appears. */
+  .tsheet-cell[data-state="pre"] { background: transparent; box-shadow: none; }
+  .tsheet-cell[data-state="blank"] {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-ink) 8%, transparent);
+  }
+  /* One ramp, one hue — the archive grid's rule. Intensity is how much the
+     depth costs you, so reading the row is reading severity, not decoding a
+     palette. Green would claim "good" about squares that only mean "not yet
+     bad enough to name". */
+  .tsheet-cell[data-state="thin"] { background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface)); }
+  .tsheet-cell[data-heat="holds"] { background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface)); }
+  .tsheet-cell[data-heat="shaky"] { background: color-mix(in srgb, var(--color-accent) 58%, var(--color-surface)); }
+  .tsheet-cell[data-heat="tears"] { background: color-mix(in srgb, var(--color-accent) 88%, var(--color-ink)); }
+
+  /* The whole field is accent now, so the marker cannot be. Ink reads as the
+     one deliberate thing on a sheet of warm squares. */
+  .tsheet-cell.is-marked {
+    box-shadow: 0 0 0 2px var(--color-ink), inset 0 -2px 0 rgb(0 0 0 / 0.13);
+  }
+  .tsheet-pip {
+    position: absolute; inset: 0; border-radius: 7px;
+    box-shadow: 0 0 0 2px var(--color-ink);
+    animation: tsheet-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* The task, before the archive. A game opens on the next lesson, not the
+     syllabus — the sheet below is the evidence, this is the assignment. */
+  .tsheet-lead {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1.5rem 2.5rem; flex-wrap: wrap;
+    border-radius: var(--radius-panel);
+    background: color-mix(in oklch, var(--color-accent) 9%, var(--color-surface));
+    padding: clamp(1.25rem, 3vw, 1.9rem);
+    margin-bottom: clamp(1.5rem, 3vw, 2.25rem);
+    box-shadow: var(--shadow-lift);
+  }
+  .tsheet-lead h2 {
+    font-size: clamp(1.25rem, 2.6vw, 1.7rem); font-weight: 650;
+    letter-spacing: -0.02em; line-height: 1.25; color: var(--color-ink);
+    max-width: 34ch; text-wrap: balance;
+  }
+  .tsheet-lead p { margin-top: 0.5rem; font-size: 0.88rem; color: var(--color-ink-muted); }
+
+  /* The crown bar: standing state, not a heading. */
+  .tsheet-status {
+    display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem;
+    margin-bottom: 1.1rem; font-size: 0.82rem; color: var(--color-ink-muted);
+  }
+  .tsheet-status b { font-weight: 650; color: var(--color-ink); }
+
+  .tsheet-showmore {
+    margin-top: 0.9rem; padding: 0.45rem 0.9rem;
+    border-radius: var(--radius-pill); background: var(--color-surface-2);
+    font-size: 0.78rem; font-weight: 650; color: var(--color-ink-muted);
+    transition: color 130ms ease, background 130ms ease;
+  }
+  .tsheet-showmore:hover { color: var(--color-ink); background: var(--color-surface); }
+
+  .tsheet-legend {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 1.1rem;
+    margin-top: 1.75rem; font-size: 0.76rem; color: var(--color-ink-muted);
+  }
+  .tsheet-legend span {
+    width: 0.95rem; height: 0.95rem; border-radius: 4px; margin-right: -0.5rem;
+    background: var(--color-surface);
+  }
+  .tsheet-legend span[data-heat="holds"] { background: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface)); }
+  .tsheet-legend span[data-heat="shaky"] { background: color-mix(in srgb, var(--color-accent) 58%, var(--color-surface)); }
+  .tsheet-legend span[data-heat="tears"] { background: color-mix(in srgb, var(--color-accent) 88%, var(--color-ink)); }
+  .tsheet-legend span[data-state="blank"] {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-ink) 12%, transparent);
+  }
+
+  .tsheet-hint { margin-top: 1.25rem; font-size: 0.82rem; color: var(--color-ink-faint); }
+
+  .tsheet-detail {
+    margin-top: 1.5rem; border-radius: var(--radius-panel);
+    background: var(--color-surface-2); padding: clamp(1.1rem, 3vw, 1.6rem);
+  }
+  .tsheet-detail-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+  }
+  .tsheet-detail-head h3 {
+    font-size: 1rem; font-weight: 620; color: var(--color-ink);
+  }
+  .tsheet-detail-head p {
+    margin-top: 0.35rem; font-size: 0.85rem; line-height: 1.5; color: var(--color-ink-muted);
+  }
+  .tsheet-detail-close {
+    flex: 0 0 auto; width: 1.6rem; height: 1.6rem; border-radius: var(--radius-pill);
+    font-size: 1.1rem; line-height: 1; color: var(--color-ink-faint);
+    transition: background 120ms ease, color 120ms ease;
+  }
+  .tsheet-detail-close:hover { background: var(--color-surface); color: var(--color-ink); }
+  .tsheet-boards { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.1rem; }
+  .tsheet-detail-go { margin-top: 1.25rem; }
+
+  @keyframes tsheet-in {
+    from { opacity: 0; transform: translateY(-3px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes tsheet-pulse {
+    0%, 100% { opacity: 0.28; }
+    50% { opacity: 0.05; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tsheet-cell { animation: none; }
+    .tsheet-cell:not(:disabled):hover,
+    .tsheet-cell:not(:disabled):focus-visible { transform: none; }
+    .tsheet-colhead.is-lit, .tsheet-rowhead.is-lit { transform: none; }
+    .tsheet-pip { animation: none; opacity: 0.2; }
+  }
+
+  /* -- the map ----------------------------------------------------------
+     The centrepiece. A horizontal strip: the walk collects as tiles on the
+     left, the fan of continuations flows out as tapered ink ribbons on the
+     right. One orange tear on the whole map, nothing else coloured. */
+  .omap-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 1.5rem; flex-wrap: wrap;
+  }
+  .omap-scroll {
+    margin-top: 1.75rem; overflow-x: auto; overscroll-behavior-x: contain;
+    padding-bottom: 0.5rem;
+  }
+  .omap-strip {
+    display: flex; align-items: center; gap: 0.9rem; width: max-content;
+  }
+
+  /* The walk: start seed + one tile per move taken. Tiles rewind on click. */
+  .omap-path { display: flex; align-items: center; gap: 0.4rem; }
+  .omap-seed {
+    width: 20px; height: 20px; border-radius: 5px; padding: 0;
+    background: var(--color-ink); flex: 0 0 auto;
+    transition: transform 120ms ease, opacity 120ms ease;
+  }
+  .omap-seed:not(:disabled):hover { transform: scale(1.15); }
+  .omap-seed:disabled { opacity: 0.85; cursor: default; }
+  .omap-tile {
+    display: inline-flex; align-items: center;
+    padding: 0.42rem 0.6rem; border-radius: var(--radius-control);
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+    font-family: var(--font-mono); font-size: 0.86rem; color: var(--color-ink);
+    animation: omap-in 300ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+    transition: box-shadow 130ms ease, transform 130ms ease;
+  }
+  .omap-tile:hover { box-shadow: var(--shadow-lift); transform: translateY(-1px); }
+
+  .omap-fan { position: relative; flex: 0 0 auto; }
+  .omap-svg { display: block; }
+  .omap-branch { animation: omap-in 420ms cubic-bezier(0.22, 0.9, 0.3, 1) both; }
+  .omap-halo { animation: omap-pulse 2.2s ease-in-out infinite; }
+
+  /* The chips: one candidate continuation each. Absolutely placed so each
+     sits exactly at its ribbon's tip. */
+  .omap-chips { position: relative; flex: 0 0 auto; width: 15.5rem; }
+  .omap-chip {
+    position: absolute; left: 0; max-width: 100%;
+    display: flex; align-items: center; gap: 0.55rem;
+    padding: 0.5rem 0.7rem; border-radius: var(--radius-control);
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+    font-size: 0.85rem; color: var(--color-ink); text-align: left;
+    animation: omap-in 420ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+    transition: box-shadow 130ms ease, transform 130ms ease;
+  }
+  .omap-chip:hover { box-shadow: var(--shadow-lift); transform: translateX(2px); }
+  .omap-chip b { font-weight: 600; font-family: var(--font-mono); font-size: 0.88rem; }
+  .omap-chip small {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 9.5rem; font-size: 0.72rem; color: var(--color-ink-faint);
+  }
+  .omap-chip .omap-games {
+    margin-left: auto; flex: 0 0 auto;
+    font-family: var(--font-mono); font-size: 0.72rem; color: var(--color-ink-faint);
+  }
+  /* The torn continuation: the one coloured thing on the map. */
+  .omap-chip.is-torn {
+    box-shadow: var(--shadow-soft), inset 0 0 0 1.5px var(--color-accent);
+  }
+  .omap-chip.is-torn b { color: var(--color-accent); }
+  .omap-more {
+    position: absolute; left: 0;
+    padding: 0.3rem 0.55rem; border-radius: var(--radius-pill);
+    font-size: 0.72rem; color: var(--color-ink-faint);
+    background: var(--color-surface-2);
+    transition: color 130ms ease;
+  }
+  .omap-more:hover { color: var(--color-ink); }
+
+  .omap-end {
+    max-width: 15rem; font-size: 0.85rem; line-height: 1.5;
+    color: var(--color-ink-muted);
+  }
+  .omap-cta {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1.5rem; flex-wrap: wrap; margin-top: 1.5rem;
+    border-radius: var(--radius-panel); padding: 1.1rem 1.4rem;
+    background: color-mix(in oklch, var(--color-accent) 9%, var(--color-surface));
+  }
+
+  @keyframes omap-in {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes omap-pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.08; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .omap-tile, .omap-branch, .omap-chip { animation: none; }
+    .omap-halo { animation: none; opacity: 0.2; }
+  }
+
+  /* The lead card sits a step above the supporting panels. */
+  .dash-lead { box-shadow: var(--shadow-lift); }
+
+  /* Two half-width cards that stack on small screens. */
+  .dash-pair {
+    display: grid; gap: 1.25rem;
+  }
+  @media (min-width: 64rem) {
+    .dash-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  .dash-pair > .rise {
+    min-width: 0; overflow: hidden;
+    border-radius: var(--radius-panel); background: var(--color-surface);
+    padding: clamp(1.75rem, 4vw, 2.75rem);
+    box-shadow: var(--shadow-soft);
+  }
+  /* When only one of the pair has content, it takes the row rather than
+     leaving a card-shaped hole beside itself. */
+  .dash-pair > .rise:only-child { grid-column: 1 / -1; }
+
+  /* A second-rank action: present, quiet, never competing with the accent. */
+  .quiet-button {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    border-radius: var(--radius-pill); padding: 0.55rem 1.1rem;
+    background: var(--color-surface-2); color: var(--color-ink);
+    font-size: 0.85rem; font-weight: 650;
+    transition: background 130ms ease;
+  }
+  .quiet-button:hover { background: color-mix(in srgb, var(--color-ink) 9%, var(--color-surface)); }
+
+  .dashboard-main > .rise {
+    /* min-width:0 so a long opening name cannot push a grid child past the
+       card and get clipped by the overflow below. */
+    min-width: 0; overflow: hidden;
+    border-radius: var(--radius-panel); background: var(--color-surface);
+    padding: clamp(1.75rem, 4vw, 3.25rem);
+    /* Deliberately lighter than the hero and the action band. These are the
+       supporting panels; if they lift as hard as the lead, nothing leads. */
+    box-shadow: var(--shadow-soft);
+  }
+  /* -- the activity grid ------------------------------------------------
+     A day per square, coloured by result. The palette is the same win/loss
+     pair the openings chart uses, so a green square means one thing on this
+     page and not two. */
+  .activity-head {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 2rem; flex-wrap: wrap;
+  }
+  .activity-head h2 { color: var(--color-ink); }
+  .activity-head p { color: var(--color-ink-muted); }
+  .activity-key {
+    display: flex; align-items: center; gap: 0.3rem;
+    font-size: 0.7rem; color: var(--color-ink-faint); white-space: nowrap;
+  }
+  .activity-key span:first-child { margin-right: 0.15rem; }
+  .activity-key span:last-child { margin-left: 0.15rem; }
+  .activity-key i { width: 0.65rem; height: 0.65rem; border-radius: 2px; }
+
+  /* Cells are a fixed size, not a fraction of the card. A square that grows
+     with the viewport stops reading as a calendar and starts reading as a
+     chart of coloured blocks; twelve pixels is the size the eye scans a year
+     at. Twenty-six of them do not fit a phone, so the grid scrolls inside its
+     own box rather than stretching the card. */
+  .activity-scroll { margin-top: 1.75rem; overflow-x: auto; padding-bottom: 0.5rem; }
+  .activity-grid {
+    display: grid;
+    grid-template-columns: auto repeat(var(--weeks), 12px);
+    grid-template-rows: auto repeat(7, 12px);
+    grid-auto-flow: column;
+    gap: 3px; width: max-content;
+  }
+  .activity-months,
+  .activity-days { display: grid; }
+  .activity-months {
+    grid-column: 2 / -1; grid-row: 1;
+    grid-template-columns: subgrid;
+    margin-bottom: 0.35rem;
+    font-size: 0.68rem; line-height: 1; color: var(--color-ink-faint);
+  }
+  .activity-months span { grid-row: 1; }
+  /* Three labels, not seven — the row positions are obvious once anchored.
+     Spans the month row as well, so that corner is occupied and the first
+     square cannot get auto-placed into it. */
+  .activity-days {
+    grid-column: 1; grid-row: 1 / -1; grid-template-rows: subgrid;
+    margin-right: 0.4rem;
+    font-size: 0.62rem; line-height: 12px; color: var(--color-ink-faint);
+  }
+
+  .activity-cell {
+    width: 12px; height: 12px; border-radius: 2.5px; padding: 0;
+    background: var(--color-surface-2); opacity: var(--vol, 1);
+    transition: transform 110ms ease, outline-color 110ms ease;
+    outline: 1.5px solid transparent; outline-offset: 1.5px;
+  }
+  .activity-cell[data-empty] { background: var(--color-surface-2); opacity: 1; }
+  .activity-cell[data-future] { background: transparent; pointer-events: none; }
+  /* Two steps either side of even, mixed against the card rather than white so
+     the pale end still separates from an unplayed square. Even days stay a
+     warm neutral: a strong grey in the middle of a diverging scale reads as a
+     third result, and there are only three. */
+  .activity-cell[data-score="-2"] { background: var(--color-loss); }
+  .activity-cell[data-score="-1"] { background: color-mix(in oklch, var(--color-loss) 45%, var(--color-surface-2)); }
+  .activity-cell[data-score="0"]  { background: color-mix(in oklch, var(--color-ink) 14%, var(--color-surface-2)); }
+  .activity-cell[data-score="1"]  { background: color-mix(in oklch, var(--color-win) 45%, var(--color-surface-2)); }
+  .activity-cell[data-score="2"]  { background: var(--color-win); }
+  .activity-key i[data-score="-2"] { background: var(--color-loss); }
+  .activity-key i[data-score="-1"] { background: color-mix(in oklch, var(--color-loss) 45%, var(--color-surface-2)); }
+  .activity-key i[data-score="0"]  { background: color-mix(in oklch, var(--color-ink) 14%, var(--color-surface-2)); }
+  .activity-key i[data-score="1"]  { background: color-mix(in oklch, var(--color-win) 45%, var(--color-surface-2)); }
+  .activity-key i[data-score="2"]  { background: var(--color-win); }
+
+  .activity-cell:hover, .activity-cell:focus-visible {
+    transform: scale(1.35); outline-color: var(--color-ink-block);
+  }
+  .activity-read {
+    margin-top: 1rem; font-size: 0.8rem; color: var(--color-ink-muted);
+    min-height: 1.2em;
+  }
+  .activity-facts {
+    display: grid; gap: 1.75rem 3rem; margin-top: 2.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  }
+  .activity-facts dt { font-size: 0.75rem; color: var(--color-ink-faint); }
+  .activity-facts dd {
+    margin-top: 0.35rem; font-size: 1.05rem; font-weight: 620;
+    letter-spacing: -0.015em; color: var(--color-ink);
+  }
+  .activity-facts dd span {
+    display: block; margin-top: 0.25rem;
+    font-size: 0.78rem; font-weight: 400; color: var(--color-ink-muted);
+  }
+
+  /* The first load only: squares drop in column by column, brightest at the
+     head of the fall and settling to their real colour. Delay is a per-cell
+     custom property so the whole thing is one keyframe and no timers. */
+  @keyframes activity-fall {
+    0%   { opacity: 0; transform: translateY(-140%) scale(0.6); }
+    45%  { opacity: 1; transform: translateY(0) scale(1); background: var(--color-accent); }
+    100% { opacity: var(--vol, 1); transform: none; }
+  }
+  .activity-grid.is-falling .activity-cell {
+    animation: activity-fall 620ms cubic-bezier(0.22, 0.9, 0.3, 1) both;
+    animation-delay: var(--d, 0ms);
+  }
+  .activity-grid.is-falling .activity-cell[data-future] { animation: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .activity-grid.is-falling .activity-cell { animation: none; }
+    .activity-cell:hover, .activity-cell:focus-visible { transform: none; }
+  }
+
+  /* Only ever rendered when there is something to sync, so it reads as an
+     offer rather than as a status field wearing a button's clothes. */
+  .nav-sync {
+    display: inline-flex; align-items: center; white-space: nowrap;
+    border-radius: var(--radius-pill); padding: 0.45rem 0.9rem;
+    background: var(--color-accent-wash); color: var(--color-accent);
+    font-size: 0.78rem; font-weight: 650; letter-spacing: -0.01em;
+    transition: background 130ms ease, opacity 130ms ease;
+  }
+  .nav-sync:hover:not(:disabled) { background: color-mix(in oklch, var(--color-accent) 18%, var(--color-surface)); }
+  .nav-sync:disabled { opacity: 0.6; cursor: default; }
   .dashboard-main > .rise > :last-child { border-bottom: 0; }
   .game-review-main > div:first-child {
     border-radius: 12px;
@@ -903,7 +1471,7 @@
   .opening-info {
     display: grid; gap: clamp(1.1rem, 3vw, 1.75rem); margin-top: 2rem;
     border-radius: var(--radius-panel);
-    background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 6%, var(--color-surface)), var(--color-surface));
+    background: color-mix(in srgb, var(--color-accent) 5%, var(--color-surface));
     padding: clamp(1.5rem, 4vw, 2.5rem);
     box-shadow: var(--shadow-lift);
   }
@@ -1090,10 +1658,17 @@
     display: flex; align-items: center; gap: 1rem;
     border-radius: var(--radius-panel);
     background: var(--color-surface); padding: 0.9rem;
-    box-shadow: var(--shadow-soft);
+    box-shadow: inset 0 -3px 0 rgb(0 0 0 / 0.1), 0 2px 6px rgb(35 33 29 / 0.08);
     transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1), border-color 150ms ease, box-shadow 150ms ease;
   }
-  .side-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
+  .side-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: inset 0 -3px 0 rgb(0 0 0 / 0.1), 0 10px 22px rgb(35 33 29 / 0.14);
+  }
+  .side-tile:active {
+    transform: translateY(1px);
+    box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.08), 0 1px 3px rgb(35 33 29 / 0.1);
+  }
   .side-tile.is-active {
     box-shadow: inset 0 0 0 1.5px var(--color-accent), var(--shadow-soft);
   }
@@ -1199,7 +1774,13 @@
 
 @layer components {
   /* -- auth (login / signup) --------------------------------------- */
-  .auth-shell { display: grid; place-items: center; min-height: 100dvh; padding: 2rem 1rem; }
+  /* Its own layer, like .public-shell and the product routes' `relative z-10`.
+     Redundant now that the backdrop sits at -1, and kept anyway: this is the
+     convention every other shell in the app follows. */
+  .auth-shell {
+    position: relative; z-index: 1;
+    display: grid; place-items: center; min-height: 100dvh; padding: 2rem 1rem;
+  }
   .auth-card {
     width: min(26rem, 100%);
     border-radius: var(--radius-panel);
@@ -1219,13 +1800,16 @@
   .auth-form label span { font-size: 0.72rem; font-weight: 700; color: var(--color-ink-muted); }
   /* A field on a white card cannot be outlined in a hairline and still read
      as a field. It is a recessed well instead, same as the reset form. */
-  .auth-form input {
+  /* Text fields only. Unscoped, this also caught the platform picker's radios
+     and rendered each one as a 2.8rem filled box with a giant dot in it, which
+     is exactly how /connect looked. A radio is not a field with a height. */
+  .auth-form input:not([type="radio"]):not([type="checkbox"]) {
     height: 2.8rem; border: 0; border-radius: var(--radius-control);
     background: var(--color-surface-2); color: var(--color-ink);
     padding: 0 0.85rem; font-size: 0.9rem;
     box-shadow: var(--shadow-flat);
   }
-  .auth-form input:focus {
+  .auth-form input:not([type="radio"]):not([type="checkbox"]):focus {
     outline: 0; background: var(--color-surface);
     box-shadow: 0 0 0 2px var(--color-accent);
   }
@@ -1310,6 +1894,7 @@
   .nav-menu-item .swatch { display: grid; width: 1.15rem; height: 1.15rem; overflow: hidden; border-radius: 4px; grid-template-columns: 1fr 1fr; }
   .nav-menu-item .glyph { width: 1.4rem; text-align: center; font-family: Georgia, "Times New Roman", serif; }
   .nav-menu-item .tick { margin-left: auto; color: var(--color-accent); }
+  .nav-menu-mark { display: grid; width: 1.15rem; height: 1.15rem; place-items: center; flex: 0 0 auto; }
   .nav-signout { color: var(--color-loss); }
 }
 

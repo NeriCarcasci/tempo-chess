@@ -556,7 +556,6 @@
     letter-spacing: -0.03em; line-height: 1.12; text-wrap: balance;
   }
   .closer .primary-button { margin-top: 2.4rem; }
-  .closer > p { margin-top: 1rem; color: var(--color-ink-faint); font-size: 0.8rem; }
 
   /* -- footer --------------------------------------------------------
      The footer arrives as a change of surface with a rounded shoulder,
@@ -1064,16 +1063,65 @@
   .auth-reset input:focus { outline: 0; background: var(--color-surface); box-shadow: 0 0 0 2px var(--color-accent); }
   .auth-choice { display: flex; gap: 0.5rem; border: 0; padding: 0; }
   .auth-choice legend { margin-bottom: 0.45rem; font-size: 0.72rem; font-weight: 700; color: var(--color-ink-muted); }
-  .auth-choice label {
-    display: inline-flex; align-items: center; gap: 0.45rem; flex: 1;
+  /* `fieldset.auth-choice` rather than `.auth-choice`: app.css sets
+     `.auth-form label { display: grid }` for its stacked label-over-field rows,
+     that rule has the same specificity as this one and comes later (public.css
+     is @imported at the top of app.css), so it won and stacked the platform
+     mark above its own name. The element selector is one point of specificity
+     and settles it. */
+  fieldset.auth-choice label {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+    flex: 1; min-width: 0;
     border-radius: var(--radius-control); background: var(--color-surface-2);
-    padding: 0.65rem 0.85rem; font-size: 0.85rem; font-weight: 650; cursor: pointer;
-    transition: background 130ms ease, color 130ms ease;
+    padding: 0.75rem 0.85rem; font-size: 0.86rem; font-weight: 650; cursor: pointer;
+    color: var(--color-ink-muted);
+    transition: background 130ms ease, color 130ms ease, box-shadow 130ms ease;
   }
-  .auth-choice label:has(input:checked) {
+  fieldset.auth-choice label:hover { background: var(--color-surface-3); color: var(--color-ink); }
+  fieldset.auth-choice label:has(input:checked) {
     background: var(--color-accent-wash); color: var(--color-accent);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-accent) 40%, transparent);
   }
-  .auth-choice input { accent-color: var(--color-accent); }
+  .auth-choice svg { flex: 0 0 auto; opacity: 0.8; }
+  fieldset.auth-choice label:has(input:checked) svg { opacity: 1; }
+  /* The input stays for keyboard and screen readers; only its box goes, so the
+     card is the selection and arrow keys still move through the group. */
+  .auth-choice input {
+    position: absolute; width: 1px; height: 1px;
+    clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+  }
+  fieldset.auth-choice label:has(input:focus-visible) { outline: 2px solid var(--color-ink); outline-offset: 2px; }
+  /* -- the account we found, for you to confirm ----------------------
+     Shown before anything is linked. The whole point is that you can recognise
+     it at a glance, so it carries the platform mark, the rating and the profile
+     link rather than just echoing the name back. */
+  .found {
+    display: grid; align-items: center; gap: 0.75rem;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    margin-top: 1.4rem;
+    border-radius: var(--radius-panel); background: var(--color-surface-2);
+    padding: 0.85rem 1rem;
+  }
+  .found-mark {
+    display: grid; width: 2.4rem; height: 2.4rem; place-items: center;
+    border-radius: var(--radius-control); background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
+  }
+  .found-who { display: grid; gap: 0.1rem; min-width: 0; }
+  .found-who b {
+    font-size: 0.98rem; font-weight: 680; letter-spacing: -0.02em; color: var(--color-ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .found-who i {
+    font-style: normal; font-family: var(--font-mono); font-size: 0.68rem;
+    color: var(--color-ink-faint);
+  }
+  .found-link {
+    font-size: 0.74rem; font-weight: 650; color: var(--color-ink-muted);
+    text-decoration: underline; text-underline-offset: 0.2rem; white-space: nowrap;
+  }
+  .found-link:hover { color: var(--color-accent); }
+
   .auth-note a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 0.2rem; }
 
   /* -- account: billing + identity ----------------------------------- */
@@ -1093,6 +1141,45 @@
   .account-billing-msg { color: var(--color-accent); font-weight: 650; }
   .account-billing-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem; }
   .account-signout { color: var(--color-loss); }
+
+  /* The linked chess accounts, on the account page: a list you act on, since
+     one of them is what every other page is reading. */
+  .account-linked { display: grid; gap: 0.4rem; margin-top: 0.8rem; }
+  .account-linked li {
+    display: flex; align-items: center; gap: 0.6rem;
+    border: 1px solid var(--color-line); border-radius: var(--radius-control);
+    padding: 0.5rem 0.7rem;
+  }
+  .account-linked li.is-active { border-color: var(--color-accent); }
+  .account-linked-mark {
+    display: grid; width: 1.6rem; height: 1.6rem; place-items: center; flex: 0 0 auto;
+    color: var(--color-ink-muted);
+  }
+  .account-linked-who { display: flex; align-items: baseline; gap: 0.45rem; min-width: 0; flex: 1 1 auto; }
+  .account-linked-who b { font-size: 0.86rem; font-weight: 650; color: var(--color-ink); }
+  .account-linked-who small {
+    color: var(--color-ink-faint); font-size: 0.66rem;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .account-linked-badge {
+    color: var(--color-accent); font-size: 0.66rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+
+  /* The same list on the connect form, where it is a reminder rather than a
+     control: this is what "another" is being added to. */
+  .auth-linked { display: grid; gap: 0.35rem; margin-top: 1rem; }
+  .auth-linked li {
+    display: flex; align-items: center; gap: 0.5rem;
+    border-radius: var(--radius-control); background: var(--color-surface-2);
+    padding: 0.45rem 0.6rem;
+    color: var(--color-ink-muted);
+  }
+  .auth-linked b { color: var(--color-ink); font-size: 0.84rem; font-weight: 650; }
+  .auth-linked small {
+    margin-left: auto; font-size: 0.66rem;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-ink-faint);
+  }
 }
 
 /* Motion is welcome, but it always has a job and it always has an off switch. */

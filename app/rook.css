@@ -1,0 +1,357 @@
+/* ================================================================== */
+/* Rook mascot motion.                                                 */
+/*                                                                     */
+/* The markup lives in app/components/RookMascot.tsx; everything that   */
+/* moves lives here. Two tiers:                                        */
+/*                                                                     */
+/*   moods  — idle / curious / sleeping. Loop forever, low amplitude.   */
+/*   cues   — press / success / error / spin / launch. Play once over   */
+/*            the top and hand the piece back to its mood.             */
+/*                                                                     */
+/* Cue rules sit after mood rules on purpose: both target .rk-piece at  */
+/* the same specificity, so source order is what lets a cue win.       */
+/* ================================================================== */
+
+@layer components {
+  .rk {
+    display: block;
+    /* Launched merlons leave the viewBox. Without this the SVG viewport
+       clips them and the whole gag lands as three pieces vanishing. */
+    overflow: visible;
+    /* The spin is a real turn about the vertical axis, so the group needs
+       a camera. Tight enough to read as depth at mascot sizes. */
+    perspective: 720px;
+
+    /* Repaint the mascot by overriding these on any ancestor. The collar
+       tracks the product accent so a re-theme carries it along. */
+    --rk-ink: var(--color-ink, #23211d);
+    --rk-shell: #fbe9e1;
+    --rk-shell-shade: #f3d0c1;
+    --rk-collar: var(--color-accent, #cf5730);
+    --rk-collar-shade: #ad4520;
+    --rk-stone: #cbbfa6;
+    --rk-stone-shade: #b1a184;
+  }
+
+  /* fill-box, so every percentage below is a share of the thing being
+     moved rather than of the whole 280x350 canvas. Origins sit on the
+     floor: a mascot that squashes should squash onto its own base. */
+  .rk-piece,
+  .rk-merlon,
+  .rk-zzz {
+    transform-box: fill-box;
+  }
+  .rk-piece,
+  .rk-merlon {
+    transform-origin: 50% 100%;
+  }
+  .rk-zzz {
+    transform-origin: 50% 100%;
+    opacity: 0;
+  }
+  /* Only wanted mid-flight; see merlonCap() in RookMascot.tsx. */
+  .rk-merlon-cap {
+    opacity: 0;
+  }
+
+  /* -- moods --------------------------------------------------------- */
+
+  /* Breath, not a bob. It reads at 32px and is invisible at a glance,
+     which is the point of a resting state. */
+  @keyframes rk-breathe {
+    0%,
+    100% {
+      transform: translateY(0) scale(1, 1);
+    }
+    50% {
+      transform: translateY(-1.8%) scale(0.992, 1.014);
+    }
+  }
+
+  /* A perk-up, then a look left, then right, then square again. The
+     holds are what make it read as attention rather than as a wobble. */
+  @keyframes rk-curious {
+    0%,
+    6% {
+      transform: translateY(0) rotate(0deg);
+    }
+    15% {
+      transform: translateY(-4%) rotate(-2deg);
+    }
+    26%,
+    42% {
+      transform: translateY(0) rotate(-8deg);
+    }
+    56%,
+    72% {
+      transform: translateY(0) rotate(6.5deg);
+    }
+    86%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+  }
+
+  /* Slower and deeper than idle, with a permanent list to one side. */
+  @keyframes rk-sleep {
+    0%,
+    100% {
+      transform: translateY(1.6%) rotate(-5deg) scale(1.01, 0.982);
+    }
+    50% {
+      transform: translateY(0) rotate(-5deg) scale(0.995, 1.014);
+    }
+  }
+
+  @keyframes rk-zzz {
+    0% {
+      opacity: 0;
+      transform: translate(0, 12%) scale(0.6);
+    }
+    22%,
+    62% {
+      opacity: 0.85;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(50%, -110%) scale(1.1);
+    }
+  }
+
+  .rk[data-state="idle"] .rk-piece {
+    animation: rk-breathe 3.6s ease-in-out infinite;
+  }
+  .rk[data-state="curious"] .rk-piece {
+    animation: rk-curious 4.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .rk[data-state="sleeping"] .rk-piece {
+    animation: rk-sleep 5.4s ease-in-out infinite;
+  }
+  .rk[data-state="sleeping"] .rk-zzz {
+    animation: rk-zzz 2.9s ease-out infinite;
+    animation-delay: calc(var(--i) * 0.62s);
+  }
+
+  /* -- cues ---------------------------------------------------------- */
+
+  /* Squash on the way down, a small overshoot on the way back. */
+  @keyframes rk-press {
+    0% {
+      transform: scale(1, 1);
+    }
+    30% {
+      transform: scale(1.09, 0.87);
+    }
+    58% {
+      transform: scale(0.965, 1.045);
+    }
+    80% {
+      transform: scale(1.015, 0.985);
+    }
+    100% {
+      transform: scale(1, 1);
+    }
+  }
+
+  /* Anticipate, leap, stretch at the top, land heavy, settle. */
+  @keyframes rk-hop {
+    0% {
+      transform: translateY(0) scale(1, 1);
+    }
+    16% {
+      transform: translateY(0) scale(1.11, 0.87);
+    }
+    40% {
+      transform: translateY(-20%) scale(0.94, 1.1);
+    }
+    58% {
+      transform: translateY(-24%) scale(0.98, 1.03);
+    }
+    80% {
+      transform: translateY(0) scale(1.08, 0.9);
+    }
+    92% {
+      transform: translateY(0) scale(0.98, 1.02);
+    }
+    100% {
+      transform: translateY(0) scale(1, 1);
+    }
+  }
+
+  /* The merlons lag the leap and land after it — the piece arrives, its
+     hat catches up. Staggered left to right off --i. Capped at -14%: any
+     further and the side edges clear the notch-floor stroke they butt
+     against, and the crown opens a seam at each merlon's base. */
+  @keyframes rk-merlon-pop {
+    0%,
+    22% {
+      transform: translateY(0);
+    }
+    46% {
+      transform: translateY(-14%);
+    }
+    72% {
+      transform: translateY(3%);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
+
+  /* Decaying shake. Rotation as well as translation, or it reads as the
+     page moving rather than the mascot refusing. */
+  @keyframes rk-shake {
+    0%,
+    100% {
+      transform: translateX(0) rotate(0deg);
+    }
+    14% {
+      transform: translateX(-4.5%) rotate(-3.5deg);
+    }
+    30% {
+      transform: translateX(4%) rotate(3deg);
+    }
+    47% {
+      transform: translateX(-3%) rotate(-2.2deg);
+    }
+    64% {
+      transform: translateX(2.1%) rotate(1.4deg);
+    }
+    82% {
+      transform: translateX(-0.9%) rotate(-0.6deg);
+    }
+  }
+
+  /* Crouch, turn, land. translateY before rotateY so the lift stays
+     vertical instead of being swung around by the turn. */
+  @keyframes rk-spin {
+    0% {
+      transform: translateY(0) rotateY(0deg) scale(1, 1);
+    }
+    14% {
+      transform: translateY(0) rotateY(0deg) scale(1.07, 0.9);
+    }
+    32% {
+      transform: translateY(-9%) rotateY(90deg) scale(1, 1);
+    }
+    62% {
+      transform: translateY(-9%) rotateY(250deg) scale(1, 1);
+    }
+    84% {
+      transform: translateY(0) rotateY(360deg) scale(1.06, 0.92);
+    }
+    100% {
+      transform: translateY(0) rotateY(360deg) scale(1, 1);
+    }
+  }
+
+  /* The body's half of the launch: recoil under the merlons leaving,
+     then hold still while they are in the air. */
+  @keyframes rk-launch-body {
+    0% {
+      transform: translateY(0) scale(1, 1);
+    }
+    12% {
+      transform: translateY(3.5%) scale(1.07, 0.92);
+    }
+    30% {
+      transform: translateY(0) scale(0.97, 1.03);
+    }
+    55%,
+    100% {
+      transform: translateY(0) scale(1, 1);
+    }
+  }
+
+  /* A merlon has no bottom edge while it is seated on the crown. It needs
+     one the moment it is airborne and you can see underneath it, and it
+     has to be gone again before it lands. The windows are timed off the
+     merlon's own flight below, and share its stagger. */
+  @keyframes rk-cap {
+    0%,
+    12% {
+      opacity: 0;
+    }
+    20%,
+    84% {
+      opacity: 1;
+    }
+    93%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  /* Per-keyframe easing, because a launch is three different motions:
+     a crouch, a fast climb that decelerates, and a fall that does not.
+     Direction and spin come in per merlon as --rk-dx/dy/rot. */
+  @keyframes rk-launch-merlon {
+    0% {
+      transform: translate(0, 0) rotate(0deg);
+      animation-timing-function: cubic-bezier(0.4, 0, 0.9, 0.5);
+    }
+    10% {
+      transform: translate(0, 10%) rotate(0deg);
+      animation-timing-function: cubic-bezier(0.05, 0.8, 0.3, 1);
+    }
+    46% {
+      transform: translate(var(--rk-dx), var(--rk-dy)) rotate(var(--rk-rot));
+      animation-timing-function: ease-in-out;
+    }
+    56% {
+      transform: translate(var(--rk-dx), var(--rk-dy)) rotate(var(--rk-rot));
+      animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0.4);
+    }
+    88% {
+      transform: translate(0, 8%) rotate(0deg);
+      animation-timing-function: cubic-bezier(0.2, 1.7, 0.5, 1);
+    }
+    100% {
+      transform: translate(0, 0) rotate(0deg);
+    }
+  }
+
+  .rk[data-state="press"] .rk-piece {
+    animation: rk-press 380ms cubic-bezier(0.3, 1.2, 0.4, 1) both;
+  }
+  .rk[data-state="success"] .rk-piece {
+    animation: rk-hop 760ms cubic-bezier(0.3, 0.9, 0.4, 1) both;
+  }
+  .rk[data-state="success"] .rk-merlon {
+    animation: rk-merlon-pop 760ms cubic-bezier(0.3, 0.9, 0.4, 1) both;
+    animation-delay: calc(var(--i) * 55ms);
+  }
+  .rk[data-state="error"] .rk-piece {
+    animation: rk-shake 540ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  }
+  .rk[data-state="spin"] .rk-piece {
+    animation: rk-spin 900ms cubic-bezier(0.5, 0, 0.2, 1) both;
+  }
+  .rk[data-state="launch"] .rk-piece {
+    animation: rk-launch-body 1200ms ease-out both;
+  }
+  .rk[data-state="launch"] .rk-merlon {
+    animation: rk-launch-merlon 1200ms both;
+    animation-delay: calc(var(--i) * 70ms);
+  }
+  .rk[data-state="launch"] .rk-merlon-cap {
+    animation: rk-cap 1200ms both;
+    animation-delay: calc(var(--i) * 70ms);
+  }
+
+  /* -- reduced motion -------------------------------------------------
+     Everything stops. The mascot is decoration in every place it is
+     used, so a still rook is a complete fallback — except for sleeping,
+     where the z's are the only thing saying "asleep" and have to stay
+     on screen rather than animate into view. */
+  @media (prefers-reduced-motion: reduce) {
+    .rk .rk-piece,
+    .rk .rk-merlon,
+    .rk .rk-zzz {
+      animation: none !important;
+    }
+    .rk[data-state="sleeping"] .rk-zzz {
+      opacity: 0.85;
+    }
+  }
+}

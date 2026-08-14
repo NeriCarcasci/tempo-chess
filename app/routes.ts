@@ -25,5 +25,7 @@ export default [
   route("play", "routes/play.tsx"),
   route("train", "routes/train.tsx"),
   route("dev/operations", "routes/operations.tsx"),
+  route("dev/preview-dense", "routes/__preview-dense.tsx"),
+  route("dev/preview-rook", "routes/__preview-rook.tsx"),
   route("game/:id", "routes/game.tsx"),
 ] satisfies RouteConfig;

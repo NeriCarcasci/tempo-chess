@@ -8,6 +8,8 @@ import { fetchRepertoire, toggleRepertoireOpening } from "../lib/account";
 import { lessonForFamily } from "../lib/lessons";
 import { InfoTip } from "../components/InfoTip";
 import { OpeningExplorer } from "../components/OpeningExplorer";
+import { TearSheet } from "../components/TearSheet";
+import { deriveTearSheet, type TearSheet as TearSheetModel } from "../lib/tearSheet";
 import { TopNav } from "../components/TopNav";
 import { loadBoardTheme } from "../lib/boardThemes";
 import { loadPieceSet } from "../lib/pieceSets";
@@ -21,9 +23,19 @@ import {
 
 interface ExplorerData {
   needsSide: false;
+  kind: "explorer";
   explorer: OpeningExplorerData & { error?: string };
   coverage: PlayerCoverage | null;
   initialFamily: string | null;
+  color: "white" | "black";
+}
+
+interface SheetData {
+  needsSide: false;
+  /** The sheet stands alone: pick a side, then read that side's grid. */
+  kind: "sheet";
+  sheet: TearSheetModel;
+  username: string;
   color: "white" | "black";
 }
 
@@ -42,11 +54,33 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     ? url.pathname.split("/").filter(Boolean).at(-1)
     : null;
 
-  // No side chosen yet — the page is just the White/Black start gate.
+  // Side first, as it always was — you study one repertoire at a time, and the
+  // sheet needs the whole page once you have chosen.
   if (color !== "white" && color !== "black" && !familySlug) {
     return { needsSide: true as const };
   }
   const side: "white" | "black" = color === "black" ? "black" : "white";
+
+  // A chosen side with no family yet: the sheet is the page. Drilling into a
+  // line goes to /openings/:slug, which is where the explorer lives.
+  if (!familySlug) {
+    const sheetKey = `openings:sheet:${session.username}:${side}`;
+    const cachedSheet = getCached<SheetData>(sheetKey, 60_000);
+    if (cachedSheet) return cachedSheet;
+
+    const query = new URLSearchParams({ username: session.username, color: side });
+    const data = await apiMaybe<OpeningExplorerData>(`/opening-explorer?${query}`);
+    const graph = data?.graph ?? null;
+    const result: SheetData = {
+      needsSide: false,
+      kind: "sheet",
+      sheet: deriveTearSheet(side === "white" ? graph : null, side === "black" ? graph : null),
+      username: session.username,
+      color: side,
+    };
+    setCached(sheetKey, result);
+    return result;
+  }
 
   const query = new URLSearchParams(url.search);
   query.set("username", session.username);
@@ -72,7 +106,7 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     if (matched) initialFamily = matched.family;
   }
 
-  const result: ExplorerData = { needsSide: false, explorer, coverage, initialFamily, color: side };
+  const result: ExplorerData = { needsSide: false, kind: "explorer", explorer, coverage, initialFamily, color: side };
   setCached(cacheKey, result);
   return result;
 }
@@ -239,6 +273,14 @@ function KingTile({ color, label, blurb }: { color: "white" | "black"; label: st
 }
 
 /** The start gate: choosing a side is the only thing on the page. */
+/**
+ * The page's instrument. Every line the player walks, how deep their book
+ * runs, and the single square worth starting from — with the two sides shown
+ * together rather than behind a choice made before there was anything to see.
+ *
+ * Falls back to the old side tiles when there is nothing to draw yet: a sheet
+ * of entirely empty squares tells a new player less than a door does.
+ */
 function SideGate() {
   return (
     <div className="relative z-10 min-h-dvh">
@@ -255,6 +297,33 @@ function SideGate() {
             <KingTile color="black" label="As Black" blurb="Your defences to 1.e4 / 1.d4" />
           </div>
         </div>
+      </main>
+    </div>
+  );
+}
+
+/**
+ * One side's repertoire as the whole page: every line it walks, and how far
+ * the book runs before it gives out.
+ */
+function SheetView({ sheet, username, color }: SheetData) {
+  const [params] = useSearchParams();
+  const empty = sheet.sections.length === 0;
+  return (
+    <div className="relative z-10 min-h-dvh">
+      <TopNav current="openings" />
+      <main className="tsheet-page">
+        <SideBreadcrumb playingAs={color} params={params} />
+        {/* No heading, no lede. The sheet opens on the task the way a game
+            opens on the next lesson — chrome would only push it down. */}
+        {empty ? (
+          <header className="tsheet-page-head">
+            <h1>Nothing to read yet</h1>
+            <p>Your first rows appear once Tempo has read about ten games from this side.</p>
+          </header>
+        ) : (
+          <TearSheet sheet={sheet} username={username} />
+        )}
       </main>
     </div>
   );
@@ -362,10 +431,13 @@ function FamilyChips({
   );
 }
 
-type ExplorerLoaderData = Extract<Awaited<ReturnType<typeof clientLoader>>, { needsSide: false }>;
+type ExplorerLoaderData = Extract<Awaited<ReturnType<typeof clientLoader>>, { kind: "explorer" }>;
 
 export default function OpeningReview({ loaderData }: Route.ComponentProps) {
   if (loaderData.needsSide) return <SideGate />;
+  if ("kind" in loaderData && loaderData.kind === "sheet") {
+    return <SheetView {...loaderData} />;
+  }
   return <ExplorerView loaderData={loaderData} />;
 }
 

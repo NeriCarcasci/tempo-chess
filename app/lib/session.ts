@@ -1,5 +1,6 @@
 import { redirect } from "react-router";
 import { getSupabase, supabaseConfigured } from "./supabase";
+import { invalidateCache } from "./loaderCache";
 
 /**
  * The signed-in user, as the app sees them.
@@ -54,6 +55,10 @@ export interface Session {
   email: string | null;
   /** The chess account whose games back the study surfaces. */
   username: string;
+  /** The site that account plays on. Study surfaces read live data from it. */
+  platform: "lichess" | "chesscom";
+  /** The full row for `username`, or null before anything is linked. */
+  activeAccount: LinkedAccount | null;
   accounts: LinkedAccount[];
   subscription: Subscription;
   limits: PlanLimits;
@@ -63,6 +68,62 @@ export interface Session {
 const API = import.meta.env.DEV
   ? "/api"
   : (import.meta.env.VITE_ENGINE_URL ?? import.meta.env.VITE_API_URL ?? "/api");
+
+/**
+ * Which linked account the product is currently looking at.
+ *
+ * A user may play on both sites, or under two names on one, and the API has
+ * always been able to serve any account they have linked — every study endpoint
+ * takes a `?username=`. What was missing was a way to *say* which one. Without
+ * it the client silently used the first row it was given, so linking a second
+ * account imported its games into a corner of the database nothing could reach.
+ *
+ * The choice lives in localStorage rather than the database because it is a
+ * per-device view preference, not account state: the same person can have their
+ * laptop on one account and their phone on the other. Keyed by user id so two
+ * people sharing a browser do not inherit each other's choice, and validated
+ * against the linked rows on every load so an unlinked account falls back to
+ * the first one rather than leaving the app pointed at nothing.
+ */
+const ACTIVE_ACCOUNT_KEY = "tempo.activeAccount";
+
+function readStoredAccountId(userId: string): string | null {
+  try {
+    return localStorage.getItem(`${ACTIVE_ACCOUNT_KEY}.${userId}`);
+  } catch {
+    return null; // private mode, or storage disabled — fall back to the first
+  }
+}
+
+function writeStoredAccountId(userId: string, accountId: string | null): void {
+  try {
+    const key = `${ACTIVE_ACCOUNT_KEY}.${userId}`;
+    if (accountId) localStorage.setItem(key, accountId);
+    else localStorage.removeItem(key);
+  } catch {
+    /* the choice just does not survive the reload */
+  }
+}
+
+function resolveActive(userId: string, accounts: LinkedAccount[]): LinkedAccount | null {
+  const stored = readStoredAccountId(userId);
+  const match = stored ? accounts.find((a) => a.id === stored) : undefined;
+  if (stored && !match) writeStoredAccountId(userId, null); // unlinked since
+  return match ?? accounts[0] ?? null;
+}
+
+/**
+ * Point the product at one of the user's linked accounts.
+ *
+ * Everything downstream is keyed by username — loader caches included — so the
+ * session and the cache both have to go before the next loader runs. Callers
+ * follow this with a navigation.
+ */
+export function setActiveAccount(userId: string, accountId: string): void {
+  writeStoredAccountId(userId, accountId);
+  current = null;
+  invalidateCache();
+}
 
 // Loaders run before render, so components can read the last resolved session
 // synchronously instead of every nav bar doing its own async fetch.
@@ -142,10 +203,14 @@ async function loadSession(): Promise<Session | null> {
     usage: UsageSummary;
   };
 
+  const active = resolveActive(body.user.id, body.accounts);
+
   current = {
     userId: body.user.id,
     email: body.user.email,
-    username: body.accounts[0]?.username ?? "",
+    username: active?.username ?? "",
+    platform: active?.platform ?? "lichess",
+    activeAccount: active,
     accounts: body.accounts,
     subscription: body.subscription,
     limits: body.limits,

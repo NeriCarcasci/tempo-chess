@@ -4,6 +4,7 @@ import { classifyGamePhases } from "../analysis/phase.js";
 import { ANALYSIS_PROFILES, Engine, type AnalysisProfile, type PositionEval } from "../engine/stockfish.js";
 import { selectCriticalPositions, type CriticalPositionCandidate, type MoveJudgment } from "../engine/critical-position.js";
 import { fetchLichessGames } from "../ingest/lichess.js";
+import { fetchChesscomGames } from "../ingest/chesscom.js";
 import { normalizeProviderUsername } from "../ingest/canonical.js";
 import type { NormalizedGame, NormalizedMove } from "../ingest/types.js";
 import { classifyTaskFailure } from "./state.js";
@@ -74,12 +75,19 @@ export interface PlayerCoverage {
   importLimit: number;
 }
 
-async function ensureAccount(username: string, ownerId?: string): Promise<{ userId: string; accountId: string }> {
+async function ensureAccount(
+  username: string,
+  ownerId?: string,
+  platform: Platform = "lichess",
+): Promise<{ userId: string; accountId: string }> {
   const normalized = normalizeProviderUsername(username);
   if (ownerId) {
+    // Matched on platform as well as name. Hardcoding 'lichess' here meant a
+    // linked Chess.com account could never be found, and the import failed with
+    // "not linked to this account" for a name that was plainly in the table.
     const rows = await client`
       select id from linked_accounts
-      where user_id = ${ownerId} and platform = 'lichess' and normalized_username = ${normalized}
+      where user_id = ${ownerId} and platform = ${platform} and normalized_username = ${normalized}
       limit 1`;
     if (!rows[0]) throw new Error(`"${username}" is not linked to this account`);
     return { userId: ownerId, accountId: String(rows[0].id) };
@@ -129,10 +137,25 @@ async function getLichessAvailableGames(username: string): Promise<number | null
   }
 }
 
-export async function getLichessCoverage(username: string, ownerId?: string): Promise<PlayerCoverage> {
-  const { userId, accountId } = await ensureAccount(username, ownerId);
+/**
+ * How much of a player's history we hold, and whether an import is running.
+ *
+ * The platform is a parameter for the same reason it is one on the import path:
+ * a linked account is only found by name *and* site. Defaulting to Lichess here
+ * meant every Chess.com account's coverage call threw "not linked to this
+ * account" and 404'd, so the hub silently lost its import prompts for anyone on
+ * that side.
+ */
+export async function getLichessCoverage(
+  username: string,
+  ownerId?: string,
+  platform: Platform = "lichess",
+): Promise<PlayerCoverage> {
+  const { userId, accountId } = await ensureAccount(username, ownerId, platform);
   const [availableGamesRaw, storedRows, analyzedRows, activeRows, latestRows] = await Promise.all([
-    getLichessAvailableGames(username),
+    // Only Lichess publishes a lifetime game count. For Chess.com this stays
+    // unknown and the total falls back to what we have imported.
+    platform === "lichess" ? getLichessAvailableGames(username) : Promise.resolve(null),
     client`select count(*)::int as count from games
       where user_id = ${userId} and account_id = ${accountId}`,
     client`select count(distinct t.game_id)::int as count
@@ -174,8 +197,16 @@ export async function getLichessCoverage(username: string, ownerId?: string): Pr
   };
 }
 
-export async function createLichessImport(username: string, requestedGames: number, ownerId?: string): Promise<ImportProgress> {
-  const { userId, accountId } = await ensureAccount(username, ownerId);
+/** A platform we can pull an archive from. */
+export type Platform = "lichess" | "chesscom";
+
+export async function createImport(
+  username: string,
+  requestedGames: number,
+  ownerId?: string,
+  platform: Platform = "lichess",
+): Promise<ImportProgress> {
+  const { userId, accountId } = await ensureAccount(username, ownerId, platform);
   const active = await client.unsafe(`${IMPORT_SELECT} where i.account_id = $1
     and i.status in ('queued', 'ingesting', 'analyzing')
     order by i.created_at desc limit 1`, [accountId]);
@@ -190,8 +221,21 @@ export async function createLichessImport(username: string, requestedGames: numb
       ${requestedGames * 70 * DEFAULT_ANALYSIS_BUDGET.estimatedScreeningCostPerPositionUsd})
     returning id`;
   const id = String(rows[0]!.id);
-  void ingestImport(id, userId, accountId, username, requestedGames).catch((error) => failImport(id, error));
+  void ingestImport(id, userId, accountId, username, requestedGames, platform)
+    .catch((error) => failImport(id, error));
   return (await getImport(id))!;
+}
+
+/**
+ * Lichess-only alias, kept because the cohort runner only ever wants Lichess and
+ * reads better saying so.
+ */
+export async function createLichessImport(
+  username: string,
+  requestedGames: number,
+  ownerId?: string,
+): Promise<ImportProgress> {
+  return createImport(username, requestedGames, ownerId, "lichess");
 }
 
 export async function cancelImport(id: string, userId?: string): Promise<ImportProgress | null> {
@@ -249,9 +293,21 @@ async function upsertGame(userId: string, accountId: string, game: NormalizedGam
   });
 }
 
-async function ingestImport(id: string, userId: string, accountId: string, username: string, max: number): Promise<void> {
+async function ingestImport(
+  id: string,
+  userId: string,
+  accountId: string,
+  username: string,
+  max: number,
+  platform: Platform = "lichess",
+): Promise<void> {
   await client`update analysis_imports set status = 'ingesting', started_at = now(), updated_at = now() where id = ${id}`;
-  for await (const game of fetchLichessGames(username, { max })) {
+  // Both fetchers are AsyncGenerator<NormalizedGame> over (username, { max }),
+  // so the only thing that varies between platforms is this line.
+  const games = platform === "chesscom"
+    ? fetchChesscomGames(username, { max })
+    : fetchLichessGames(username, { max });
+  for await (const game of games) {
     const cancelled = await client`select cancel_requested from analysis_imports where id = ${id}`;
     if (cancelled[0]?.cancel_requested) break;
     const gameId = await upsertGame(userId, accountId, game);
