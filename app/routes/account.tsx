@@ -21,7 +21,7 @@ interface AccountData {
 }
 
 export function meta() {
-  return [{ title: "Your account · Tempo" }];
+  return [{ title: "Your account · Forma" }];
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
@@ -205,7 +205,7 @@ function BillingPanel({
                         className="chip-btn"
                         onClick={() => {
                           setActiveAccount(session.userId, account.id);
-                          location.href = "/dashboard";
+                          location.href = "/today";
                         }}
                       >
                         Use this
@@ -286,7 +286,7 @@ export default function Account({ loaderData }: Route.ComponentProps) {
             <div>
               <p className="eyebrow">Fix your mistakes</p>
               <h2>Turn your slip-ups into fixed lines</h2>
-              <p>Tempo found the opening moments where the engine beats the move you actually played. Drill the better move until it's automatic.</p>
+              <p>Forma found the opening moments where the engine beats the move you actually played. Drill the better move until it's automatic.</p>
             </div>
             <div className="account-fix-actions">
               {mistakes.white > 0 ? (

@@ -21,7 +21,7 @@ const progress = (item: AnalysisImport) => {
 };
 
 export function meta() {
-  return [{ title: "Analysis Operations · Tempo" }];
+  return [{ title: "Analysis Operations · Forma" }];
 }
 
 /** Ops tooling reads the import pipeline, so it needs a signed-in user too. */
@@ -112,7 +112,7 @@ export default function Operations() {
 
   return <div className="relative z-10 min-h-dvh">
     <header className="border-b border-line bg-bg/80 backdrop-blur-xl"><div className="mx-auto flex h-16 max-w-[1240px] items-center justify-between px-5 sm:px-8">
-      <Link to="/dashboard" className="text-lg font-black uppercase tracking-[-0.05em]">Tempo <span className="text-accent">Chess</span></Link>
+      <Link to="/today" className="text-lg font-black uppercase tracking-[-0.05em]">Forma</Link>
       <div className="flex items-center gap-2"><span className="h-2 w-2 animate-pulse rounded-full bg-accent" /><span className="cap text-ink-muted">Engine online</span></div>
     </div></header>
     <main className="mx-auto max-w-[1240px] px-5 pb-24 pt-12 sm:px-8 sm:pt-16">

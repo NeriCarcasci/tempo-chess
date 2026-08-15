@@ -179,7 +179,7 @@ export function formatMarkdownReport(report: BenchmarkReport): string {
   const usd = (value: number) => `$${value.toFixed(4)}`;
   const microUsd = (value: number) => `$${value.toFixed(6)}`;
   const lines = [
-    "# Tempo engine quality-cost benchmark",
+    "# Forma engine quality-cost benchmark",
     "",
     `Generated: ${report.generatedAt}`,
     `Adapter: ${report.adapter}`,

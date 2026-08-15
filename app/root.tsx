@@ -9,10 +9,12 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { EarlyAccessBoundary, earlyAccessEnabled } from "./components/EarlyAccessGate";
 import "@fontsource-variable/manrope";
 import "@fontsource-variable/newsreader";
 import "@fontsource-variable/jetbrains-mono";
 import "./app.css";
+import "./early-access.css";
 
 export const links: Route.LinksFunction = () => [];
 
@@ -23,6 +25,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#f4f1ea" />
+        {earlyAccessEnabled ? <meta name="robots" content="noindex, nofollow" /> : null}
         <Meta />
         <Links />
       </head>
@@ -44,7 +47,7 @@ function NavProgress() {
 }
 
 export default function App() {
-  return <Outlet />;
+  return <EarlyAccessBoundary><Outlet /></EarlyAccessBoundary>;
 }
 
 export function HydrateFallback() {

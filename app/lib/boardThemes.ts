@@ -12,7 +12,7 @@ export const BOARD_THEMES: BoardTheme[] = [
   { id: "ocean", name: "Ocean", light: "#d3dce8", dark: "#547a9e" },
   { id: "ash", name: "Ash", light: "#d2ccbf", dark: "#6b665c" },
   { id: "midnight", name: "Midnight", light: "#9aa1af", dark: "#383d47" },
-  { id: "tempo", name: "Tempo", light: "#f7e6d2", dark: "#f58a24" },
+  { id: "tempo", name: "Forma", light: "#f7e6d2", dark: "#f58a24" },
 ];
 
 // v2: default moved from the loud "tempo" orange to a calm warm "maple".

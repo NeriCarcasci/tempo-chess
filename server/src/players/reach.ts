@@ -2,7 +2,7 @@ import { client } from "../db/client.js";
 import { TtlCache } from "../cache.js";
 
 /**
- * How much chess Tempo has actually read. This is the only number the marketing
+ * How much chess Forma has actually read. This is the only number the marketing
  * site is allowed to quote about our reach, and it is counted from rows rather
  * than typed into a component, so the landing page cannot drift away from the
  * truth (see DESIGN.md, "Public copy rules").

@@ -1,4 +1,4 @@
-# Tempo Chess
+# Forma
 
 Automatic multi-game chess analysis for chess.com and Lichess. Beyond single-game
 review: per-player stats, accurate blunder/mistake capture, a plain-English reason

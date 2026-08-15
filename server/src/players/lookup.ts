@@ -11,7 +11,7 @@
  * data their own profile pages serve.
  */
 
-const UA = "tempo-chess (+https://tempo-chess-9uf.pages.dev)";
+const UA = "forma-chess (+https://tempo-chess-9uf.pages.dev)";
 
 export interface PlatformAccount {
   platform: "lichess" | "chesscom";

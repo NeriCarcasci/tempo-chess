@@ -1,5 +1,5 @@
 /**
- * Tempo's identity: the crown of a rook, plus the wordmark.
+ * Forma's identity: the crown of a rook, plus the wordmark.
  *
  * The turret only, three merlons over a tapered wall on a flared plinth. A whole
  * rook has to shrink its own body to fit a 20px nav, which reads as a squashed
@@ -134,7 +134,7 @@ export function Logo({ size = 22 }: { size?: number }) {
   return (
     <span className="logo">
       <RookMark size={size} className="logo-mark" />
-      <span className="logo-word">Tempo</span>
+      <span className="logo-word">Forma</span>
     </span>
   );
 }

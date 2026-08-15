@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200" role="img" aria-labelledby="title desc">
+  <title id="title">Forma rook logo</title>
+  <desc id="desc">A warm orange rook crown on a cream square.</desc>
+  <rect width="200" height="200" rx="42" fill="#f4f2ee"/>
+  <path d="M46 48 Q46 42 52 42 H75 Q81 42 81 48 V68 H91 V48 Q91 42 97 42 H103 Q109 42 109 48 V68 H119 V48 Q119 42 125 42 H148 Q154 42 154 48 L143 126 Q142 134 134 134 H66 Q58 134 57 126 Z" fill="#cf5730"/>
+  <path d="M54 132 Q54 126 60 126 H140 Q146 126 146 132 V151 Q146 158 139 158 H61 Q54 158 54 151 Z" fill="#cf5730"/>
+  <path d="M68 117 H132" fill="none" stroke="#f4f2ee" stroke-width="7" stroke-linecap="round" opacity=".72"/>
+</svg>

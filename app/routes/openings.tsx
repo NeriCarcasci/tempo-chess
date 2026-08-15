@@ -41,8 +41,8 @@ interface SheetData {
 
 export function meta() {
   return [
-    { title: "Opening Explorer · Tempo" },
-    { name: "description", content: "Walk every branch of your own opening repertoire and see where it goes wrong." },
+    { title: "Openings · Forma" },
+    { name: "description", content: "Every line in your repertoire, and where the mistakes are." },
   ];
 }
 
@@ -290,7 +290,7 @@ function SideGate() {
           <p className="eyebrow">Opening explorer</p>
           <h1>Which side do you want to study?</h1>
           <p className="side-gate-sub">
-            Pick a side and Tempo shows the openings you actually play from there. You can switch any time.
+            Pick a side and Forma shows the openings you actually play from there. You can switch any time.
           </p>
           <div className="side-tiles">
             <KingTile color="white" label="As White" blurb="Your 1.e4 / 1.d4 repertoire" />
@@ -319,7 +319,7 @@ function SheetView({ sheet, username, color }: SheetData) {
         {empty ? (
           <header className="tsheet-page-head">
             <h1>Nothing to read yet</h1>
-            <p>Your first rows appear once Tempo has read about ten games from this side.</p>
+            <p>Your first rows appear once Forma has read about ten games from this side.</p>
           </header>
         ) : (
           <TearSheet sheet={sheet} username={username} />
@@ -560,7 +560,7 @@ function ExplorerView({ loaderData }: { loaderData: ExplorerLoaderData }) {
         ) : (
           <section className="empty-opening-review">
             <h2>No opening map yet</h2>
-            <p>Import and analyse games first so Tempo can build your position tree.</p>
+            <p>Import and analyse games first so Forma can build your position tree.</p>
           </section>
         )}
       </main>

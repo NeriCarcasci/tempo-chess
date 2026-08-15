@@ -83,7 +83,7 @@ export async function createCheckoutSession(req: CheckoutRequest): Promise<Check
       url: null,
       configured: false,
       message:
-        "Checkout isn't live yet. Tempo is free while we finish billing — you already have full access.",
+        "Checkout isn't live yet. Forma is free while we finish billing — you already have full access.",
     };
   }
 

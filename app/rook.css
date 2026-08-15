@@ -8,6 +8,12 @@
 /*   cues   — press / success / error / spin / launch. Play once over   */
 /*            the top and hand the piece back to its mood.             */
 /*                                                                     */
+/* One rule runs through all of it: the head is never on the same beat  */
+/* as the body. It arrives late, it overshoots, it settles last. That   */
+/* delay is the only reason a shape with no eyes reads as a creature,   */
+/* so every state below animates .rk-head as well as .rk-piece, and     */
+/* none of them do it in phase.                                        */
+/*                                                                     */
 /* Cue rules sit after mood rules on purpose: both target .rk-piece at  */
 /* the same specificity, so source order is what lets a cue win.       */
 /* ================================================================== */
@@ -18,9 +24,6 @@
     /* Launched merlons leave the viewBox. Without this the SVG viewport
        clips them and the whole gag lands as three pieces vanishing. */
     overflow: visible;
-    /* The spin is a real turn about the vertical axis, so the group needs
-       a camera. Tight enough to read as depth at mascot sizes. */
-    perspective: 720px;
 
     /* Repaint the mascot by overriding these on any ancestor. The collar
        tracks the product accent so a re-theme carries it along. */
@@ -33,25 +36,83 @@
     --rk-stone-shade: #b1a184;
   }
 
-  /* fill-box, so every percentage below is a share of the thing being
-     moved rather than of the whole 280x350 canvas. Origins sit on the
-     floor: a mascot that squashes should squash onto its own base. */
-  .rk-piece,
-  .rk-merlon,
+  /* Every distance below is in viewBox units, and every pivot is an
+     absolute point rather than a percentage of a box.
+     `transform-box: fill-box` would be the obvious way to write this and
+     it is the wrong one here: the shading is a pair of rectangles far
+     wider than the piece, clipped down to each part, and a clip does not
+     shrink a bounding box. Any group holding one measures roughly 528
+     units across instead of 36, so a percentage translate lands about
+     fifteen times too far and an origin of `50% 100%` is nowhere near
+     the piece. Absolute units are immune to that. */
+  .rk-piece {
+    /* the floor, centre */
+    transform-origin: 140px 316px;
+  }
+  .rk-head {
+    /* the collar joint — where a neck would be */
+    transform-origin: 140px 152px;
+  }
+  /* A merlon in the air pivots on its centre of mass. The shape runs from
+     y=64 to y=100, so that is the middle of it at y=82 — not the footing
+     at 100, which is where this used to be and which made a tossed merlon
+     look hinged at one end rather than tumbling. A free body rotates
+     about its centroid; anything else reads as being on a stick.
+
+     Growing back is a different motion about a different point, and it
+     lives on the inner group below. */
+  .rk-merlon {
+    transform-origin: var(--rk-ox) 82px;
+  }
+  .rk-merlon-grow {
+    transform-origin: var(--rk-ox) 100px;
+  }
+
+  /* The z's have no clipped children, so their box is honest and
+     fill-box is the clearest way to place them. */
   .rk-zzz {
     transform-box: fill-box;
-  }
-  .rk-piece,
-  .rk-merlon {
-    transform-origin: 50% 100%;
-  }
-  .rk-zzz {
     transform-origin: 50% 100%;
     opacity: 0;
   }
-  /* Only wanted mid-flight; see merlonCap() in RookMascot.tsx. */
+  /* Only wanted mid-flight; see merlonCap in RookMascot.tsx. */
   .rk-merlon-cap {
     opacity: 0;
+  }
+
+  /* -- attention ------------------------------------------------------
+     Two numbers come in from the component, --rk-aim-x and --rk-aim-y,
+     each clamped to -1..1, and everything below is CSS. There is no
+     animation loop: the transition does the easing, so a pointer that
+     stops moving costs nothing at all.
+
+     The head leads and the body follows, which is the opposite of the
+     rule everywhere else on this piece. That is deliberate. When the
+     mascot is moving under its own steam the head lags, because it is
+     being carried. When it is *looking at something* the head goes
+     first, because it is the part doing the looking, and the body
+     catches up half a second later. Same character, two situations.
+
+     The head's curve overshoots slightly, which is the settle at the end
+     of a glance. The lean does not — a body that bounces reads as
+     unsteady rather than attentive. */
+  .rk-look {
+    transform-origin: 140px 152px;
+    transform: rotate(calc(var(--rk-aim-x, 0) * 11deg))
+      translate(calc(var(--rk-aim-x, 0) * 3px), calc(var(--rk-aim-y, 0) * 2.5px));
+    transition: transform 260ms cubic-bezier(0.18, 0.9, 0.3, 1.15);
+  }
+  .rk-lean {
+    transform-origin: 140px 316px;
+    transform: rotate(calc(var(--rk-aim-x, 0) * 2.2deg));
+    transition: transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  /* Asleep, it stops noticing you. Both eased rather than snapped, so
+     dropping into the sleeping mood looks like attention going rather
+     than like a value being reset. */
+  .rk[data-state="sleeping"] .rk-look,
+  .rk[data-state="sleeping"] .rk-lean {
+    transform: none;
   }
 
   /* -- moods --------------------------------------------------------- */
@@ -64,29 +125,77 @@
       transform: translateY(0) scale(1, 1);
     }
     50% {
-      transform: translateY(-1.8%) scale(0.992, 1.014);
+      transform: translateY(-4.5px) scale(0.992, 1.014);
     }
   }
 
-  /* A perk-up, then a look left, then right, then square again. The
-     holds are what make it read as attention rather than as a wobble. */
-  @keyframes rk-curious {
+  /* Twice the body's period, so the head is only occasionally in step
+     with it and the loop never quite repeats itself. The bob at 62% is
+     this thing's version of a blink — the one beat in seven seconds
+     where it looks like it thought of something. */
+  @keyframes rk-idle-head {
     0%,
-    6% {
+    100% {
       transform: translateY(0) rotate(0deg);
     }
-    15% {
-      transform: translateY(-4%) rotate(-2deg);
+    28% {
+      transform: translateY(-1px) rotate(-0.7deg);
     }
-    26%,
-    42% {
-      transform: translateY(0) rotate(-8deg);
+    62% {
+      transform: translateY(-3.5px) rotate(1.1deg);
     }
-    56%,
-    72% {
-      transform: translateY(0) rotate(6.5deg);
+    74% {
+      transform: translateY(0.8px) rotate(0.4deg);
     }
-    86%,
+  }
+
+  /* The body barely moves. The head does the looking, and it holds at
+     each end — a turn without a hold reads as a wobble. */
+  @keyframes rk-curious {
+    0%,
+    8% {
+      transform: translateY(0) rotate(0deg);
+    }
+    18% {
+      transform: translateY(-7px) rotate(-1.5deg);
+    }
+    30%,
+    46% {
+      transform: translateY(0) rotate(-3deg);
+    }
+    58%,
+    74% {
+      transform: translateY(0) rotate(2.4deg);
+    }
+    88%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+  }
+  @keyframes rk-curious-head {
+    0%,
+    4% {
+      transform: translateY(0) rotate(0deg);
+    }
+    14% {
+      transform: translateY(-4.5px) rotate(2deg);
+    }
+    /* Overshoots past the body's lean, then eases back into it. */
+    26% {
+      transform: translateY(-1px) rotate(-12deg);
+    }
+    34%,
+    48% {
+      transform: translateY(0) rotate(-9deg);
+    }
+    60% {
+      transform: translateY(-1px) rotate(9.5deg);
+    }
+    68%,
+    76% {
+      transform: translateY(0) rotate(7.5deg);
+    }
+    92%,
     100% {
       transform: translateY(0) rotate(0deg);
     }
@@ -96,10 +205,21 @@
   @keyframes rk-sleep {
     0%,
     100% {
-      transform: translateY(1.6%) rotate(-5deg) scale(1.01, 0.982);
+      transform: translateY(4px) rotate(-4deg) scale(1.01, 0.982);
     }
     50% {
-      transform: translateY(0) rotate(-5deg) scale(0.995, 1.014);
+      transform: translateY(0) rotate(-4deg) scale(0.995, 1.014);
+    }
+  }
+  /* The head droops further than the body lists, and comes back up a
+     fraction late. A nod, not a sway. */
+  @keyframes rk-sleep-head {
+    0%,
+    100% {
+      transform: translateY(2.5px) rotate(-5deg);
+    }
+    55% {
+      transform: translateY(0) rotate(-2.5deg);
     }
   }
 
@@ -121,11 +241,20 @@
   .rk[data-state="idle"] .rk-piece {
     animation: rk-breathe 3.6s ease-in-out infinite;
   }
+  .rk[data-state="idle"] .rk-head {
+    animation: rk-idle-head 7.2s ease-in-out infinite;
+  }
   .rk[data-state="curious"] .rk-piece {
-    animation: rk-curious 4.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    animation: rk-curious 4.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .rk[data-state="curious"] .rk-head {
+    animation: rk-curious-head 4.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
   .rk[data-state="sleeping"] .rk-piece {
     animation: rk-sleep 5.4s ease-in-out infinite;
+  }
+  .rk[data-state="sleeping"] .rk-head {
+    animation: rk-sleep-head 5.4s ease-in-out infinite;
   }
   .rk[data-state="sleeping"] .rk-zzz {
     animation: rk-zzz 2.9s ease-out infinite;
@@ -152,52 +281,111 @@
       transform: scale(1, 1);
     }
   }
+  /* Driven down into the collar, then springs clear of it. The head is
+     what makes a press feel like a button rather than a resize. */
+  @keyframes rk-press-head {
+    0% {
+      transform: translateY(0);
+    }
+    32% {
+      transform: translateY(4px);
+    }
+    64% {
+      transform: translateY(-2.6px);
+    }
+    100% {
+      transform: translateY(0);
+    }
+  }
 
-  /* Anticipate, leap, stretch at the top, land heavy, settle. */
-  @keyframes rk-hop {
+  /* -- success: the piece comes apart in the air ----------------------
+     A jump, but the four courses do not travel together. Each one is
+     slower to leave and slower to arrive than the one below it, so the
+     rook opens up at the top of the arc and packs itself back down on
+     the way in. The base never moves on its own — it is the thing the
+     other three are stacked on, and it lands first. */
+  @keyframes rk-jump {
     0% {
       transform: translateY(0) scale(1, 1);
     }
-    16% {
-      transform: translateY(0) scale(1.11, 0.87);
+    14% {
+      transform: translateY(0) scale(1.1, 0.88);
     }
-    40% {
-      transform: translateY(-20%) scale(0.94, 1.1);
+    34% {
+      transform: translateY(-40px) scale(0.95, 1.08);
     }
+    50%,
     58% {
-      transform: translateY(-24%) scale(0.98, 1.03);
+      transform: translateY(-55px) scale(1, 1);
     }
-    80% {
-      transform: translateY(0) scale(1.08, 0.9);
+    76% {
+      transform: translateY(-15px) scale(0.98, 1.03);
     }
-    92% {
+    86% {
+      transform: translateY(0) scale(1.09, 0.89);
+    }
+    94% {
       transform: translateY(0) scale(0.98, 1.02);
     }
     100% {
       transform: translateY(0) scale(1, 1);
     }
   }
-
-  /* The merlons lag the leap and land after it — the piece arrives, its
-     hat catches up. Staggered left to right off --i. Capped at -14%: any
-     further and the side edges clear the notch-floor stroke they butt
-     against, and the crown opens a seam at each merlon's base. */
-  @keyframes rk-merlon-pop {
+  @keyframes rk-sep-head {
     0%,
-    22% {
+    16% {
+      transform: translateY(0) rotate(0deg);
+    }
+    52%,
+    60% {
+      transform: translateY(-34px) rotate(-2deg);
+    }
+    84% {
+      transform: translateY(0) rotate(0deg);
+    }
+    /* Lands last and rings once, like a lid dropped back on a box. */
+    91% {
+      transform: translateY(3px) rotate(0deg);
+    }
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+  }
+  @keyframes rk-sep-collar {
+    0%,
+    16% {
       transform: translateY(0);
     }
-    46% {
-      transform: translateY(-14%);
+    52%,
+    60% {
+      transform: translateY(-19px);
     }
-    72% {
-      transform: translateY(3%);
+    86% {
+      transform: translateY(0);
+    }
+    92% {
+      transform: translateY(2px);
     }
     100% {
       transform: translateY(0);
     }
   }
+  @keyframes rk-sep-body {
+    0%,
+    16% {
+      transform: translateY(0);
+    }
+    52%,
+    60% {
+      transform: translateY(-9px);
+    }
+    88%,
+    100% {
+      transform: translateY(0);
+    }
+  }
 
+  /* -- error --------------------------------------------------------- */
   /* Decaying shake. Rotation as well as translation, or it reads as the
      page moving rather than the mascot refusing. */
   @keyframes rk-shake {
@@ -206,137 +394,776 @@
       transform: translateX(0) rotate(0deg);
     }
     14% {
-      transform: translateX(-4.5%) rotate(-3.5deg);
+      transform: translateX(-8px) rotate(-3.5deg);
     }
     30% {
-      transform: translateX(4%) rotate(3deg);
+      transform: translateX(7px) rotate(3deg);
     }
     47% {
-      transform: translateX(-3%) rotate(-2.2deg);
+      transform: translateX(-5.3px) rotate(-2.2deg);
     }
     64% {
-      transform: translateX(2.1%) rotate(1.4deg);
+      transform: translateX(3.7px) rotate(1.4deg);
     }
     82% {
-      transform: translateX(-0.9%) rotate(-0.6deg);
+      transform: translateX(-1.6px) rotate(-0.6deg);
     }
   }
-
-  /* Crouch, turn, land. translateY before rotateY so the lift stays
-     vertical instead of being swung around by the turn. */
-  @keyframes rk-spin {
-    0% {
-      transform: translateY(0) rotateY(0deg) scale(1, 1);
+  /* A beat behind the body and swinging further, so the head whips
+     rather than shakes — and is still moving after the body has
+     stopped. That last quarter-second is the part that reads as "no". */
+  @keyframes rk-shake-head {
+    0%,
+    8% {
+      transform: rotate(0deg);
     }
-    14% {
-      transform: translateY(0) rotateY(0deg) scale(1.07, 0.9);
+    24% {
+      transform: rotate(7deg);
     }
-    32% {
-      transform: translateY(-9%) rotateY(90deg) scale(1, 1);
+    42% {
+      transform: rotate(-5.5deg);
     }
-    62% {
-      transform: translateY(-9%) rotateY(250deg) scale(1, 1);
+    60% {
+      transform: rotate(4deg);
     }
-    84% {
-      transform: translateY(0) rotateY(360deg) scale(1.06, 0.92);
+    78% {
+      transform: rotate(-2.4deg);
+    }
+    92% {
+      transform: rotate(1deg);
     }
     100% {
-      transform: translateY(0) rotateY(360deg) scale(1, 1);
+      transform: rotate(0deg);
     }
   }
 
-  /* The body's half of the launch: recoil under the merlons leaving,
-     then hold still while they are in the air. */
-  @keyframes rk-launch-body {
-    0% {
-      transform: translateY(0) scale(1, 1);
-    }
-    12% {
-      transform: translateY(3.5%) scale(1.07, 0.92);
-    }
-    30% {
-      transform: translateY(0) scale(0.97, 1.03);
-    }
-    55%,
-    100% {
-      transform: translateY(0) scale(1, 1);
-    }
+  /* -- spin ----------------------------------------------------------
+     A jump, and while it is up, a turn.
+
+     The turn is the interesting half. A rook is a solid of revolution:
+     spin one under a fixed light and the body, the collar and the base
+     present exactly the same silhouette and exactly the same shading at
+     every angle. There is genuinely nothing to see. An earlier pass here
+     swept the shadow across the piece, which is the one thing a real
+     turn would *not* do — the light does not travel with the object.
+
+     The only part of a rook that is not rotationally symmetric is its
+     crenellation, so that is the only part that moves. The merlons
+     travel across the crown on their 50-unit pitch, are occluded by the
+     near edge of the drum, and are replaced by the next one arriving
+     from the other side. Six pitches is a whole turn.
+
+     Two details make it hold up. The band clip is the drum's own
+     silhouette, so a merlon leaving is hidden by the crown rather than
+     shrinking. And each merlon's shading counter-translates by exactly
+     what the merlon travels, so the shaded side stays nailed to the
+     scene while the stonework slides through it — which is what a fixed
+     light actually does. */
+  @keyframes rk-crenel {
+    from { transform: translateX(0); }
+    to { transform: translateX(50px); }
+  }
+  @keyframes rk-crenel-shade {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50px); }
+  }
+  /* The jump underneath it. No horizontal squash: a drum seen from the
+     side is the same width whichever way it is facing. */
+  @keyframes rk-spin-jump {
+    0% { transform: translateY(0) scale(1, 1); }
+    14% { transform: translateY(0) scale(1.1, 0.88); }
+    32% { transform: translateY(-34px) scale(0.96, 1.07); }
+    48%, 60% { transform: translateY(-46px) scale(1, 1); }
+    76% { transform: translateY(-12px) scale(0.98, 1.03); }
+    87% { transform: translateY(0) scale(1.09, 0.89); }
+    94% { transform: translateY(0) scale(0.98, 1.02); }
+    100% { transform: translateY(0) scale(1, 1); }
+  }
+  /* Lags the launch and the landing, nothing more. The head cannot lean
+     into a turn it is rigidly part of. */
+  @keyframes rk-spin-head {
+    0%, 8% { transform: translateY(0); }
+    22% { transform: translateY(3px); }
+    52% { transform: translateY(-2px); }
+    88% { transform: translateY(2.5px); }
+    100% { transform: translateY(0); }
   }
 
+  /* -- launch --------------------------------------------------------
+     A throw, sampled off the actual curve rather than eased into a
+     rough approximation of one.
+
+     Two earlier passes at this both felt wrong for the same reason:
+     they sent the merlons out sideways and then brought them back. No
+     force does that. Once a thrown object leaves your hand its
+     horizontal velocity is constant, so anything that goes out and
+     returns has to be pushed back, and a viewer reads that instantly as
+     a rewind however the keyframes are dressed up.
+
+     So they go straight up. Vertical position is sampled at nine points
+     off y = -h * 4u(1-u), the parabola an object under constant gravity
+     actually traces, and every timing function through the flight is
+     linear so nothing bends the curve back out of shape. Rotation is
+     linear over the same window — a rigid body in free flight turns at
+     a constant rate — and lands on a whole number of turns. What keeps
+     three identical parabolas from reading as one object is that the
+     heights and the spins differ, which is just three different
+     impulses, and they leave 50ms apart. */
+  @keyframes rk-toss-body {
+    0% { transform: translateY(0) scale(1, 1); }
+    8% { transform: translateY(7px) scale(1.06, 0.93); }
+    22% { transform: translateY(0) scale(0.98, 1.02); }
+    44%, 100% { transform: translateY(0) scale(1, 1); }
+  }
+  /* Ducks under the throw, rises to meet them coming down. */
+  @keyframes rk-toss-head {
+    0% { transform: translateY(0); }
+    9% { transform: translateY(4px); }
+    30% { transform: translateY(0); }
+    55% { transform: translateY(-2px); }
+    62% { transform: translateY(2.5px); }
+    72%, 100% { transform: translateY(0); }
+  }
+  @keyframes rk-toss-merlon {
+    0% { transform: translateY(0) rotate(0deg); }
+    /* wind up */
+    8% { transform: translateY(4px) rotate(0deg); }
+    /* released: nine samples of 4u(1-u), peak at 33% */
+    14% { transform: translateY(calc(var(--rk-h) * -0.422)) rotate(calc(var(--rk-rot) * 0.12)); }
+    20% { transform: translateY(calc(var(--rk-h) * -0.730)) rotate(calc(var(--rk-rot) * 0.24)); }
+    26% { transform: translateY(calc(var(--rk-h) * -0.922)) rotate(calc(var(--rk-rot) * 0.36)); }
+    33% { transform: translateY(calc(var(--rk-h) * -1)) rotate(calc(var(--rk-rot) * 0.5)); }
+    40% { transform: translateY(calc(var(--rk-h) * -0.922)) rotate(calc(var(--rk-rot) * 0.64)); }
+    46% { transform: translateY(calc(var(--rk-h) * -0.730)) rotate(calc(var(--rk-rot) * 0.76)); }
+    52% { transform: translateY(calc(var(--rk-h) * -0.422)) rotate(calc(var(--rk-rot) * 0.88)); }
+    /* down, square, seated */
+    58% { transform: translateY(0) rotate(var(--rk-rot)); }
+    /* and one small bounce out of the socket, then a smaller one */
+    62% { transform: translateY(calc(var(--rk-h) * -0.09)) rotate(var(--rk-rot)); }
+    66% { transform: translateY(calc(var(--rk-h) * -0.12)) rotate(var(--rk-rot)); }
+    70% { transform: translateY(calc(var(--rk-h) * -0.09)) rotate(var(--rk-rot)); }
+    74% { transform: translateY(0) rotate(var(--rk-rot)); }
+    78% { transform: translateY(calc(var(--rk-h) * -0.032)) rotate(var(--rk-rot)); }
+    82% { transform: translateY(0) rotate(var(--rk-rot)); }
+    100% { transform: translateY(0) rotate(var(--rk-rot)); }
+  }
   /* A merlon has no bottom edge while it is seated on the crown. It needs
      one the moment it is airborne and you can see underneath it, and it
-     has to be gone again before it lands. The windows are timed off the
-     merlon's own flight below, and share its stagger. */
+     has to be gone again before it finishes settling. */
   @keyframes rk-cap {
-    0%,
-    12% {
-      opacity: 0;
-    }
-    20%,
-    84% {
-      opacity: 1;
-    }
-    93%,
-    100% {
-      opacity: 0;
-    }
-  }
-
-  /* Per-keyframe easing, because a launch is three different motions:
-     a crouch, a fast climb that decelerates, and a fall that does not.
-     Direction and spin come in per merlon as --rk-dx/dy/rot. */
-  @keyframes rk-launch-merlon {
-    0% {
-      transform: translate(0, 0) rotate(0deg);
-      animation-timing-function: cubic-bezier(0.4, 0, 0.9, 0.5);
-    }
-    10% {
-      transform: translate(0, 10%) rotate(0deg);
-      animation-timing-function: cubic-bezier(0.05, 0.8, 0.3, 1);
-    }
-    46% {
-      transform: translate(var(--rk-dx), var(--rk-dy)) rotate(var(--rk-rot));
-      animation-timing-function: ease-in-out;
-    }
-    56% {
-      transform: translate(var(--rk-dx), var(--rk-dy)) rotate(var(--rk-rot));
-      animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0.4);
-    }
-    88% {
-      transform: translate(0, 8%) rotate(0deg);
-      animation-timing-function: cubic-bezier(0.2, 1.7, 0.5, 1);
-    }
-    100% {
-      transform: translate(0, 0) rotate(0deg);
-    }
+    0%, 6% { opacity: 0; }
+    12%, 72% { opacity: 1; }
+    80%, 100% { opacity: 0; }
   }
 
   .rk[data-state="press"] .rk-piece {
     animation: rk-press 380ms cubic-bezier(0.3, 1.2, 0.4, 1) both;
   }
+  .rk[data-state="press"] .rk-head {
+    animation: rk-press-head 380ms cubic-bezier(0.3, 1.2, 0.4, 1) both;
+  }
+
   .rk[data-state="success"] .rk-piece {
-    animation: rk-hop 760ms cubic-bezier(0.3, 0.9, 0.4, 1) both;
+    animation: rk-jump 1000ms cubic-bezier(0.3, 0.9, 0.4, 1) both;
   }
-  .rk[data-state="success"] .rk-merlon {
-    animation: rk-merlon-pop 760ms cubic-bezier(0.3, 0.9, 0.4, 1) both;
-    animation-delay: calc(var(--i) * 55ms);
+  .rk[data-state="success"] .rk-head {
+    animation: rk-sep-head 1000ms cubic-bezier(0.3, 0.85, 0.35, 1) both;
   }
+  .rk[data-state="success"] .rk-collar {
+    animation: rk-sep-collar 1000ms cubic-bezier(0.3, 0.85, 0.35, 1) both;
+  }
+  .rk[data-state="success"] .rk-body {
+    animation: rk-sep-body 1000ms cubic-bezier(0.3, 0.85, 0.35, 1) both;
+  }
+
   .rk[data-state="error"] .rk-piece {
-    animation: rk-shake 540ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    animation: rk-shake 620ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
   }
+  .rk[data-state="error"] .rk-head {
+    animation: rk-shake-head 620ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  }
+
+  /* The spare crenellation is not part of the mark. It exists so the
+     pattern has somewhere to come from, and it is only ever rendered
+     while the crown is turning. */
+  .rk-merlon-spare { display: none; }
+  .rk[data-state="spin"] .rk-merlon-spare { display: inline; }
+
+  /* The crown's side walls, and the merlons held behind them.
+     ---------------------------------------------------------------
+     Two earlier attempts at this edge both failed the same way, and the
+     reason is worth writing down. Clipping a merlon at the crown's edge
+     cuts its outline along with it, so the border stops in mid-air and
+     raw fill meets the background. Patching that with an edge line drawn
+     only where a merlon happens to be gets you a border whose *weight*
+     varies with how much of the merlon is left — hairlines and detached
+     stubs. And foreshortening the merlon instead, which is the honest
+     thing a turning drum does, thins its ink along with its face; the
+     fix for that is `vector-effect: non-scaling-stroke`, which this
+     engine does not honour under an animated CSS transform.
+
+     So: the wall is drawn last, at full weight, permanently, and the
+     merlons simply pass behind it. There is no cut edge to see because
+     the cut is always underneath a solid line, and the line never
+     changes width because nothing is deciding whether to draw it. When a
+     gap in the crenellation reaches the wall you see the wall with the
+     gap behind it, which is just a merlon most of the way round the
+     back — the right thing, for free. */
+  .rk-crown-wall { display: none; }
+  .rk[data-state="spin"] .rk-crown-wall { display: inline; }
+  .rk[data-state="spin"] .rk-merlons { clip-path: var(--rk-band); }
+
   .rk[data-state="spin"] .rk-piece {
-    animation: rk-spin 900ms cubic-bezier(0.5, 0, 0.2, 1) both;
+    animation: rk-spin-jump 1200ms cubic-bezier(0.3, 0.9, 0.4, 1) both;
   }
+  .rk[data-state="spin"] .rk-head {
+    animation: rk-spin-head 1200ms cubic-bezier(0.3, 0.9, 0.4, 1) both;
+  }
+  /* Linear and six times over: a rigid body turns at a constant rate,
+     and each pass leaves the crown looking exactly as it started, so the
+     restart between passes is invisible. It runs only while the piece is
+     off the ground. */
+  .rk[data-state="spin"] .rk-merlon {
+    animation: rk-crenel 110ms linear 260ms 6 both;
+  }
+  .rk[data-state="spin"] .rk-merlon .rk-shade {
+    animation: rk-crenel-shade 110ms linear 260ms 6 both;
+  }
+
   .rk[data-state="launch"] .rk-piece {
-    animation: rk-launch-body 1200ms ease-out both;
+    animation: rk-toss-body 1000ms ease-out both;
   }
+  .rk[data-state="launch"] .rk-head {
+    animation: rk-toss-head 1000ms ease-out both;
+  }
+  /* Linear, because every value in the flight is already sampled off the
+     parabola. Anything else here re-times gravity. */
   .rk[data-state="launch"] .rk-merlon {
-    animation: rk-launch-merlon 1200ms both;
-    animation-delay: calc(var(--i) * 70ms);
+    animation: rk-toss-merlon 1000ms linear both;
+    animation-delay: calc(var(--i) * 50ms);
   }
   .rk[data-state="launch"] .rk-merlon-cap {
-    animation: rk-cap 1200ms both;
-    animation-delay: calc(var(--i) * 70ms);
+    animation: rk-cap 1000ms linear both;
+    animation-delay: calc(var(--i) * 50ms);
+  }
+
+  /* -- explosion -----------------------------------------------------
+     The piece loads, throws its crenellation off sideways, and grows a
+     new one. Most of the cue is the load: the squeeze runs for the best
+     part of a second, accelerating and shaking as it goes, because the
+     charge is the part that has to be *felt*. The burst itself is over
+     in a frame.
+
+     The flight is a real projectile again, and the same rules apply as
+     for the toss: horizontal velocity is constant once the charge has
+     gone, so x is simply linear in time, and the vertical is one sampled
+     parabola. There is a single burst, so all three share a vertical
+     impulse and differ only in how much of it went sideways — which is
+     what --rk-fx and --rk-fy are. They never come back, so unlike the
+     toss the arc does not have to close: they leave the frame and the
+     fade is only there to stop them drawing over whatever is beside the
+     mascot.
+
+     Growing back is a plain scale off the footing, staggered with the
+     rest. Because it happens on the inner group it can use its own
+     origin while the group above it is still holding the flight. */
+  @keyframes rk-blast-body {
+    0% {
+      transform: translateX(0) scale(1, 1);
+      animation-timing-function: cubic-bezier(0.4, 0, 0.7, 0.5);
+    }
+    10% {
+      transform: translateX(0) scale(1.035, 0.955);
+    }
+    20% {
+      transform: translateX(0) scale(1.09, 0.885);
+    }
+    /* Deep in the load now, and starting to shake with it. The shudder
+       is what turns a slow squash into something under strain. */
+    25% {
+      transform: translateX(-0.8px) scale(1.115, 0.855);
+    }
+    27% {
+      transform: translateX(0.8px) scale(1.128, 0.84);
+    }
+    29% {
+      transform: translateX(-0.6px) scale(1.14, 0.825);
+    }
+    30.5% {
+      transform: translateX(0) scale(1.145, 0.82);
+      animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1);
+    }
+    37% {
+      transform: translateX(0) scale(0.95, 1.08);
+    }
+    45% {
+      transform: translateX(0) scale(1.02, 0.985);
+    }
+    55%,
+    100% {
+      transform: translateX(0) scale(1, 1);
+    }
+  }
+  @keyframes rk-blast-head {
+    0% {
+      transform: translateY(0);
+    }
+    14% {
+      transform: translateY(2px);
+    }
+    27% {
+      transform: translateY(5px);
+    }
+    30.5% {
+      transform: translateY(5.5px);
+    }
+    38% {
+      transform: translateY(-2px);
+    }
+    50%,
+    100% {
+      transform: translateY(0);
+    }
+  }
+  @keyframes rk-blast-merlon {
+    0% {
+      transform: none;
+      opacity: 1;
+      animation-timing-function: cubic-bezier(0.4, 0, 0.7, 0.5);
+    }
+    /* driven further and further down into the crown as it loads */
+    10% {
+      transform: translate(0, 1.5px);
+    }
+    20% {
+      transform: translate(0, 3.5px);
+    }
+    27% {
+      transform: translate(0, 5px);
+    }
+    30.5% {
+      transform: translate(0, 5.5px);
+      animation-timing-function: linear;
+    }
+    /* gone: x linear, y sampled off the parabola */
+    35% {
+      transform: translate(calc(var(--rk-fx) * 0.158), calc(var(--rk-fy) * -34.2px))
+        rotate(calc(var(--rk-frot) * 0.158));
+    }
+    38.7% {
+      transform: translate(calc(var(--rk-fx) * 0.289), calc(var(--rk-fy) * -47.5px))
+        rotate(calc(var(--rk-frot) * 0.289));
+    }
+    43.2% {
+      transform: translate(calc(var(--rk-fx) * 0.447), calc(var(--rk-fy) * -45.3px))
+        rotate(calc(var(--rk-frot) * 0.447));
+    }
+    /* They are gone while still on the way out, not faded down as they
+       fall. The middle one is thrown highest and comes back down through
+       the piece; at any opacity above zero that is a smudge drifting
+       across the body. Fading out by 53% has all three still climbing,
+       or already off the side, at the moment they disappear. */
+    47.7% {
+      transform: translate(calc(var(--rk-fx) * 0.605), calc(var(--rk-fy) * -23px))
+        rotate(calc(var(--rk-frot) * 0.605));
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+    52.2% {
+      transform: translate(calc(var(--rk-fx) * 0.763), calc(var(--rk-fy) * 19.3px))
+        rotate(calc(var(--rk-frot) * 0.763));
+    }
+    53% {
+      opacity: 0;
+    }
+    56% {
+      transform: translate(calc(var(--rk-fx) * 0.895), calc(var(--rk-fy) * 69.8px))
+        rotate(calc(var(--rk-frot) * 0.895));
+    }
+    59% {
+      transform: translate(var(--rk-fx), calc(var(--rk-fy) * 120px)) rotate(var(--rk-frot));
+      opacity: 0;
+    }
+    /* back to the seat, still invisible — the group below is at zero */
+    60%,
+    100% {
+      transform: none;
+      opacity: 1;
+    }
+  }
+  @keyframes rk-blast-grow {
+    0%,
+    59% {
+      transform: scale(1);
+    }
+    60% {
+      transform: scale(0);
+      animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    80% {
+      transform: scale(1.05);
+    }
+    91% {
+      transform: scale(0.99);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes rk-cap-blast {
+    0%,
+    30% {
+      opacity: 0;
+    }
+    34%,
+    54% {
+      opacity: 1;
+    }
+    59%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  .rk[data-state="explosion"] .rk-piece {
+    animation: rk-blast-body 2100ms cubic-bezier(0.3, 0.9, 0.4, 1) both;
+  }
+  .rk[data-state="explosion"] .rk-head {
+    animation: rk-blast-head 2100ms cubic-bezier(0.3, 0.9, 0.4, 1) both;
+  }
+  .rk[data-state="explosion"] .rk-merlon {
+    animation: rk-blast-merlon 2100ms linear both;
+    animation-delay: calc(var(--i) * 40ms);
+  }
+  .rk[data-state="explosion"] .rk-merlon-grow {
+    animation: rk-blast-grow 2100ms linear both;
+    animation-delay: calc(var(--i) * 40ms);
+  }
+  .rk[data-state="explosion"] .rk-merlon-cap {
+    animation: rk-cap-blast 2100ms linear both;
+    animation-delay: calc(var(--i) * 40ms);
+  }
+
+  /* -- collapse -------------------------------------------------------
+     The tower comes apart and puts itself back together.
+
+     Every course is already a closed shape with its own complete outline
+     — that is what the crown's bottom edge and the merlon caps were for
+     — so any of them can come away without looking torn. Seven pieces
+     fall: three merlons, then the crown, the collar and the body. The
+     base never moves. It is the foundation, it is what the heap lands
+     around, and leaving it standing is what makes the rebuild legible:
+     the tower goes back up on something.
+
+     It comes down top-first, because that is the order gravity takes a
+     stack apart, and it goes back up bottom-first, because that is the
+     order you can build one. Those two orders are the reason each course
+     has its own keyframes rather than sharing one set with a delay — a
+     delay would force the rebuild to run in the same order as the fall.
+
+     Falls are sampled off y = h·u², the curve of something dropped
+     rather than thrown: barely moving at first, quickest at the floor.
+     Rises use (1-u)², which is the same curve read backwards, so a piece
+     leaves the heap fast and arrives gently. Rotation is linear through
+     both, and every timing function is linear so nothing re-times the
+     curves. */
+
+  /* Each course turns about its own centre of mass once it is loose. */
+  .rk-collar {
+    transform-origin: 140px 161px;
+  }
+  .rk-body {
+    transform-origin: 140px 222px;
+  }
+  .rk-base {
+    transform-origin: 140px 292px;
+  }
+  /* The head normally pivots at the collar joint, which is a hinge. A
+     crown lying on the floor is not hinged to anything, so the two
+     halves of the block turn about the middle of themselves — and it is
+     those two, not .rk-head, because .rk-head contains the merlons and
+     would carry them along with it. */
+  .rk-crown-lower,
+  .rk-crown-upper {
+    transform-origin: 140px 123px;
+  }
+  /* It is not watching you while it is in pieces. */
+  .rk[data-state="collapse"] .rk-look,
+  .rk[data-state="collapse"] .rk-lean {
+    transform: none;
+  }
+
+  @keyframes rk-fall-merlon {
+    0%,
+    8% {
+      transform: none;
+    }
+    /* losing its footing */
+    11% {
+      transform: rotate(calc(var(--rk-krot) * 0.06));
+    }
+    15% {
+      transform: translate(calc(var(--rk-kx) * 0.16), calc(var(--rk-ky) * 0.02))
+        rotate(calc(var(--rk-krot) * 0.16));
+    }
+    20% {
+      transform: translate(calc(var(--rk-kx) * 0.4), calc(var(--rk-ky) * 0.12))
+        rotate(calc(var(--rk-krot) * 0.4));
+    }
+    25% {
+      transform: translate(calc(var(--rk-kx) * 0.66), calc(var(--rk-ky) * 0.36))
+        rotate(calc(var(--rk-krot) * 0.66));
+    }
+    28% {
+      transform: translate(calc(var(--rk-kx) * 0.86), calc(var(--rk-ky) * 0.68))
+        rotate(calc(var(--rk-krot) * 0.86));
+    }
+    30% {
+      transform: translate(var(--rk-kx), var(--rk-ky)) rotate(var(--rk-krot));
+    }
+    /* one small skip off the floor */
+    32% {
+      transform: translate(calc(var(--rk-kx) * 1.04), calc(var(--rk-ky) - 9px))
+        rotate(calc(var(--rk-krot) * 1.06));
+    }
+    35%,
+    76% {
+      transform: translate(calc(var(--rk-kx) * 1.07), var(--rk-ky))
+        rotate(calc(var(--rk-krot) * 1.1));
+    }
+    /* and back up, last of all */
+    84% {
+      transform: translate(calc(var(--rk-kx) * 0.34), calc(var(--rk-ky) * 0.28))
+        rotate(calc(var(--rk-krot) * 0.32));
+    }
+    92% {
+      transform: translateY(-4px) rotate(2deg);
+    }
+    96% {
+      transform: translateY(1.5px);
+    }
+    100% {
+      transform: none;
+    }
+  }
+
+  /* Every resting place below is solved rather than eyeballed: the
+     lowest corner of the rotated shape, stroke included, lands exactly
+     on y=316, the line the whole piece stands on. For a rectangle turned
+     by θ that corner is (W·|sinθ| + H·|cosθ|)/2 + 4.5 below its centre,
+     so the centre goes at 316 minus that.
+
+     It is worth knowing that this puts a hard limit on how far the body
+     can fall. It is wider than it is tall, so tipping it over makes it
+     *taller*, and its lowest corner is already almost on the floor. It
+     drops about ten units and does the rest of its talking by rotating.
+     Anything more and it would be through the ground, which is exactly
+     what all three of these were doing before. */
+  @keyframes rk-fall-head {
+    0%,
+    12% {
+      transform: none;
+    }
+    16% {
+      transform: translate(-11px, 4px) rotate(-6.5deg);
+    }
+    20% {
+      transform: translate(-22px, 14px) rotate(-12.5deg);
+    }
+    25% {
+      transform: translate(-36px, 36px) rotate(-20.5deg);
+    }
+    30% {
+      transform: translate(-50px, 70px) rotate(-28.5deg);
+    }
+    34% {
+      transform: translate(-61px, 105px) rotate(-35deg);
+    }
+    36% {
+      transform: translate(-66px, 124px) rotate(-38deg);
+    }
+    38% {
+      transform: translate(-67px, 116px) rotate(-40deg);
+    }
+    41%,
+    70% {
+      transform: translate(-68px, 124px) rotate(-41deg);
+    }
+    78% {
+      transform: translate(-23px, 41px) rotate(-14deg);
+    }
+    85% {
+      transform: translateY(-5px) rotate(3deg);
+    }
+    90% {
+      transform: translateY(2px) rotate(-1deg);
+    }
+    100% {
+      transform: none;
+    }
+  }
+
+  @keyframes rk-fall-collar {
+    0%,
+    18% {
+      transform: none;
+    }
+    22% {
+      transform: translate(6px, 3px) rotate(3deg);
+    }
+    26% {
+      transform: translate(11px, 12px) rotate(6deg);
+    }
+    31% {
+      transform: translate(18px, 32px) rotate(9.7deg);
+    }
+    36% {
+      transform: translate(26px, 62px) rotate(13.5deg);
+    }
+    40% {
+      transform: translate(31px, 93px) rotate(16.6deg);
+    }
+    42% {
+      transform: translate(34px, 110px) rotate(18deg);
+    }
+    44% {
+      transform: translate(35px, 103px) rotate(19.5deg);
+    }
+    47%,
+    65% {
+      transform: translate(36px, 110px) rotate(20deg);
+    }
+    73% {
+      transform: translate(12px, 37px) rotate(7deg);
+    }
+    79% {
+      transform: translateY(-4px) rotate(-2deg);
+    }
+    84% {
+      transform: translateY(1.5px);
+    }
+    100% {
+      transform: none;
+    }
+  }
+
+  @keyframes rk-fall-body {
+    0%,
+    24% {
+      transform: none;
+    }
+    28% {
+      transform: translate(13px, 0.3px) rotate(5deg);
+    }
+    32% {
+      transform: translate(25px, 1px) rotate(10deg);
+    }
+    38% {
+      transform: translate(41px, 3px) rotate(16deg);
+    }
+    44% {
+      transform: translate(57px, 6px) rotate(22.5deg);
+    }
+    47% {
+      transform: translate(70px, 8.5px) rotate(27.5deg);
+    }
+    48% {
+      transform: translate(76px, 10px) rotate(30deg);
+    }
+    50% {
+      transform: translate(77px, 5px) rotate(32deg);
+    }
+    53%,
+    60% {
+      transform: translate(78px, 10px) rotate(33deg);
+    }
+    68% {
+      transform: translate(27px, 4px) rotate(11deg);
+    }
+    74% {
+      transform: translateY(-4px) rotate(-3deg);
+    }
+    80% {
+      transform: translateY(1.5px);
+    }
+    100% {
+      transform: none;
+    }
+  }
+
+  /* The foundation. It does not go anywhere; it just takes the weight,
+     once as the tower gives and once for each course that lands on it. */
+  @keyframes rk-fall-base {
+    0%,
+    6% {
+      transform: scale(1, 1);
+    }
+    9% {
+      transform: scale(1.03, 0.94);
+    }
+    14% {
+      transform: scale(1, 1);
+    }
+    31% {
+      transform: scale(1.02, 0.96);
+    }
+    35% {
+      transform: scale(1, 1);
+    }
+    43% {
+      transform: scale(1.03, 0.95);
+    }
+    47% {
+      transform: scale(1, 1);
+    }
+    49% {
+      transform: scale(1.05, 0.92);
+    }
+    54%,
+    100% {
+      transform: scale(1, 1);
+    }
+  }
+
+  /* Loose merlons need their bottom edge for as long as they are loose,
+     which here is nearly the whole cue. */
+  @keyframes rk-cap-fall {
+    0%,
+    7% {
+      opacity: 0;
+    }
+    12%,
+    88% {
+      opacity: 1;
+    }
+    94%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  .rk[data-state="collapse"] .rk-merlon {
+    animation: rk-fall-merlon 2800ms linear both;
+    animation-delay: calc(var(--i) * 60ms);
+  }
+  .rk[data-state="collapse"] .rk-merlon-cap {
+    animation: rk-cap-fall 2800ms linear both;
+    animation-delay: calc(var(--i) * 60ms);
+  }
+  .rk[data-state="collapse"] .rk-crown-lower,
+  .rk[data-state="collapse"] .rk-crown-upper {
+    animation: rk-fall-head 2800ms linear both;
+  }
+  .rk[data-state="collapse"] .rk-collar {
+    animation: rk-fall-collar 2800ms linear both;
+  }
+  .rk[data-state="collapse"] .rk-body {
+    animation: rk-fall-body 2800ms linear both;
+  }
+  .rk[data-state="collapse"] .rk-base {
+    animation: rk-fall-base 2800ms linear both;
   }
 
   /* -- reduced motion -------------------------------------------------
@@ -346,12 +1173,29 @@
      on screen rather than animate into view. */
   @media (prefers-reduced-motion: reduce) {
     .rk .rk-piece,
+    .rk .rk-head,
+    .rk .rk-body,
+    .rk .rk-collar,
+    .rk .rk-shade,
+    .rk .rk-base,
+    .rk .rk-crown-lower,
+    .rk .rk-crown-upper,
     .rk .rk-merlon,
+    .rk .rk-merlon-grow,
+    .rk .rk-merlon .rk-shade,
+    .rk .rk-merlon-cap,
     .rk .rk-zzz {
       animation: none !important;
     }
     .rk[data-state="sleeping"] .rk-zzz {
       opacity: 0.85;
+    }
+    /* Tracking is suppressed in the component too, but belt and braces:
+       a transition is motion the visitor did not ask for either. */
+    .rk .rk-look,
+    .rk .rk-lean {
+      transform: none;
+      transition: none;
     }
   }
 }

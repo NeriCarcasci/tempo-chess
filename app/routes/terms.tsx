@@ -3,18 +3,12 @@ import { PublicPage } from "../components/PublicShell";
 
 export function meta() {
   return [
-    { title: "Terms of service · Tempo" },
-    { name: "description", content: "The terms covering your use of Tempo." },
+    { title: "Terms of service · Forma" },
+    { name: "description", content: "The terms governing access to Forma's completed-game analysis service." },
   ];
 }
 
-/**
- * A working draft. Stripe requires published terms before it will approve an
- * account, and these cover the real shape of the service — but they have not
- * been through a lawyer, and the banner says so rather than implying otherwise.
- */
-
-const UPDATED = "9 August 2026";
+const UPDATED = "14 August 2026";
 
 export default function Terms() {
   return (
@@ -24,121 +18,204 @@ export default function Terms() {
         <p className="legal-meta">Last updated {UPDATED}</p>
 
         <div className="legal-notice" role="note">
-          <strong>Draft pending legal review.</strong> These terms describe how
-          Tempo actually operates, but they have not yet been reviewed by a
-          lawyer. Have them checked before taking payments.
+          <strong>Completed games only.</strong> Forma is a study and training
+          service. It must not be used to obtain assistance during an ongoing
+          game, and it cannot submit moves or play on your behalf.
         </div>
 
-        <h2>1. Who we are</h2>
+        <h2>1. About Forma</h2>
         <p>
-          Tempo ("we", "us") provides software that analyses chess
-          games you have already played on third-party platforms and turns that
-          analysis into training material. These terms govern your use of the
-          service. By creating an account you agree to them.
+          Forma is an independent chess-analysis service operated in Ireland.
+          It imports completed games from an account you connect, analyses
+          patterns across those games, and produces personal reports and training
+          material. These terms form an agreement between you and Forma when you
+          access or create an account for the service.
+        </p>
+        <p>
+          Forma is not affiliated with, endorsed by, sponsored by, or operated by
+          Chess.com or Lichess. Platform names and marks belong to their respective
+          owners, and your use of each platform remains governed by its own terms
+          and policies.
         </p>
 
-        <h2>2. Your account</h2>
+        <h2>2. Early access</h2>
         <p>
-          You need an account to use Tempo. You are responsible for keeping your
-          password confidential and for activity that happens under your account.
-          Tell us promptly if you believe someone else has gained access. You must
-          be old enough to form a binding contract where you live; if you are
-          under 16, ask a parent or guardian to accept these terms for you.
+          Forma is currently a limited early-access service. Invitations may be
+          limited, features may be unfinished, analysis may be re-run, and stored
+          data may need to be migrated as the product develops. Please do not rely
+          on early-access availability for competitions, coaching obligations, or
+          any purpose where interruption would cause material loss.
+        </p>
+        <p>
+          Early-access codes are personal preview credentials. Do not publish,
+          resell, or use them to give access to people outside the invited group.
+          They are not a substitute for a Forma user account or its security.
         </p>
 
-        <h2>3. Connected chess accounts</h2>
+        <h2>3. Eligibility and your Forma account</h2>
         <p>
-          Tempo reads publicly available game archives from platforms such as
-          Lichess and Chess.com using the username you provide. We never ask for,
-          and cannot accept, your password on those platforms, and we cannot play
-          moves or otherwise act on your behalf there. You may only connect a
-          username that belongs to you. We are not affiliated with, endorsed by,
-          or operated by Lichess or Chess.com, and your use of those platforms
-          remains subject to their own terms.
+          You must be at least 16 and legally able to accept these terms. You are
+          responsible for accurate registration information, protecting access to
+          your Forma account, and activity carried out through it. Notify us at{" "}
+          <a href="mailto:hello@formachess.app">hello@formachess.app</a> if you
+          believe the account has been compromised.
         </p>
 
-        <h2>4. Acceptable use</h2>
-        <p>You agree not to:</p>
+        <h2>4. Connecting a chess account</h2>
+        <p>
+          You may connect only a chess account that you own or are expressly
+          authorized to manage. Where OAuth is available, Forma uses the platform's
+          authorization flow to verify the connection without receiving your
+          platform password. You authorize Forma to request completed-game and
+          public profile information needed to provide the service and to store
+          the resulting personal analysis.
+        </p>
+        <p>
+          You may revoke a platform authorization through the platform or ask us
+          to disconnect it. Revocation prevents future authorized requests but
+          does not automatically delete information already imported into Forma;
+          deletion is handled as described in our <Link to="/privacy">privacy policy</Link>.
+        </p>
+
+        <h2>5. Fair play</h2>
+        <p>
+          Forma is designed exclusively for post-game study. You must not open,
+          consult, or use Forma to help choose moves in an ongoing game where
+          external assistance is prohibited. This includes rated, tournament,
+          prize, and other games governed by a platform's fair-play rules.
+        </p>
+        <p>You must not use Forma to:</p>
         <ul>
-          <li>use Tempo, or any output from it, to receive assistance during a live game;</li>
-          <li>connect a chess account you do not control, or attempt to access another user's data;</li>
-          <li>scrape, resell, or redistribute analysis output as a competing dataset or service;</li>
-          <li>overload, probe, or interfere with the service or the engines behind it;</li>
-          <li>use Tempo for anything unlawful.</li>
+          <li>receive engine evaluations, opening guidance, or move recommendations during a prohibited ongoing game;</li>
+          <li>automate play, submit moves, operate a bot, or circumvent a platform restriction;</li>
+          <li>misrepresent ownership or authorization of a connected account; or</li>
+          <li>help another person breach Chess.com's, Lichess's, a tournament organizer's, or another provider's rules.</li>
         </ul>
         <p>
-          Using engine assistance during rated play violates the rules of every
-          major chess platform. Tempo is a study tool for games that are already
-          finished. Accounts used for live assistance will be terminated.
+          We may suspend or terminate access where we reasonably believe Forma is
+          being used for live assistance or another fair-play violation.
         </p>
 
-        <h2>5. Plans, billing, and cancellation</h2>
+        <h2>6. Other acceptable-use rules</h2>
+        <p>You also agree not to:</p>
+        <ul>
+          <li>access another person's private Forma account or data without permission;</li>
+          <li>probe, disrupt, overload, reverse engineer, or bypass security or service limits;</li>
+          <li>scrape or systematically copy Forma's interface, reports, opening catalogue, or analysis for a competing dataset or service;</li>
+          <li>resell access or generated reports without written permission; or</li>
+          <li>use Forma unlawfully, fraudulently, or in a way that infringes another person's rights.</li>
+        </ul>
+
+        <h2>7. Game data and permission to process it</h2>
         <p>
-          Tempo offers a free plan and a paid Pro subscription; what each includes
-          is set out on the <Link to="/pricing">pricing page</Link>. Paid plans
-          renew automatically at the end of each billing period until cancelled.
-          You may cancel at any time and will keep Pro access until the end of the
-          period you have paid for. We do not provide pro-rata refunds for partial
-          periods, but if the service has failed you, contact us and we will deal
-          with it fairly. We may change prices with at least 30 days' notice to
-          existing subscribers.
+          You retain whatever rights you hold in the information you provide.
+          Chess-game and platform data may also be governed by the source
+          platform's terms. You give Forma the limited permission necessary to
+          request, copy, normalize, store, analyse, and display connected completed
+          games and public account information back to you for the operation and
+          improvement of the service.
         </p>
         <p>
-          If you cancel, your analysed history is not deleted. Access is reduced
-          to the free plan's limits, and restoring the subscription restores
-          it.
+          Forma does not claim ownership of your completed games. Forma's original
+          interface, software, scoring methods, written presentation, brand, and
+          generated report structure remain protected by applicable intellectual
+          property law. You may use your personal reports and drills for your own
+          non-commercial chess study and coaching sessions.
         </p>
 
-        <h2>6. Your content and our analysis</h2>
+        <h2>8. Analysis limitations</h2>
         <p>
-          Games you play belong to you and to the platforms you played them on.
-          You grant us the permission needed to fetch, store, analyse, and display
-          that data back to you so the service can function. The analysis Tempo
-          produces (evaluations, findings, generated puzzles) is ours, and you
-          may use it freely for your own study.
+          Chess-engine evaluations are produced with finite compute and can change
+          with search depth, engine version, or position context. Pattern labels,
+          explanations, opening classifications, priorities, and recommendations
+          may be incomplete or wrong. Forma does not guarantee rating improvement,
+          tournament results, or that every mistake will be found or explained.
         </p>
 
-        <h2>7. Availability</h2>
+        <h2>9. Plans, payments, and cancellation</h2>
         <p>
-          We aim to keep Tempo running but do not guarantee uninterrupted
-          availability. Analysis depends on third-party platforms whose data we
-          fetch, and those platforms rate-limit and occasionally go down. We may
-          change or discontinue features; if we discontinue something you paid
-          for, we will give notice and a fair refund.
+          Early access may be provided without charge. Before paid subscriptions
+          are enabled, the pricing page and checkout will state the current price,
+          billing interval, included features, renewal terms, taxes where
+          applicable, and any trial or refund conditions. We will not charge you
+          without an affirmative checkout action.
+        </p>
+        <p>
+          Once subscriptions are available, you may cancel renewal at any time and
+          retain paid access until the end of the current billing period. Mandatory
+          consumer cancellation and refund rights continue to apply. Material
+          price changes for an existing renewing subscription will be communicated
+          before the next affected charge.
         </p>
 
-        <h2>8. Disclaimer and liability</h2>
+        <h2>10. Third-party services</h2>
         <p>
-          Tempo is provided "as is". Engine evaluations are approximations
-          produced at a finite search depth and may be wrong. Nothing Tempo tells
-          you is a guarantee of improvement or of any result. To the fullest
-          extent permitted by law, our total liability arising from your use of
-          the service is limited to the amount you paid us in the twelve months
-          before the claim. Nothing here limits liability that cannot lawfully be
-          limited.
+          Forma depends on third-party platforms and infrastructure, including
+          chess providers, authentication, hosting, database, and payment services.
+          Their availability, APIs, policies, and permissions may change. We may
+          limit, alter, or discontinue an integration if necessary to comply with
+          a provider's requirements or protect the service.
         </p>
 
-        <h2>9. Termination</h2>
+        <h2>11. Availability and changes</h2>
         <p>
-          You may delete your account at any time from your account settings. We
-          may suspend or terminate an account that breaches these terms, and will
-          explain why unless doing so would be unlawful.
+          We work to keep Forma accurate and available, but do not promise
+          uninterrupted operation or permanent availability of a feature. During
+          early access, we may change the data model, re-run analysis, reset
+          derived findings, or restrict access while repairing the service. If a
+          future paid feature is materially discontinued, we will provide any
+          remedy required by law and otherwise aim to treat affected subscribers
+          fairly.
         </p>
 
-        <h2>10. Changes</h2>
+        <h2>12. Suspension, termination, and deletion</h2>
         <p>
-          We may update these terms. If a change materially affects your rights we
-          will notify you by email or in the app before it takes effect. Continuing
-          to use Tempo after that means you accept the updated terms.
+          You may stop using Forma at any time and may request account deletion as
+          described in the privacy policy. We may restrict or terminate access for
+          a serious or repeated breach of these terms, security or fair-play risk,
+          unlawful activity, non-payment, or where a platform integration requires
+          us to do so. Where reasonable, we will explain the restriction and give
+          an opportunity to contact us.
         </p>
 
-        <h2>11. Contact</h2>
+        <h2>13. Disclaimers and liability</h2>
         <p>
-          Questions about these terms: <a href="mailto:hello@tempochess.app">hello@tempochess.app</a>.
+          Forma is provided with reasonable care but, to the extent law permits,
+          without a guarantee that it will always be available, error-free, or
+          suitable for a particular training goal. We are not responsible for
+          losses caused solely by a third-party platform outage, your breach of
+          fair-play rules, or decisions made in reliance on an engine suggestion.
+        </p>
+        <p>
+          To the extent permitted by law, Forma's aggregate liability arising from
+          the service will not exceed the amount you paid Forma in the twelve
+          months preceding the event giving rise to the claim. Nothing in these
+          terms excludes liability that cannot legally be excluded or limits your
+          mandatory consumer rights.
+        </p>
+
+        <h2>14. Governing law</h2>
+        <p>
+          These terms are governed by Irish law. If you are a consumer, this does
+          not deprive you of mandatory protections or court rights available under
+          the law of your country of residence. We encourage you to contact us
+          first so we can try to resolve a concern informally.
+        </p>
+
+        <h2>15. Changes and contact</h2>
+        <p>
+          We may update these terms as Forma develops. The date above identifies
+          the current version. If a change materially affects existing users, we
+          will provide reasonable notice through the service or by email.
+        </p>
+        <p>
+          Questions about these terms: <a href="mailto:hello@formachess.app">hello@formachess.app</a>.
+          Privacy requests: <a href="mailto:privacy@formachess.app">privacy@formachess.app</a>.
         </p>
 
         <p className="legal-foot">
-          See also our <Link to="/privacy">privacy policy</Link>.
+          See also our <Link to="/privacy">privacy policy</Link> and{" "}
+          <Link to="/brand">brand disclosure</Link>.
         </p>
       </article>
     </PublicPage>

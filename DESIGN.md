@@ -1,11 +1,13 @@
 # Design
 
-Visual system for Tempo. Light, warm, chess-native: a graphite analysis desk
+Visual system for Forma. Light, warm, chess-native: a graphite analysis desk
 rather than a dark instrument panel. One theme, locked (light).
 
 ## Identity
 
-The product is **Tempo**, not "Tempo Chess". The mark is a rook drawn as a
+The product is **Forma**. The name means "shape" or "form" in Italian and Latin,
+and gives the hero line — "Your mistakes have a shape" — its organising idea.
+The mark is a rook drawn as a
 single closed outline (`app/components/Logo.tsx`) with real piece anatomy:
 three merlons, a collar, a flared plinth. It carries the accent; the wordmark
 stays ink, so the lockup reads as one object. `RookMark` is the mark alone for
@@ -145,10 +147,66 @@ Product:
 - **Sparkline** — rating trend, 1px accent line, no axes chrome.
 - **Record bar** — W/L/D as one proportional bar with counts.
 - **Data table** — recent games; tabular-nums; result as a coloured letter chip.
+- **Line row** (`TearSheet.tsx`) — the `/openings` page is a list of these and
+  nothing else. One repertoire line per row: its name, a **move strip** of its
+  own move numbers on the heat ramp, the count in a fixed two-part shape
+  ("16 mistakes" over "from move 10"), and a Practice control. Rows sort worst
+  first, with the marked line pinned to the top, so reading down the page is
+  reading a to-do list.
+
+  **The count is always the same two facts in the same shape**, so only the
+  numbers change down the page. It replaced four different sentence forms
+  ("Tears at move 5", "holds to move 4", "Show 1 quieter line") which between
+  them ran three unrelated metaphors — fabric, walking, volume — and invented a
+  private vocabulary for things chess already names. See the vocabulary rule in
+  the component header: **never invent a word for something chess already
+  names, and never write a sentence where a measurement will do.** A `failure`
+  in the model is a move outside book and repertoire that lost 90cp or more,
+  which is a *mistake*, so the page says mistake and states the threshold.
+
+  **Exactly one Practice button is accented at a time** — the marked line's.
+  Every other row carries the same control in the same slot as a quiet ghost
+  pill that fills on approach. The action is never hidden behind the
+  disclosure, and the page is never a column of orange buttons. That is the one
+  gamification device here: an active node and a quiet path, in the sense
+  Duolingo means it and not in the sense PRODUCT.md's anti-reference refuses.
+  No badges, no streaks, no coins, no confetti.
+
+  The strip is a **picture when the row is closed and an instrument when it is
+  open**: presentational spans become buttons, grow, and take move numbers on
+  hover. Everything at one altitude is what made the previous version read as a
+  spreadsheet. Opening a row also recesses its header strip, so the summary and
+  the instrument are not the same picture twice at full strength.
+
+  Counts step by **weight and value, never by hue**. Severity is already
+  carried by the ramp beside them, and the accent on this page means "the
+  action". Nothing in the row is coloured except the strip and the one live
+  button.
+- **Today** (`Today.tsx`) — the product's home, and the one page with a point
+  of view. It opens on a **conclusion as its heading** ("5 mistakes at move 11
+  of your London System"), not on the word "Today": the nav already says where
+  you are, so spending the largest type on repeating it buys furniture. The
+  measurement *is* the headline, which is the strongest thing this product can
+  say and the only thing that has earned that size.
+
+  Under it: one line of support, the line's own move strip, and **exactly one
+  primary action**. Then a "Then" list of at most three quiet rows, each a real
+  destination with a measured reason to be there, each using the same ghost
+  pill as the openings rows so a column of buttons never competes with the
+  action above. A row that cannot state its reason does not render.
+
+  The strip and the boards are the same components the openings page uses.
+  Diagnosis and practice look like one instrument because they are drawn from
+  one set of parts.
+
+  It replaced a dashboard of five panels — a superseded opening map, ratings,
+  recent games, an activity calendar, an engine read — none of which named a
+  decision. That is PRODUCT.md's third principle ("every number earns its
+  place") applied to a whole page rather than to a tile.
 
 The landing is exactly six beats: hero, statement, scale, showcase, beta note,
 closer.
-There was a sixth ("What Tempo will not do", three pastel tiles) and it is gone:
+There was a sixth ("What Forma will not do", three pastel tiles) and it is gone:
 the refusals were already implied by everything the product does show.
 
 Public (one layout family per section, never repeated):
@@ -330,7 +388,7 @@ Public (one layout family per section, never repeated):
 - Handles shown in the Scale wash are public Lichess usernames, harvested from
   public arena results, whose public archives we screened through the same API
   the site's own export button uses. Nothing private, nothing inferred, and no
-  claim that any of them endorse Tempo — the copy says we read their games,
+  claim that any of them endorse Forma — the copy says we read their games,
   because that is all that happened.
 - Any figure about our own reach is counted, never typed. It comes from
   `/stats/reach`. If the count is unavailable the Scale section does not render;
@@ -365,7 +423,7 @@ Every animation has to name its job. The ones we ship:
 - **Evaluation bars** growing to their real value on entry, staggered 90ms.
   Job: the value *is* the animation, so a growing bar is the measurement.
 - **Flowing dashes** along the connect wires. Job: shows games moving from the
-  platform into Tempo, which is the thing that step describes.
+  platform into Forma, which is the thing that step describes.
 - **Key press** on buttons: 1px translate plus the bottom edge collapsing
   from `--shadow-key` to `--shadow-key-down`. Job: feedback.
 

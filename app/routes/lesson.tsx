@@ -15,7 +15,7 @@ import { RouteError } from "../components/RouteError";
 import { usePrimaryActionKeys } from "../lib/usePrimaryActionKeys";
 
 export function meta() {
-  return [{ title: "Lesson · Tempo" }];
+  return [{ title: "Lesson · Forma" }];
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

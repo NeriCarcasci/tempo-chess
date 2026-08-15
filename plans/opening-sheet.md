@@ -4,6 +4,18 @@ Self-contained implementation plan. Everything below was locked in design
 conversation; where a value is marked *tunable*, pick the stated default and
 make it a named constant.
 
+> **Superseded, presentation only.** Every definition below still holds: rows,
+> columns, cell states, the heat thresholds, the marker, the variation fold.
+> What changed is the shape they are drawn in. The sheet is no longer one grid
+> of rows against a header of move numbers with a detail panel docked at the
+> bottom of the page. It is a **list of line rows** (see DESIGN.md → Components
+> → Line row): each row folds its own columns into a depth strip, states its
+> verdict in words, carries its own Practice button, and opens in place onto
+> the instrument, the positions, and its variations. The grid put every square
+> on the page at one altitude and parked the primary action a full page below
+> the row it belonged to. Read this file for what the numbers mean, and
+> DESIGN.md for what they look like.
+
 ## What this is
 
 A heat grid of the player's opening skill: **rows are their repertoire lines,
@@ -221,7 +233,7 @@ States:
 3. Temporary preview route (pattern: `app/routes/__preview-dense.tsx` +
    entry in `app/routes.ts` — **delete both before finishing**) rendering
    dense, thin, and no-graph states.
-4. In the browser (`preview_start` name "tempo", app at :5173, API :8787):
+4. In the browser (`preview_start` name "forma", app at :5173, API :8787):
    walk a cell → dock fills; unfold variations; marker pulses; exactly one
    marker across both sections; deep-link URL restores selection.
 5. 375px: page has no horizontal scroll; the sheet scrolls inside its box.

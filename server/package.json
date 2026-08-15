@@ -1,5 +1,5 @@
 {
-  "name": "@tempo/server",
+  "name": "@forma/server",
   "private": true,
   "type": "module",
   "scripts": {

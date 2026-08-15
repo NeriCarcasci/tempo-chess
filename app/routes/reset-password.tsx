@@ -5,7 +5,7 @@ import { getSupabase, supabaseConfigured } from "../lib/supabase";
 import { updatePassword } from "../lib/session";
 
 export function meta() {
-  return [{ title: "Choose a new password · Tempo" }];
+  return [{ title: "Choose a new password · Forma" }];
 }
 
 export async function clientLoader() {
@@ -35,7 +35,7 @@ export default function ResetPassword({ loaderData, actionData }: Route.Componen
   return (
     <main className="auth-shell">
       <div className="auth-card">
-        <Link to="/" className="auth-brand" aria-label="Tempo home">
+        <Link to="/" className="auth-brand" aria-label="Forma home">
           <BrandLock size={24} />
         </Link>
         <h1>Choose a new password</h1>

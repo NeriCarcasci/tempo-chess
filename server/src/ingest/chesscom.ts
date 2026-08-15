@@ -14,7 +14,7 @@ import {
 } from "./types.js";
 
 const CHESSCOM_API = "https://api.chess.com/pub";
-const USER_AGENT = "TempoChess/0.1 (+https://github.com/NeriCarcasci/tempo-chess)";
+const USER_AGENT = "FormaChess/0.1 (+https://github.com/NeriCarcasci/tempo-chess)";
 
 interface ChesscomPlayer {
   username?: string;

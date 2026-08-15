@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "tempo",
+      "name": "forma",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:all"],
       "port": 5173

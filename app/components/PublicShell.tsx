@@ -37,7 +37,7 @@ export function PublicNav() {
     <header className="public-header">
       <a href="#main" className="skip-link">Skip to content</a>
       <div className="public-header-inner">
-        <Link to="/" className="public-brand" aria-label="Tempo home">
+        <Link to="/" className="public-brand" aria-label="Forma home">
           <Logo />
         </Link>
 
@@ -65,7 +65,7 @@ export function PublicNav() {
             </NavLink>
           ))}
           {signedIn ? (
-            <Link to="/dashboard" className="primary-button public-cta" prefetch="intent">
+            <Link to="/today" className="primary-button public-cta" prefetch="intent">
               Go to dashboard
             </Link>
           ) : (
@@ -112,7 +112,7 @@ export function PublicFooter() {
         </nav>
       </div>
       <div className="public-footer-base">
-        <span>© {new Date().getFullYear()} Tempo</span>
+        <span>© {new Date().getFullYear()} Forma</span>
         <span>
           Opening data from the CC0{" "}
           <a href="https://github.com/lichess-org/chess-openings" target="_blank" rel="noreferrer noopener">
