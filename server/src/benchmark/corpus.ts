@@ -62,7 +62,7 @@ function buildGame(archetype: Archetype, ordinal: number): BenchmarkGame {
   extendGame(chess, `${id}:tail`, 8 + (ordinal % 7));
 
   chess.header(
-    "Event", "Tempo credential-free benchmark",
+    "Event", "Forma credential-free benchmark",
     "Site", ordinal % 2 === 0 ? "https://lichess.org" : "https://chess.com",
     "Date", `2026.01.${String((ordinal % 28) + 1).padStart(2, "0")}`,
     "Round", "-",

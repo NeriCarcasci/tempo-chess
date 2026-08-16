@@ -20,7 +20,7 @@ import type { OpeningGraph, OpeningGraphEdge } from "../lib/openings";
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 export function meta() {
-  return [{ title: "Repertoire trainer · Tempo" }];
+  return [{ title: "Repertoire trainer · Forma" }];
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
@@ -388,7 +388,7 @@ export default function Train({ loaderData }: Route.ComponentProps) {
           <div>
             <p className="eyebrow">Repertoire trainer</p>
             <h1>{family ? `Drill your ${family}` : `Drill your ${color} repertoire`}</h1>
-            <p>Play the moves you'd choose. Tempo checks each against the line you actually play, and explains why.</p>
+            <p>Play the moves you'd choose. Forma checks each against the line you actually play, and explains why.</p>
           </div>
         </header>
 

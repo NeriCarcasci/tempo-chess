@@ -5,11 +5,11 @@ import { supabaseConfigured } from "../lib/supabase";
 import { BrandLock } from "../components/PublicShell";
 
 export function meta() {
-  return [{ title: "Create account · Tempo" }];
+  return [{ title: "Create account · Forma" }];
 }
 
 export async function clientLoader() {
-  if (await getSession()) throw redirect("/dashboard");
+  if (await getSession()) throw redirect("/today");
   return null;
 }
 
@@ -45,7 +45,7 @@ export default function Signup({ actionData }: Route.ComponentProps) {
     return (
       <main className="auth-shell">
         <div className="auth-card">
-          <Link to="/" className="auth-brand" aria-label="Tempo home">
+          <Link to="/" className="auth-brand" aria-label="Forma home">
             <BrandLock size={24} />
           </Link>
           <h1>Check your email</h1>
@@ -59,12 +59,12 @@ export default function Signup({ actionData }: Route.ComponentProps) {
   return (
     <main className="auth-shell">
       <div className="auth-card">
-        <Link to="/" className="auth-brand" aria-label="Tempo home">
+        <Link to="/" className="auth-brand" aria-label="Forma home">
           <BrandLock size={24} />
         </Link>
         <h1>Create your account</h1>
         <p className="auth-sub">
-          Free to start. Link a chess account next and Tempo reads your whole history.
+          Free to start. Link a chess account next and Forma reads your whole history.
         </p>
 
         {!supabaseConfigured ? (

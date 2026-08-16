@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200" role="img" aria-labelledby="title desc">
+  <title id="title">Forma rook logo</title>
+  <desc id="desc">The Forma rook's crown and collar, lit from the right, on a cream square.</desc>
+
+  <!-- Geometry is the mascot's own, mapped from its 280x350 space into this
+       tile: crown x72-208 y64-152 with merlons on a 50 pitch, collar x60-220
+       starting at that same y152 so the parts share nothing but the ink line
+       — both 9-wide strokes land on that one edge and coincide, which is the
+       whole of the join. Shade falls left of the mascot's terminator at x=108,
+       which is why the light reads as coming from the right here exactly as it
+       does on the mascot. See app/components/Logo.tsx.
+
+       Paths are repeated rather than shared through <use href>: this file is
+       handed to OAuth application directories, which render it with whatever
+       they have, and SVG2 href on <use> is the first thing those renderers
+       drop. Duplication is the cheap half of that trade. -->
+
+  <rect width="200" height="200" rx="42" fill="#f4f2ee"/>
+
+  <clipPath id="forma-collar-clip"><path d="M30.9 135.4 Q30.9 126.8 39.5 126.8 L160.5 126.8 Q169.1 126.8 169.1 135.4 L169.1 140.6 Q169.1 149.2 160.5 149.2 L39.5 149.2 Q30.9 149.2 30.9 140.6 Z"/></clipPath>
+  <clipPath id="forma-crown-clip"><path d="M41.3 55.1 Q41.3 50.8 45.6 50.8 L68 50.8 Q72.4 50.8 72.4 55.1 L72.4 72.4 Q72.4 76.7 76.7 76.7 L80.1 76.7 Q84.4 76.7 84.4 72.4 L84.4 55.1 Q84.4 50.8 88.8 50.8 L111.2 50.8 Q115.6 50.8 115.6 55.1 L115.6 72.4 Q115.6 76.7 119.9 76.7 L123.3 76.7 Q127.6 76.7 127.6 72.4 L127.6 55.1 Q127.6 50.8 132 50.8 L154.4 50.8 Q158.7 50.8 158.7 55.1 L158.7 122.5 Q158.7 126.8 154.4 126.8 L45.6 126.8 Q41.3 126.8 41.3 122.5 Z"/></clipPath>
+
+  <path d="M30.9 135.4 Q30.9 126.8 39.5 126.8 L160.5 126.8 Q169.1 126.8 169.1 135.4 L169.1 140.6 Q169.1 149.2 160.5 149.2 L39.5 149.2 Q30.9 149.2 30.9 140.6 Z" fill="#cf5730"/>
+  <rect x="0" y="0" width="72.4" height="200" fill="#ad4520" clip-path="url(#forma-collar-clip)"/>
+  <path d="M30.9 135.4 Q30.9 126.8 39.5 126.8 L160.5 126.8 Q169.1 126.8 169.1 135.4 L169.1 140.6 Q169.1 149.2 160.5 149.2 L39.5 149.2 Q30.9 149.2 30.9 140.6 Z" fill="none" stroke="#23211d" stroke-width="7.8" stroke-linejoin="round"/>
+
+  <path d="M41.3 55.1 Q41.3 50.8 45.6 50.8 L68 50.8 Q72.4 50.8 72.4 55.1 L72.4 72.4 Q72.4 76.7 76.7 76.7 L80.1 76.7 Q84.4 76.7 84.4 72.4 L84.4 55.1 Q84.4 50.8 88.8 50.8 L111.2 50.8 Q115.6 50.8 115.6 55.1 L115.6 72.4 Q115.6 76.7 119.9 76.7 L123.3 76.7 Q127.6 76.7 127.6 72.4 L127.6 55.1 Q127.6 50.8 132 50.8 L154.4 50.8 Q158.7 50.8 158.7 55.1 L158.7 122.5 Q158.7 126.8 154.4 126.8 L45.6 126.8 Q41.3 126.8 41.3 122.5 Z" fill="#fbe9e1"/>
+  <rect x="0" y="0" width="72.4" height="200" fill="#f3d0c1" clip-path="url(#forma-crown-clip)"/>
+  <path d="M41.3 55.1 Q41.3 50.8 45.6 50.8 L68 50.8 Q72.4 50.8 72.4 55.1 L72.4 72.4 Q72.4 76.7 76.7 76.7 L80.1 76.7 Q84.4 76.7 84.4 72.4 L84.4 55.1 Q84.4 50.8 88.8 50.8 L111.2 50.8 Q115.6 50.8 115.6 55.1 L115.6 72.4 Q115.6 76.7 119.9 76.7 L123.3 76.7 Q127.6 76.7 127.6 72.4 L127.6 55.1 Q127.6 50.8 132 50.8 L154.4 50.8 Q158.7 50.8 158.7 55.1 L158.7 122.5 Q158.7 126.8 154.4 126.8 L45.6 126.8 Q41.3 126.8 41.3 122.5 Z" fill="none" stroke="#23211d" stroke-width="7.8" stroke-linejoin="round"/>
+</svg>

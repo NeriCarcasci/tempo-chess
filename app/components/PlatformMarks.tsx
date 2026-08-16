@@ -1,5 +1,5 @@
 /**
- * Marks for the chess platforms Tempo connects to.
+ * Marks for the chess platforms Forma connects to.
  *
  * Licensing, checked August 2026, because the two platforms differ:
  *

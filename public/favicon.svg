@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- The mono mark from app/components/Logo.tsx. Solid, one colour: at 16px
+       the colour tile's ink outline is half a pixel and the cream crown loses
+       its edge, so one shape in one colour is the only thing that survives.
+
+       No tile behind it. A paper square is the brightest object in a dark tab
+       strip and the mark ends up reading as a lit block with something in it,
+       rather than as the mark. Transparent lets the strip's own colour do the
+       work, and the shape gets the room the tile was using.
+
+       The accent is dark enough that it silts up against dark chrome, so the
+       dark scheme lifts it. Browsers that ignore prefers-color-scheme in a
+       favicon just keep the accent, which is correct on light chrome and the
+       common case. -->
+  <style>
+    path { fill: #cf5730 }
+    @media (prefers-color-scheme: dark) { path { fill: #f08a63 } }
+  </style>
+  <path d="M3.25 6.25 Q3.25 5.31 4.19 5.31 L9.06 5.31 Q10 5.31 10 6.25 L10 10 Q10 10.94 10.94 10.94 L11.69 10.94 Q12.63 10.94 12.63 10 L12.63 6.25 Q12.63 5.31 13.56 5.31 L18.44 5.31 Q19.38 5.31 19.38 6.25 L19.38 10 Q19.38 10.94 20.31 10.94 L21.06 10.94 Q22 10.94 22 10 L22 6.25 Q22 5.31 22.94 5.31 L27.81 5.31 Q28.75 5.31 28.75 6.25 L28.75 21.25 Q28.75 21.81 29.31 21.81 L30.44 21.81 Q31 21.81 31 22.38 L31 24.81 Q31 26.69 29.13 26.69 L2.88 26.69 Q1 26.69 1 24.81 L1 22.38 Q1 21.81 1.56 21.81 L2.69 21.81 Q3.25 21.81 3.25 21.25 Z"/>
+</svg>

@@ -11,11 +11,11 @@ import { supabaseConfigured } from "../lib/supabase";
 import { BrandLock } from "../components/PublicShell";
 
 export function meta() {
-  return [{ title: "Sign in · Tempo" }];
+  return [{ title: "Sign in · Forma" }];
 }
 
 export async function clientLoader() {
-  if (await getSession()) throw redirect("/dashboard");
+  if (await getSession()) throw redirect("/today");
   return null;
 }
 
@@ -33,7 +33,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
   // loader reads /me, or a fast re-login would show the old account's data.
   invalidateSession();
   const next = new URL(request.url).searchParams.get("next");
-  throw redirect(next && next.startsWith("/") ? next : "/dashboard");
+  throw redirect(next && next.startsWith("/") ? next : "/today");
 }
 
 function ResetPassword() {
@@ -94,7 +94,7 @@ export default function Login({ actionData }: Route.ComponentProps) {
   return (
     <main className="auth-shell">
       <div className="auth-card">
-        <Link to="/" className="auth-brand" aria-label="Tempo home">
+        <Link to="/" className="auth-brand" aria-label="Forma home">
           <BrandLock size={24} />
         </Link>
         <h1>Welcome back</h1>

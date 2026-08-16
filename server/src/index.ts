@@ -76,7 +76,7 @@ function fail(c: Context, error: unknown) {
 // --- public ---------------------------------------------------------------
 
 app.get("/health", (c) =>
-  c.json({ status: "ok", service: "tempo-chess-api", ts: Date.now() }),
+  c.json({ status: "ok", service: "forma-chess-api", ts: Date.now() }),
 );
 
 /**
@@ -559,7 +559,7 @@ app.post("/engine/play", async (c) => {
 // web server) can't steal this one. Production (Cloud Run) still uses PORT.
 const port = Number(process.env.API_PORT ?? process.env.PORT ?? 8080);
 serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`tempo-chess api listening on :${info.port}`);
+  console.log(`forma-chess api listening on :${info.port}`);
 });
 void recoverPipeline().catch((error) => console.error("pipeline recovery failed", error));
 

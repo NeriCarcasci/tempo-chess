@@ -12,11 +12,11 @@ import {
 
 export function meta() {
   return [
-    { title: "Features · Tempo" },
+    { title: "Features · Forma" },
     {
       name: "description",
       content:
-        "Connect a Lichess or Chess.com account and Tempo prices every move you have played, maps your openings, explains each mistake, and turns the expensive ones into drills.",
+        "Connect a Lichess or Chess.com account and Forma prices every move you have played, maps your openings, explains each mistake, and turns the expensive ones into drills.",
     },
   ];
 }
@@ -82,7 +82,7 @@ export default function Features() {
       <header className="page-head feature-hero">
         <h1>Everything you have played, in one pass</h1>
         <p>
-          Connect an account and Tempo reads the lot: what you play, where it
+          Connect an account and Forma reads the lot: what you play, where it
           goes wrong, and what to practise about it.
         </p>
         <ArchiveHero />

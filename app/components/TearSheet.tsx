@@ -2,19 +2,27 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { Board } from "./Board";
 import { openingSlug } from "../lib/openingContent";
+import { OTHER_ROW } from "../lib/tearSheet";
 import type { SheetCell, SheetRow, TearSheet as Sheet } from "../lib/tearSheet";
 
 /**
- * The tear sheet.
+ * The opening sheet: one row per line in the player's repertoire.
  *
- * Rows are the lines the player's games actually walk, columns are their own
- * move number, and colour is how their decisions went at that depth. The point
- * of the shape is that it can be read as a sentence — fine for five moves,
- * shaky at six, torn at seven — which is the one thing a tree of moves cannot
- * do for anyone who does not already read chess notation fluently.
+ * The row carries its name, a strip of its own moves shaded by how many were
+ * mistakes, the count, and the action. Rows sort worst first, so reading down
+ * the page is reading a to-do list.
  *
- * Nothing here shows a move. Notation lives one altitude down, in the docked
- * panel and the explorer beyond it, where the reader has asked for it.
+ * **Vocabulary rule.** Nothing here invents a word for something chess already
+ * names. A `failure` in the model is a player move outside book and repertoire
+ * that lost 90 centipawns or more, which is a *mistake*, so the page says
+ * mistake. Earlier copy called them "decisions that cost you the thread" and
+ * described lines that "hold", "tear" and can be "walked": three metaphors and
+ * a private vocabulary, none of which a player could check against anything.
+ *
+ * **One fact per line.** Every row states its count and its move in the same
+ * two-part shape, so only the numbers change between rows. The panel headline
+ * is derived from the selected square and nothing else, which is what keeps it
+ * from disagreeing with the number underneath it.
  */
 
 const SECTION_LABEL = {
@@ -23,15 +31,163 @@ const SECTION_LABEL = {
 } as const;
 
 /** Rows shown before the rest fold away. A screen of rows is a spreadsheet. */
-const VISIBLE_ROWS = 5;
+const VISIBLE_ROWS = 6;
 
-/** What a cell says when you point at it. */
-function cellTitle(row: SheetRow, cell: SheetCell): string {
-  const where = `${row.label} · your move ${cell.moveNo}`;
-  if (cell.state === "pre") return `${where} — before this line begins`;
-  if (cell.state === "blank") return `${where} — past your book`;
-  const rate = Math.round((cell.failures / cell.decisions) * 100);
-  return `${where} — ${cell.decisions} decisions, ${cell.failures} cost you something (${rate}%)`;
+type VerdictKind = "tears" | "shaky" | "holds" | "thin";
+
+interface Verdict {
+  kind: VerdictKind;
+  /** Mistakes across the whole line. */
+  mistakes: number;
+  /** Where it first stops being reliable, or the depth it reaches when it does. */
+  moveNo: number;
+  /** The count. */
+  headline: string;
+  /** Where the count applies. Empty when there is not enough to say. */
+  detail: string;
+}
+
+/** Worst first. The product's own rule, applied to the order of the page. */
+const RANK: Record<VerdictKind, number> = { tears: 0, shaky: 1, holds: 2, thin: 3 };
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
+/** The last move number this line has any scored move at. */
+function depthOf(cells: SheetCell[]): number {
+  return cells.reduce((deepest, cell) => (cell.decisions > 0 ? cell.moveNo : deepest), 0);
+}
+
+/** What a line amounts to: a count, and the move it applies from. */
+function readLine(cells: SheetCell[]): Verdict {
+  const depth = depthOf(cells);
+  const mistakes = cells.reduce((n, cell) => n + cell.failures, 0);
+  const count = `${mistakes} ${plural(mistakes, "mistake", "mistakes")}`;
+
+  const breaks = cells.find((cell) => cell.heat === "tears" || cell.heat === "shaky");
+  if (breaks) {
+    return {
+      kind: breaks.heat === "tears" ? "tears" : "shaky",
+      mistakes,
+      moveNo: breaks.moveNo,
+      headline: count,
+      detail: `from move ${breaks.moveNo}`,
+    };
+  }
+  if (cells.some((cell) => cell.heat === "holds")) {
+    return {
+      kind: "holds",
+      mistakes,
+      moveNo: depth,
+      headline: mistakes === 0 ? "No mistakes" : count,
+      detail: `through move ${depth}`,
+    };
+  }
+  return { kind: "thin", mistakes, moveNo: depth, headline: "Too few games", detail: "" };
+}
+
+/** The square a line opens on: the one with the most mistakes, deepest to break ties. */
+function worstCell(cells: SheetCell[]): SheetCell | null {
+  let best: SheetCell | null = null;
+  for (const cell of cells) {
+    if (cell.decisions === 0) continue;
+    if (
+      !best ||
+      cell.failures > best.failures ||
+      (cell.failures === best.failures && cell.moveNo > best.moveNo)
+    ) {
+      best = cell;
+    }
+  }
+  return best;
+}
+
+/**
+ * One square, in words. Used for the panel headline and the tooltip, so the
+ * two can never say different things about the same square.
+ */
+function readCell(where: string, cell: SheetCell | null): string {
+  if (!cell) return `${where}. No moves analysed yet.`;
+  const at = `${where}, move ${cell.moveNo}.`;
+  if (cell.state === "pre") return `${at} The line has not started yet.`;
+  if (cell.decisions === 0) return `${at} You have never played this deep here.`;
+  const moves = `${cell.decisions} ${plural(cell.decisions, "move", "moves")}`;
+  if (cell.failures === 0) return `${at} None of your ${moves} here were mistakes.`;
+  const thin = cell.state === "thin" ? " Too few to read yet." : "";
+  return `${at} ${cell.failures} of your ${moves} here ${plural(cell.failures, "was a mistake", "were mistakes")}.${thin}`;
+}
+
+/**
+ * The move strip: the row's own picture of where its mistakes are.
+ *
+ * Presentational while the row is closed, and the same squares become buttons
+ * once it opens. A closed row is a count you scan; an open row is an instrument
+ * you point at. Making every square on the page pressable at rest is what made
+ * the old sheet read as a spreadsheet.
+ */
+export function MoveStrip({
+  cells,
+  maxMove,
+  label,
+  markedMove,
+  pickedMove,
+  onPick,
+  small,
+}: {
+  cells: SheetCell[];
+  maxMove: number;
+  label: string;
+  markedMove?: number | null;
+  pickedMove?: number | null;
+  onPick?: (cell: SheetCell) => void;
+  small?: boolean;
+}) {
+  const shown = cells.slice(0, maxMove);
+  return (
+    <div className={`line-strip ${small ? "is-small" : ""}`} aria-hidden={!onPick}>
+      {shown.map((cell, i) => {
+        const dead = cell.state === "pre" || cell.state === "blank";
+        const className = [
+          "line-sq",
+          markedMove === cell.moveNo ? "is-marked" : "",
+          pickedMove === cell.moveNo ? "is-picked" : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+        const style = { "--i": i } as React.CSSProperties;
+        if (!onPick) {
+          return (
+            <span
+              key={cell.moveNo}
+              className={className}
+              data-state={cell.state}
+              data-heat={cell.heat}
+              style={style}
+            />
+          );
+        }
+        const title = readCell(label, cell);
+        return (
+          <button
+            key={cell.moveNo}
+            type="button"
+            className={className}
+            data-state={cell.state}
+            data-heat={cell.heat}
+            style={style}
+            disabled={dead}
+            title={title}
+            aria-label={title}
+            aria-pressed={pickedMove === cell.moveNo}
+            onClick={() => onPick(cell)}
+          >
+            <span className="line-sq-no" aria-hidden="true">
+              {cell.moveNo}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export function TearSheet({
@@ -41,388 +197,435 @@ export function TearSheet({
   sheet: Sheet;
   username: string;
 }) {
-  const [open, setOpen] = useState<Set<string>>(new Set());
   /**
-   * The cell under the cursor, so the sheet can light its column and row.
-   * Reading a grid means finding "which move number is this" — a crosshair
-   * answers that without the eye having to travel to the header and back.
-   */
-  const [hover, setHover] = useState<{ rowKey: string; moveNo: number } | null>(null);
-  const [showAll, setShowAll] = useState<Set<string>>(new Set());
-  const [picked, setPicked] = useState<{
-    row: SheetRow;
-    cell: SheetCell;
-    color: "white" | "black";
-    variation: string | null;
-  } | null>(null);
-
-  /**
-   * The marker, resolved to the things the lead card and the detail panel
-   * need: its row, the exact cell (variation-level when the marker names one,
-   * so the boards behind it are the precise positions), and words for it.
-   */
-  const task = useMemo(() => {
-    const m = sheet.marker;
-    if (!m) return null;
-    for (const section of sheet.sections) {
-      const row = section.rows.find((r) => r.key === m.rowKey);
-      if (!row) continue;
-      const variation = m.variationKey
-        ? row.variations.find((v) => v.key === m.variationKey) ?? null
-        : null;
-      const cell = (variation ?? row).cells[m.moveNo - 1];
-      if (!cell) return null;
-      return { section, row, variation, cell };
-    }
-    return null;
-  }, [sheet]);
-
-  const fixThis = () => {
-    if (!task) return;
-    if (task.variation) setOpen((prev) => new Set(prev).add(task.row.key));
-    setPicked({
-      row: task.row,
-      cell: task.cell,
-      color: task.section.color,
-      variation: task.variation?.label ?? null,
-    });
-    // The panel docks below the sheet; bring it to the reader.
-    requestAnimationFrame(() =>
-      document.querySelector(".tsheet-detail")?.scrollIntoView({ behavior: "smooth", block: "center" }),
-    );
-  };
-
-  const columns = useMemo(
-    () => Array.from({ length: sheet.maxMove }, (_, i) => i + 1),
-    [sheet.maxMove],
-  );
-
-  const toggle = (key: string) =>
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-
-  /**
-   * Exactly one marker is visible at any time.
+   * One line open at a time, starting on the one the marker names.
    *
-   * It is computed against a variation, but variations start folded — so on a
-   * folded row it surfaces to the family cell above it, and moves down to the
-   * precise variation once the reader opens the row. Without this the sheet's
-   * single most important square is invisible until someone thinks to unfold
-   * the row it is hiding in.
+   * A page where every row can be open at once is the spreadsheet again, one
+   * scroll further down. The single open row is also what makes "the next
+   * thing" a place on the page rather than a card above it.
    */
-  const markerOn = (
-    rowKey: string,
-    variationKey: string | null,
-    moveNo: number,
-    unfolded: boolean,
-  ) => {
-    const m = sheet.marker;
-    if (!m || m.rowKey !== rowKey || m.moveNo !== moveNo) return false;
-    if (variationKey === null) return !unfolded || m.variationKey === null;
-    return m.variationKey === variationKey;
-  };
+  const [open, setOpen] = useState<string | null>(sheet.marker?.rowKey ?? null);
+  const [showAll, setShowAll] = useState<Set<string>>(new Set());
 
-  const renderCells = (
-    row: SheetRow,
-    cells: SheetCell[],
-    color: "white" | "black",
-    variationKey: string | null,
-    variationLabel: string | null,
-    unfolded: boolean,
-  ) =>
-    cells.slice(0, sheet.maxMove).map((cell) => {
-      const marked = markerOn(row.key, variationKey, cell.moveNo, unfolded);
-      const dead = cell.state === "pre" || cell.state === "blank";
-      const selected =
-        picked?.row.key === row.key &&
-        picked.cell.moveNo === cell.moveNo &&
-        picked.variation === variationLabel;
-      return (
-        <button
-          // The grid is one flat parent, so a family row and its variation
-          // rows are siblings — a bare move number collides across them.
-          key={`${variationKey ?? row.key}:${cell.moveNo}`}
-          type="button"
-          className={`tsheet-cell ${marked ? "is-marked" : ""} ${selected ? "is-picked" : ""} ${
-            variationKey === null && cell.moveNo === row.bookDepth && cell.decisions > 0 ? "is-edge" : ""
-          }`}
-          data-state={cell.state}
-          data-heat={cell.heat}
-          disabled={dead}
-          title={cellTitle(row, cell)}
-          aria-label={cellTitle(row, cell)}
-          onClick={() =>
-            setPicked({ row, cell, color, variation: variationLabel })
-          }
-          onMouseEnter={() => setHover({ rowKey: variationKey ?? row.key, moveNo: cell.moveNo })}
-          onFocus={() => setHover({ rowKey: variationKey ?? row.key, moveNo: cell.moveNo })}
-        >
-          {marked ? <span className="tsheet-pip" aria-hidden="true" /> : null}
-          {/* The number only appears under the cursor: at rest the sheet is a
-              picture, and on approach it becomes a readout. */}
-          {cell.state === "scored" || cell.state === "thin" ? (
-            <span className="tsheet-count" aria-hidden="true">{cell.failures}</span>
-          ) : null}
-        </button>
-      );
-    });
-
-  const lines = sheet.sections.reduce((n, sec) => n + sec.rows.length, 0);
-  const bookDepth = sheet.sections.reduce(
-    (max, sec) => sec.rows.reduce((m, r) => Math.max(m, r.bookDepth), max),
+  const lines = sheet.sections.reduce((n, section) => n + section.rows.length, 0);
+  const depth = sheet.sections.reduce(
+    (max, section) => section.rows.reduce((m, row) => Math.max(m, row.bookDepth), max),
     0,
   );
-  const torn = sheet.sections.reduce(
-    (n, sec) =>
-      sec.rows.reduce(
-        (m, r) => m + r.cells.filter((c) => c.heat === "tears").length,
+  const mistakes = sheet.sections.reduce(
+    (n, section) =>
+      section.rows.reduce(
+        (m, row) => m + row.cells.reduce((k, cell) => k + cell.failures, 0),
         n,
       ),
     0,
   );
 
   return (
-    <div className="tsheet">
-      {/* Standing state, not a heading — the crown bar. */}
-      <p className="tsheet-status" aria-label="Repertoire summary">
-        <span><b>{lines}</b> lines</span>
-        <span>book runs to move <b>{bookDepth}</b></span>
-        <span><b>{torn}</b> torn</span>
-      </p>
-
-      {/* One task. The sheet below is the evidence for it. */}
-      {task ? (
-        <div className="tsheet-lead">
-          <div>
-            <h2>
-              Your {task.row.label}
-              {task.variation ? ` (${task.variation.label})` : ""} holds to move{" "}
-              {task.cell.moveNo - 1}. Move {task.cell.moveNo} is where it goes.
-            </h2>
-            <p>
-              {task.cell.failures} of {task.cell.decisions} decisions there cost you
-              the thread.
-            </p>
-          </div>
-          <button type="button" className="primary-button" onClick={fixThis}>
-            Fix this
-          </button>
-        </div>
-      ) : null}
+    <div className="lsheet">
+      <header className="lsheet-head">
+        <h1>Openings</h1>
+        <p className="lsheet-facts">
+          <span>
+            <b>{lines}</b> {plural(lines, "line", "lines")}
+          </span>
+          <span>
+            <b>{mistakes}</b> {plural(mistakes, "mistake", "mistakes")}
+          </span>
+          {/* The model caps columns at `maxMove`, so a line that runs deeper
+              than the sheet is drawn reports the cap. Saying "to move 12" when
+              the real answer is "we stopped counting at 12" is the kind of
+              number that costs a reader their trust in the other two. */}
+          <span>
+            deepest {depth >= sheet.maxMove ? "past" : "to"} move{" "}
+            <b>{depth >= sheet.maxMove ? sheet.maxMove - 1 : depth}</b>
+          </span>
+        </p>
+        {/* The threshold is stated, not implied. A number a player can check is
+            worth more than an adjective they have to take on trust. */}
+        <p className="lsheet-key">
+          One square per move, darkest where you make the most mistakes. A mistake is a
+          move outside your book that lost 90 centipawns or more.
+        </p>
+      </header>
 
       {sheet.sections.map((section) => (
-        <section key={section.color} className="tsheet-section">
-          {/* With the side gate in front there is one section, and naming it
-              would repeat the breadcrumb. The head only earns its place when
-              both colours share the page (previews, future views). */}
-          {sheet.sections.length > 1 ? (
-            <h2 className="tsheet-section-head">{SECTION_LABEL[section.color]}</h2>
-          ) : null}
-
-          <div className="tsheet-scroll">
-            <div
-              className="tsheet-grid"
-              style={{ "--cols": sheet.maxMove } as React.CSSProperties}
-              onMouseLeave={() => setHover(null)}
-            >
-              <div className="tsheet-corner">your move №</div>
-              {columns.map((n) => (
-                <div
-                  key={n}
-                  className={`tsheet-colhead ${hover?.moveNo === n ? "is-lit" : ""}`}
-                  style={hover?.moveNo === n ? { color: "var(--color-accent)" } : undefined}
-                >
-                  {n}
-                </div>
-              ))}
-              <div className="tsheet-corner tsheet-corner-end">games</div>
-
-              {(showAll.has(section.color)
-                ? section.rows
-                : section.rows.filter(
-                    (row, i) => i < VISIBLE_ROWS || row.key === sheet.marker?.rowKey,
-                  )
-              ).map((row) => {
-                const unfolded = open.has(row.key);
-                return [
-                  <div
-                    key={`${row.key}-label`}
-                    className={`tsheet-rowhead ${hover?.rowKey === row.key ? "is-lit" : ""}`}
-                  >
-                    {row.variations.length ? (
-                      <button
-                        type="button"
-                        className={`tsheet-unfold ${unfolded ? "is-open" : ""}`}
-                        onClick={() => toggle(row.key)}
-                        aria-expanded={unfolded}
-                      >
-                        {row.label}
-                      </button>
-                    ) : (
-                      <span>{row.label}</span>
-                    )}
-                  </div>,
-                  ...renderCells(row, row.cells, section.color, null, null, unfolded),
-                  <div key={`${row.key}-games`} className="tsheet-rowgames">
-                    {row.games}
-                  </div>,
-
-                  ...(unfolded
-                    ? row.variations.flatMap((variation) => [
-                        <div
-                          key={`${variation.key}-label`}
-                          className={`tsheet-rowhead is-variation ${hover?.rowKey === variation.key ? "is-lit" : ""}`}
-                        >
-                          <span>{variation.label}</span>
-                        </div>,
-                        ...renderCells(
-                          row,
-                          variation.cells,
-                          section.color,
-                          variation.key,
-                          variation.label,
-                          unfolded,
-                        ),
-                        <div
-                          key={`${variation.key}-games`}
-                          className="tsheet-rowgames is-variation"
-                        >
-                          {variation.games}
-                        </div>,
-                      ])
-                    : []),
-                ];
-              })}
-            </div>
-          </div>
-          {!showAll.has(section.color) && section.rows.length > VISIBLE_ROWS ? (
-            <button
-              type="button"
-              className="tsheet-showmore"
-              onClick={() => setShowAll((prev) => new Set(prev).add(section.color))}
-            >
-              Show{" "}
-              {section.rows.length -
-                section.rows.filter(
-                  (row, i) => i < VISIBLE_ROWS || row.key === sheet.marker?.rowKey,
-                ).length}{" "}
-              quieter lines
-            </button>
-          ) : null}
-        </section>
-      ))}
-
-      <p className="tsheet-legend">
-        <span data-heat="holds" /> holds
-        <span data-heat="shaky" /> shaky
-        <span data-heat="tears" /> tears
-        <span data-state="blank" /> you have never been this deep
-      </p>
-
-      {picked ? (
-        <CellDetail
-          picked={picked}
+        <Section
+          key={section.color}
+          section={section}
+          sheet={sheet}
           username={username}
-          onClose={() => setPicked(null)}
+          named={sheet.sections.length > 1}
+          open={open}
+          setOpen={setOpen}
+          expanded={showAll.has(section.color)}
+          onShowAll={() => setShowAll((prev) => new Set(prev).add(section.color))}
         />
-      ) : (
-        <p className="tsheet-hint">
-          Pick a square to see the positions behind it.
-        </p>
-      )}
+      ))}
     </div>
   );
 }
 
+function Section({
+  section,
+  sheet,
+  username,
+  named,
+  open,
+  setOpen,
+  expanded,
+  onShowAll,
+}: {
+  section: Sheet["sections"][number];
+  sheet: Sheet;
+  username: string;
+  named: boolean;
+  open: string | null;
+  setOpen: (key: string | null) => void;
+  expanded: boolean;
+  onShowAll: () => void;
+}) {
+  const marked = sheet.marker?.rowKey ?? null;
+
+  /**
+   * The marked line first, then worst first, catch-all last.
+   *
+   * The model orders rows by how often a line is played, which is the right
+   * order for an archive and the wrong one for a page whose job is to say what
+   * to fix. A line you play forty times and never go wrong in is not the first
+   * thing you should read.
+   *
+   * Inside a severity the tie-break is total mistakes, not how early the line
+   * gives out: ranking by earliness floats a nine-game line that wobbled at
+   * move 3 over the sixty-game line that is actually bleeding. It is also the
+   * rule the marker itself uses, so the row at the top and the square it names
+   * never disagree.
+   */
+  const rows = useMemo(() => {
+    const ranked = section.rows.map((row) => ({ row, verdict: readLine(row.cells) }));
+    return ranked.sort((left, right) => {
+      if (left.row.key === marked) return -1;
+      if (right.row.key === marked) return 1;
+      if (left.row.family === OTHER_ROW) return 1;
+      if (right.row.family === OTHER_ROW) return -1;
+      const byKind = RANK[left.verdict.kind] - RANK[right.verdict.kind];
+      if (byKind !== 0) return byKind;
+      if (left.verdict.mistakes !== right.verdict.mistakes) {
+        return right.verdict.mistakes - left.verdict.mistakes;
+      }
+      return right.row.games - left.row.games;
+    });
+  }, [section.rows, marked]);
+
+  const shown = expanded ? rows : rows.slice(0, VISIBLE_ROWS);
+
+  return (
+    <section className="lsheet-section">
+      {named ? <h2 className="lsheet-section-head">{SECTION_LABEL[section.color]}</h2> : null}
+
+      <ul className="line-list">
+        {shown.map(({ row, verdict }) => (
+          <LineRow
+            key={row.key}
+            row={row}
+            verdict={verdict}
+            color={section.color}
+            maxMove={sheet.maxMove}
+            marker={sheet.marker?.rowKey === row.key ? sheet.marker : null}
+            username={username}
+            open={open === row.key}
+            onToggle={() => setOpen(open === row.key ? null : row.key)}
+          />
+        ))}
+      </ul>
+
+      {rows.length > shown.length ? (
+        <button type="button" className="line-showmore" onClick={onShowAll}>
+          Show all {rows.length}
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
 /**
- * What one cell contains, docked below the sheet rather than on another page —
- * the sheet is how you choose, so the answer belongs beside the choosing.
+ * One line.
+ *
+ * The header is two siblings, never nested: a disclosure button carrying the
+ * name, strip and count, and the Practice link beside it. Putting the link
+ * inside the button would be the one thing that breaks both the keyboard and
+ * the pointer at once.
+ */
+function LineRow({
+  row,
+  verdict,
+  color,
+  maxMove,
+  marker,
+  username,
+  open,
+  onToggle,
+}: {
+  row: SheetRow;
+  verdict: Verdict;
+  color: "white" | "black";
+  maxMove: number;
+  marker: Sheet["marker"];
+  username: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  /**
+   * The square the line opens on.
+   *
+   * When the sheet has marked this row, that square wins: the marker is
+   * computed at variation level and the row's own worst square at family
+   * level, so they can name different moves. Opening on the family's worst
+   * would then ring one square and select another, and the reader would have
+   * to work out which of the two the page meant.
+   */
+  const opensOn = useMemo(() => {
+    if (marker) {
+      const variation = marker.variationKey
+        ? row.variations.find((v) => v.key === marker.variationKey) ?? null
+        : null;
+      const cell = (variation ?? row).cells[marker.moveNo - 1];
+      if (cell) return { cell, variation: variation?.label ?? null };
+    }
+    const worst = worstCell(row.cells);
+    return worst ? { cell: worst, variation: null } : null;
+  }, [marker, row]);
+
+  const [picked, setPicked] = useState<{ cell: SheetCell; variation: string | null } | null>(null);
+  const here = picked ?? opensOn;
+
+  const panelId = `line-panel-${openingSlug(row.family)}-${color}`;
+  // "Other lines" is a bucket, not an opening, so there is nothing to drill.
+  const practiceHref =
+    row.family === OTHER_ROW
+      ? `/train?color=${color}`
+      : `/train?color=${color}&family=${encodeURIComponent(row.family)}`;
+
+  return (
+    <li className={`line-row ${open ? "is-open" : ""} ${marker ? "is-next" : ""}`}>
+      <div className="line-head">
+        <button
+          type="button"
+          className="line-open"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={onToggle}
+        >
+          <span className="line-name">
+            <span className="line-caret" aria-hidden="true" />
+            <span className="line-title">
+              <strong>{row.label}</strong>
+              <small>
+                {row.games} {plural(row.games, "game", "games")}
+                {row.variations.length ? ` · ${row.variations.length} variations` : ""}
+              </small>
+            </span>
+          </span>
+
+          <MoveStrip
+            cells={row.cells}
+            maxMove={maxMove}
+            label={row.label}
+            markedMove={marker?.moveNo ?? null}
+          />
+
+          {/* Two facts in one shape on every row, so only the numbers change. */}
+          <span className="line-count" data-kind={verdict.kind}>
+            <strong>{verdict.headline}</strong>
+            {verdict.detail ? <small>{verdict.detail}</small> : null}
+          </span>
+        </button>
+
+        <Link to={practiceHref} className="line-practice" aria-label={`Practice ${row.label}`}>
+          Practice
+        </Link>
+      </div>
+
+      <div className="line-panel" id={panelId} hidden={!open}>
+        {open ? (
+          <LinePanel
+            row={row}
+            color={color}
+            maxMove={maxMove}
+            marker={marker}
+            username={username}
+            here={here}
+            onPick={setPicked}
+          />
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * What is inside a line: the selected square in words, the positions behind it,
+ * and the variations underneath.
+ *
+ * The headline is derived from the selected square alone. An earlier version
+ * headlined the line's verdict and then printed the selected square's numbers
+ * below it, which put two different move numbers three lines apart.
  *
  * This is the first altitude where a board appears. Above it the page is
  * deliberately wordless about chess; here the reader has asked a specific
  * question and gets positions, not prose.
  */
-function CellDetail({
-  picked,
+function LinePanel({
+  row,
+  color,
+  maxMove,
+  marker,
   username,
-  onClose,
+  here,
+  onPick,
 }: {
-  picked: {
-    row: SheetRow;
-    cell: SheetCell;
-    color: "white" | "black";
-    variation: string | null;
-  };
+  row: SheetRow;
+  color: "white" | "black";
+  maxMove: number;
+  marker: Sheet["marker"];
   username: string;
-  onClose: () => void;
+  here: { cell: SheetCell; variation: string | null } | null;
+  onPick: (picked: { cell: SheetCell; variation: string | null }) => void;
 }) {
-  const { row, cell, color, variation } = picked;
-  const where = variation ? `${row.label} · ${variation}` : row.label;
+  const cell = here?.cell ?? null;
+  const where = here?.variation ? `${row.label}, ${here.variation}` : row.label;
 
   // A position key is a FEN prefix, and Board throws on anything that is not
   // one. A single malformed key would otherwise take the whole page down
   // through the error boundary, so the panel drops what it cannot draw and
   // still shows everything else it knows.
-  const boards = cell.nodeKeys.filter((key) => {
-    const board = key.split(" ")[0] ?? "";
-    return board.split("/").length === 8;
-  });
+  //
+  // Two positions, not three. A third board at this size stops being a
+  // position and becomes a picture of one.
+  const boards = (cell?.nodeKeys ?? [])
+    .filter((key) => {
+      const board = key.split(" ")[0] ?? "";
+      return board.split("/").length === 8;
+    })
+    .slice(0, 2);
 
-  const href = (() => {
-    const query = new URLSearchParams({
-      username,
-      color,
-      family: row.family,
-    });
-    if (cell.nodeKeys[0]) query.set("node", cell.nodeKeys[0]);
+  const explorerHref = (() => {
+    const query = new URLSearchParams({ username, color, family: row.family });
+    if (cell?.nodeKeys[0]) query.set("node", cell.nodeKeys[0]);
     return `/openings/${openingSlug(row.family)}?${query}`;
   })();
 
+  const strip = here?.variation
+    ? row.variations.find((v) => v.label === here.variation)?.cells ?? row.cells
+    : row.cells;
+
+  // The marker belongs to one level of the line. Showing its ring on whichever
+  // strip happens to be on screen would claim a square the marker never named.
+  const markedVariation = marker?.variationKey
+    ? row.variations.find((v) => v.key === marker.variationKey)?.label ?? null
+    : null;
+  const markedHere = Boolean(marker) && (here?.variation ?? null) === markedVariation;
+
   return (
-    <div className="tsheet-detail">
-      <div className="tsheet-detail-head">
-        <div>
-          <h3>
-            {where} — your move {cell.moveNo}
-          </h3>
-          <p>
-            {cell.decisions === 0
-              ? "Your games have never reached this depth in this line."
-              : cell.failures === 0
-                ? `${cell.decisions} decisions here, none of them costly.`
-                : `${cell.decisions} decisions here, ${cell.failures} cost you the thread.`}
-            {cell.state === "thin"
-              ? " Too few to draw a conclusion from yet."
-              : ""}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="tsheet-detail-close"
-          onClick={onClose}
-          aria-label="Close"
-        >
-          ×
-        </button>
+    <div className="line-panel-inner">
+      <div className="line-readout">
+        <h3>{readCell(where, cell)}</h3>
+      </div>
+
+      <div className="line-instrument">
+        <MoveStrip
+          cells={strip}
+          maxMove={maxMove}
+          label={where}
+          markedMove={markedHere ? marker?.moveNo ?? null : null}
+          pickedMove={cell?.moveNo ?? null}
+          onPick={(next) => onPick({ cell: next, variation: here?.variation ?? null })}
+        />
       </div>
 
       {boards.length ? (
-        <div className="tsheet-boards">
+        <div className="line-boards">
           {boards.map((key) => (
-            <Board key={key} fen={`${key} 0 1`} size={132} flip={color === "black"} />
+            <Board key={key} fen={`${key} 0 1`} size={142} flip={color === "black"} />
           ))}
         </div>
       ) : null}
 
-      {cell.decisions > 0 ? (
-        <Link to={href} className="primary-button tsheet-detail-go">
-          Walk this line
+      {row.variations.length ? (
+        <div className="line-variations">
+          <p className="cap">Variations</p>
+          <ul>
+            <VariationRow
+              label="Whole line"
+              games={row.games}
+              cells={row.cells}
+              maxMove={maxMove}
+              active={here?.variation == null}
+              onSelect={() => {
+                const worst = worstCell(row.cells);
+                if (worst) onPick({ cell: worst, variation: null });
+              }}
+            />
+            {row.variations.map((variation) => (
+              <VariationRow
+                key={variation.key}
+                label={variation.label}
+                games={variation.games}
+                cells={variation.cells}
+                maxMove={maxMove}
+                active={here?.variation === variation.label}
+                onSelect={() => {
+                  const worst = worstCell(variation.cells);
+                  if (worst) onPick({ cell: worst, variation: variation.label });
+                }}
+              />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {cell && cell.decisions > 0 ? (
+        <Link to={explorerHref} className="secondary-button line-explore">
+          Open in explorer
         </Link>
       ) : null}
     </div>
+  );
+}
+
+function VariationRow({
+  label,
+  games,
+  cells,
+  maxMove,
+  active,
+  onSelect,
+}: {
+  label: string;
+  games: number;
+  cells: SheetCell[];
+  maxMove: number;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const verdict = readLine(cells);
+  return (
+    <li>
+      <button
+        type="button"
+        className={`line-variation ${active ? "is-active" : ""}`}
+        aria-pressed={active}
+        onClick={onSelect}
+      >
+        <span className="line-variation-name">{label}</span>
+        <MoveStrip cells={cells} maxMove={maxMove} label={label} small />
+        <span className="line-variation-count" data-kind={verdict.kind}>
+          {verdict.headline}
+        </span>
+        <span className="line-variation-games">
+          {games} {plural(games, "game", "games")}
+        </span>
+      </button>
+    </li>
   );
 }

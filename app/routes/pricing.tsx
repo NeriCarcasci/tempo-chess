@@ -13,7 +13,7 @@ import {
 
 export function meta() {
   return [
-    { title: "Pricing · Tempo" },
+    { title: "Pricing · Forma" },
     {
       name: "description",
       content:
@@ -46,7 +46,7 @@ const FAQ = [
   },
   {
     q: "Do you need my chess password?",
-    a: "No. Tempo reads public game archives using your username. It cannot play moves on your behalf.",
+    a: "No. Forma reads public game archives using your username. It cannot play moves on your behalf.",
   },
   {
     q: "How long does the first analysis take?",
@@ -123,7 +123,7 @@ function PlanCard({
         {current ? (
           <span className="price-current">Your current plan</span>
         ) : plan.id === "free" ? (
-          <Link to={signedIn ? "/dashboard" : "/signup"} className="secondary-button price-cta">
+          <Link to={signedIn ? "/today" : "/signup"} className="secondary-button price-cta">
             {signedIn ? "Go to dashboard" : "Start free"}
           </Link>
         ) : signedIn ? (

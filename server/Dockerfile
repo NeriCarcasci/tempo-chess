@@ -1,4 +1,4 @@
-# Cloud Run image for the Tempo Chess API (Hono, TypeScript).
+# Cloud Run image for the Forma API (Hono, TypeScript).
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./

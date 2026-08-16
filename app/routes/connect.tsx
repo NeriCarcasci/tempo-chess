@@ -34,7 +34,7 @@ import { LichessMark, ChessComMark } from "../components/PlatformMarks";
  */
 
 export function meta() {
-  return [{ title: "Connect your chess account · Tempo" }];
+  return [{ title: "Connect your chess account · Forma" }];
 }
 
 type Platform = "lichess" | "chesscom";
@@ -98,7 +98,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
     const linked = findLinked(session.accounts, platform, username);
     if (!linked) return { error: "That account is not linked to you." } satisfies ActionResult;
     setActiveAccount(session.userId, linked.id);
-    throw redirect("/dashboard");
+    throw redirect("/today");
   }
 
   // -- step one: does this account exist? ---------------------------------
@@ -157,7 +157,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
     json: { username, platform, games: "all" },
   }).catch(() => null);
 
-  throw redirect("/dashboard");
+  throw redirect("/today");
 }
 
 /** What we found, for them to confirm or reject. */
@@ -231,7 +231,7 @@ export default function Connect({ loaderData, actionData }: Route.ComponentProps
   return (
     <main className="auth-shell">
       <div className="auth-card auth-card-wide">
-        <Link to="/" className="auth-brand" aria-label="Tempo home">
+        <Link to="/" className="auth-brand" aria-label="Forma home">
           <BrandLock size={24} />
         </Link>
 
@@ -251,7 +251,7 @@ export default function Connect({ loaderData, actionData }: Route.ComponentProps
               : "We found one account with that name. Confirm it and we will read its whole history."
             : adding
               ? "Play on both sites, or under another name? Add it and you can switch between accounts from the menu at any time."
-              : "Tempo analyses games you have already played. Tell us where you play and we will find your account."}
+              : "Forma analyses games you have already played. Tell us where you play and we will find your account."}
         </p>
 
         {/* What they already have, so "another" means something concrete and

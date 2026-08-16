@@ -14,7 +14,7 @@ them, and what to train next.
 
 ## Product Purpose
 
-Tempo Chess connects a player's chess.com / Lichess accounts and analyzes their
+Forma connects a player's chess.com / Lichess accounts and analyzes their
 whole history — not one game at a time. It records every blunder and mistake
 accurately, explains each in plain language (the tactic missed, the idea skipped),
 turns those mistakes into personalized puzzles, builds a per-player style

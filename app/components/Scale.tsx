@@ -4,7 +4,7 @@ import { LichessMark, ChessComMark } from "./PlatformMarks";
 import { BetaForm } from "./BetaForm";
 
 /**
- * How much chess Tempo has read: the figures, and the accounts they count.
+ * How much chess Forma has read: the figures, and the accounts they count.
  *
  * Both numbers come from `GET /stats/reach`, which counts rows (see
  * server/src/players/reach.ts — including the one documented exception, the
@@ -305,7 +305,7 @@ export function Scale() {
           {/* The figures are the headline. A sentence above them saying the same
               thing in words was the thing that did not fit. */}
           <h2 id="scale-title" className="scale-sr">
-            How much chess Tempo has read
+            How much chess Forma has read
           </h2>
 
           <div className="scale-figures">

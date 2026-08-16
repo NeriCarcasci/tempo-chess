@@ -96,7 +96,7 @@ assert.deepEqual(
 assert.deepEqual(
   classifyDuplicate({ ...stored, userId: "user-2" }, [stored]),
   { kind: "new" },
-  "deduplication never crosses Tempo users",
+  "deduplication never crosses Forma users",
 );
 
 const normalizedMoves: NormalizedMove[] = [

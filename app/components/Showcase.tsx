@@ -81,13 +81,13 @@ function Card({
 /* -- connect ------------------------------------------------------- */
 
 /**
- * Where your games come from: the platforms across the top, Tempo underneath,
+ * Where your games come from: the platforms across the top, Forma underneath,
  * everything flowing down into it.
  *
  * The mark is not part of the scene. It is rendered as the card's `badge` and
  * pinned to the card's bottom edge, half on and half off, so it sits over the
  * join between this card and the two below it — the arriving games and the two
- * things Tempo then does with them are one object, not three tiles in a row.
+ * things Forma then does with them are one object, not three tiles in a row.
  *
  * Nodes sit at fixed fractions of the scene and the wires are drawn in that
  * same fractional space, so an endpoint can never drift away from the tile it
@@ -156,7 +156,7 @@ export function Showcase() {
         <Card
           wide
           title="Connect"
-          blurb="One username. Tempo pulls your whole archive from Lichess or Chess.com, however far back it goes."
+          blurb="One username. Forma pulls your whole archive from Lichess or Chess.com, however far back it goes."
           badge={<ConnectBadge />}
         >
           <ConnectScene />

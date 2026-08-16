@@ -741,7 +741,7 @@ export const betaSignups = pgTable(
     username: text("username"),
     /** A band ("1400-1600"), not a number: nobody knows their exact rating across sites. */
     rating: text("rating"),
-    /** What they want Tempo to fix. Optional, and the most useful field we have. */
+    /** What they want Forma to fix. Optional, and the most useful field we have. */
     goal: text("goal"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

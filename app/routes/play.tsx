@@ -16,7 +16,7 @@ const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const STRENGTHS = [800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400];
 
 export function meta() {
-  return [{ title: "Play vs the bot · Tempo" }];
+  return [{ title: "Play vs the bot · Forma" }];
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

@@ -9,12 +9,21 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
+import { EarlyAccessBoundary, earlyAccessEnabled } from "./components/EarlyAccessGate";
 import "@fontsource-variable/manrope";
 import "@fontsource-variable/newsreader";
 import "@fontsource-variable/jetbrains-mono";
 import "./app.css";
+import "./early-access.css";
 
-export const links: Route.LinksFunction = () => [];
+export const links: Route.LinksFunction = () => [
+  /* The SVG is the real favicon; the .ico is the same mark rasterised, for the
+     browsers that ignore image/svg+xml and for anything that goes straight to
+     /favicon.ico without reading the document at all. `rel="alternate icon"`
+     is what keeps the two from competing. */
+  { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+  { rel: "alternate icon", href: "/favicon.ico", sizes: "32x32" },
+];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -23,6 +32,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#f4f1ea" />
+        {earlyAccessEnabled ? <meta name="robots" content="noindex, nofollow" /> : null}
         <Meta />
         <Links />
       </head>
@@ -44,7 +54,7 @@ function NavProgress() {
 }
 
 export default function App() {
-  return <Outlet />;
+  return <EarlyAccessBoundary><Outlet /></EarlyAccessBoundary>;
 }
 
 export function HydrateFallback() {

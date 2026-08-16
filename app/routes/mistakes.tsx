@@ -13,7 +13,7 @@ import { fetchMistakes, type MistakeDrill } from "../lib/account";
 import { usePrimaryActionKeys } from "../lib/usePrimaryActionKeys";
 
 export function meta() {
-  return [{ title: "Fix your mistakes · Tempo" }];
+  return [{ title: "Fix your mistakes · Forma" }];
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
@@ -152,7 +152,7 @@ export default function Mistakes({ loaderData }: Route.ComponentProps) {
 
         {drills.length === 0 ? (
           <div className="account-empty mt-8">
-            <p>No {color} mistakes to drill right now — either you've been playing cleanly, or Tempo hasn't analysed enough {color} games yet. Try the other side, or come back after importing more games.</p>
+            <p>No {color} mistakes to drill right now — either you've been playing cleanly, or Forma hasn't analysed enough {color} games yet. Try the other side, or come back after importing more games.</p>
             <Link to={`/mistakes?color=${color === "white" ? "black" : "white"}`} className="primary-button mt-4 inline-flex">Try your {color === "white" ? "black" : "white"} mistakes →</Link>
           </div>
         ) : (

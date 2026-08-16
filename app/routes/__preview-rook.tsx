@@ -7,14 +7,16 @@ import {
   type RookMood,
 } from "../components/RookMascot";
 
-const CUES: RookCue[] = ["press", "success", "error", "spin", "launch"];
+const CUES: RookCue[] = ["press", "success", "error", "spin", "launch", "explosion", "collapse"];
 
 const FILMSTRIP: { cue: RookCue; frames: number[] }[] = [
   { cue: "press", frames: [0, 70, 130, 200, 280, 370] },
-  { cue: "success", frames: [0, 110, 230, 340, 460, 600, 750] },
-  { cue: "error", frames: [0, 70, 150, 240, 330, 450] },
-  { cue: "spin", frames: [0, 110, 240, 350, 460, 600, 780] },
-  { cue: "launch", frames: [0, 110, 260, 420, 560, 760, 980, 1150] },
+  { cue: "success", frames: [0, 140, 300, 440, 560, 700, 860, 980] },
+  { cue: "error", frames: [0, 90, 180, 290, 400, 520, 610] },
+  { cue: "spin", frames: [0, 150, 300, 420, 520, 620, 720, 850, 1000, 1150] },
+  { cue: "launch", frames: [0, 80, 160, 260, 350, 460, 560, 640, 720, 820, 950] },
+  { cue: "explosion", frames: [0, 180, 340, 480, 570, 640, 720, 840, 990, 1160, 1400, 1700, 1950] },
+  { cue: "collapse", frames: [0, 260, 420, 560, 700, 840, 980, 1140, 1350, 1700, 2000, 2200, 2400, 2600, 2800] },
 ];
 const MOODS: { mood: RookMood; note: string }[] = [
   { mood: "idle", note: "resting — a breath, nothing more" },
@@ -45,7 +47,7 @@ export default function PreviewRook() {
       >
         {/* Room around it: launched merlons draw outside the SVG box. */}
         <div style={{ display: "grid", placeItems: "center", minWidth: "16rem", minHeight: "16rem" }}>
-          <RookMascot ref={stage} mood="idle" size={190} label="Rook mascot" />
+          <RookMascot ref={stage} mood="idle" size={190} sound track label="Rook mascot" />
         </div>
 
         <div style={{ display: "grid", gap: "0.6rem", alignContent: "start" }}>
@@ -78,7 +80,7 @@ export default function PreviewRook() {
             className="panel"
             style={{ display: "grid", justifyItems: "center", gap: "0.75rem", padding: "2rem" }}
           >
-            <RookMascot mood={mood} size={120} />
+            <RookMascot mood={mood} size={120} track />
             <p className="cap">{mood}</p>
             <p style={{ color: "var(--color-ink-muted)", fontSize: "0.78rem" }}>{note}</p>
           </div>
@@ -96,16 +98,36 @@ export default function PreviewRook() {
       </section>
 
       {/* Contact sheet. Each cue held still at a series of offsets, so the
-          shape of the motion can be read without catching it live. The
-          per-merlon stagger is approximated here (one constant for every
-          cue), so launch frames are indicative rather than exact. */}
+          shape of the motion can be read without catching it live.
+
+          These rules are deliberately unlayered — app/rook.css lives in
+          @layer components, and an unlayered rule beats a layered one
+          whatever its specificity, which is the only reliable way to
+          override an `animation` shorthand from outside. */}
       <style>{`
         .rk-freeze .rk-piece,
+        .rk-freeze .rk-head,
+        .rk-freeze .rk-crown-lower,
+        .rk-freeze .rk-crown-upper,
+        .rk-freeze .rk-base,
+        .rk-freeze .rk-body,
+        .rk-freeze .rk-collar,
+        .rk-freeze .rk-shade,
+        .rk-freeze .rk-merlon .rk-shade,
+        .rk-freeze .rk-edge,
         .rk-freeze .rk-merlon,
+        .rk-freeze .rk-merlon-grow,
         .rk-freeze .rk-merlon-cap,
         .rk-freeze .rk-zzz {
           animation-play-state: paused;
-          animation-delay: calc(var(--i, 0) * 60ms + var(--rk-t));
+          animation-delay: calc(var(--i, 0) * 50ms + var(--rk-t));
+        }
+        /* The crenellation carries its own start delay and repeats, so it
+           needs the offset measured from where it actually begins. */
+        .rk-freeze[data-state="spin"] .rk-merlon,
+        .rk-freeze[data-state="spin"] .rk-merlon .rk-shade,
+        .rk-freeze[data-state="spin"] .rk-edge {
+          animation-delay: calc(260ms + var(--rk-t));
         }
       `}</style>
       {FILMSTRIP.map(({ cue, frames }) => (

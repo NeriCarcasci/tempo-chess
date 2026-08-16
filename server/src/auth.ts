@@ -178,7 +178,7 @@ export async function linkAccount(
     where platform = ${platform} and normalized_username = ${normalized}
     limit 1`;
   if (taken[0] && String(taken[0].user_id) !== userId) {
-    throw new Error(`"${username}" is already linked to another Tempo account`);
+    throw new Error(`"${username}" is already linked to another Forma account`);
   }
   const rows = await client`
     insert into linked_accounts (user_id, platform, username, normalized_username)

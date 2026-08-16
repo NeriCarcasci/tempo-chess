@@ -54,6 +54,26 @@ function TreeIcon() {
   );
 }
 
+/** Two moves crossing: the phase where the pieces are in contact. */
+function ClashIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M4 16 16 4M12 4h4v4" />
+      <path d="M16 16 4 4M8 4H4v4" />
+    </svg>
+  );
+}
+
+/** A flag: the phase you are converting, not exploring. */
+function FlagIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M5.5 3v14" />
+      <path d="M5.5 4.5h9l-2 3 2 3h-9z" />
+    </svg>
+  );
+}
+
 function SlidersIcon() {
   return (
     <svg {...iconProps}>
@@ -207,7 +227,7 @@ function AccountMenu() {
                     onClick={() => {
                       if (active) return setOpen(false);
                       setActiveAccount(session.userId, account.id);
-                      location.href = "/dashboard";
+                      location.href = "/today";
                     }}
                   >
                     <span className="nav-menu-mark" aria-hidden="true">
@@ -220,6 +240,11 @@ function AccountMenu() {
               })}
             </>
           ) : null}
+
+          <div className="nav-menu-label">Study</div>
+          <Link to="/lessons" className="nav-menu-item">
+            Lessons
+          </Link>
 
           <div className="nav-menu-label">Account</div>
           <Link to="/account" className="nav-menu-item">
@@ -249,7 +274,12 @@ export function TopNav({
   right,
   back,
 }: {
-  current: "home" | "openings" | "lessons" | "account" | "game";
+  /**
+   * `home` is Today. The primary nav is the three phases of a game plus the
+   * queue that draws from all three; lessons moved into the account menu when
+   * the phases took the bar, because it is a library rather than a phase.
+   */
+  current: "home" | "openings" | "middlegame" | "endgame" | "lessons" | "account" | "game";
   right?: React.ReactNode;
   /** A left-aligned "back to parent" control shown on sub-pages. */
   back?: { to: string; label: string };
@@ -278,27 +308,31 @@ export function TopNav({
               <span>{back.label}</span>
             </Link>
           ) : null}
-          <Link to="/dashboard" className="product-mark" prefetch="intent" aria-label="Tempo dashboard">
+          <Link to="/today" className="product-mark" prefetch="intent" aria-label="Forma, today">
             <Logo size={20} />
           </Link>
         </div>
-        <div className="product-nav-group">
-          <nav aria-label="Primary navigation">
-            <Link to="/dashboard" prefetch="intent" aria-current={current === "home" ? "page" : undefined}>
-              <HomeIcon /><span>My Chess</span>
-            </Link>
-            <Link to="/openings" prefetch="intent" aria-current={current === "openings" ? "page" : undefined}>
-              <TreeIcon /><span>Openings</span>
-            </Link>
-            <Link to="/lessons" prefetch="intent" aria-current={current === "lessons" ? "page" : undefined}>
-              <CapIcon /><span>Lessons</span>
-            </Link>
-          </nav>
-          <div className="product-nav-actions">
-            {right}
-            <SettingsMenu />
-            <AccountMenu />
-          </div>
+        {/* Three siblings in a three-column grid, so the tabs sit optically
+            centred in the bar rather than pushed around by whatever the lead
+            and the actions happen to weigh. */}
+        <nav className="product-tabs" aria-label="Primary navigation">
+          <Link to="/today" prefetch="intent" aria-current={current === "home" ? "page" : undefined}>
+            <HomeIcon /><span>Today</span>
+          </Link>
+          <Link to="/openings" prefetch="intent" aria-current={current === "openings" ? "page" : undefined}>
+            <TreeIcon /><span>Openings</span>
+          </Link>
+          <Link to="/middlegame" prefetch="intent" aria-current={current === "middlegame" ? "page" : undefined}>
+            <ClashIcon /><span>Middlegame</span>
+          </Link>
+          <Link to="/endgame" prefetch="intent" aria-current={current === "endgame" ? "page" : undefined}>
+            <FlagIcon /><span>Endgame</span>
+          </Link>
+        </nav>
+        <div className="product-nav-actions">
+          {right}
+          <SettingsMenu />
+          <AccountMenu />
         </div>
       </div>
     </header>

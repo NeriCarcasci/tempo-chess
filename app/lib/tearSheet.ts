@@ -79,7 +79,7 @@ export interface TearSheet {
 }
 
 /** Where the catch-all row and bucket live. */
-const OTHER_ROW = "Other lines";
+export const OTHER_ROW = "Other lines";
 const EARLY = "Early deviations";
 
 /**

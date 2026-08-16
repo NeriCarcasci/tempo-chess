@@ -24,7 +24,7 @@ export type DuplicateDecision =
     };
 
 /**
- * Classifies only candidates already scoped to the same Tempo user. Provider
+ * Classifies only candidates already scoped to the same Forma user. Provider
  * identity wins and is safe to merge. A normalized replay fingerprint detects
  * candidates across exports/providers but deliberately does not merge them:
  * unrelated games can have identical short replays. A second provider source

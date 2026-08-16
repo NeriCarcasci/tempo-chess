@@ -5,7 +5,7 @@ import { requireSession } from "../lib/session";
 import type { Route } from "./+types/game";
 
 export function meta() {
-  return [{ title: "Game review · Tempo" }];
+  return [{ title: "Game review · Forma" }];
 }
 
 export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {

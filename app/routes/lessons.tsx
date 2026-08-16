@@ -8,7 +8,7 @@ import { LESSONS } from "../lib/lessons";
 import { RouteError } from "../components/RouteError";
 
 export function meta() {
-  return [{ title: "Lessons · Tempo" }];
+  return [{ title: "Lessons · Forma" }];
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
@@ -62,7 +62,7 @@ export default function Lessons({ loaderData }: Route.ComponentProps) {
           <p className="eyebrow">Guided lessons</p>
           <h1>Learn an opening, one idea at a time</h1>
           <p>
-            Play the moves yourself and Tempo explains the why behind each one — plans, targets, and
+            Play the moves yourself and Forma explains the why behind each one — plans, targets, and
             the principles that make the opening work. {doneCount ? `${doneCount} completed so far.` : ""}
           </p>
         </header>

@@ -6,11 +6,11 @@ import { Scale } from "../components/Scale";
 
 export function meta() {
   return [
-    { title: "Tempo · Your mistakes have a shape" },
+    { title: "Forma · Your mistakes have a shape" },
     {
       name: "description",
       content:
-        "Tempo reads every game you have played, finds the mistakes you repeat, and turns them into drills.",
+        "Forma reads every game you have played, finds the mistakes you repeat, and turns them into drills.",
     },
   ];
 }
@@ -26,7 +26,7 @@ export default function Home() {
             have a <em>shape</em>.
           </h1>
           <p>
-            Tempo reads every game you have played, finds the errors you repeat,
+            Forma reads every game you have played, finds the errors you repeat,
             and turns them into drills.
           </p>
           <div className="hero-actions">
@@ -39,7 +39,7 @@ export default function Home() {
 
       <section className="statement">
         <p>
-          Reviewing one game tells you what went wrong <i>once</i>. Tempo reads
+          Reviewing one game tells you what went wrong <i>once</i>. Forma reads
           your whole history at once, so the mistake you have made forty times
           stops looking like bad luck.
         </p>
