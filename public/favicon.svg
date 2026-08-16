@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- The mono mark from app/components/Logo.tsx on a paper tile. Solid accent
+       rather than the colour tile's shell-and-ink: at 16px the ink outline is
+       half a pixel and the cream crown loses its edge against the tile. One
+       shape in one colour is the only thing that survives that size. -->
+  <rect width="32" height="32" rx="7" fill="#f4f2ee"/>
+  <path d="M4.1 6.9 Q4.1 6.03 4.97 6.03 L9.52 6.03 Q10.4 6.03 10.4 6.9 L10.4 10.4 Q10.4 11.28 11.27 11.28 L11.97 11.28 Q12.85 11.28 12.85 10.4 L12.85 6.9 Q12.85 6.03 13.72 6.03 L18.27 6.03 Q19.15 6.03 19.15 6.9 L19.15 10.4 Q19.15 11.28 20.02 11.28 L20.72 11.28 Q21.6 11.28 21.6 10.4 L21.6 6.9 Q21.6 6.03 22.47 6.03 L27.02 6.03 Q27.9 6.03 27.9 6.9 L27.9 20.9 Q27.9 21.42 28.42 21.42 L29.48 21.42 Q30 21.42 30 21.95 L30 24.23 Q30 25.98 28.25 25.98 L3.75 25.98 Q2 25.98 2 24.23 L2 21.95 Q2 21.42 2.52 21.42 L3.57 21.42 Q4.1 21.42 4.1 20.9 Z" fill="#cf5730"/>
+</svg>

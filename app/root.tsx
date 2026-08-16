@@ -16,7 +16,14 @@ import "@fontsource-variable/jetbrains-mono";
 import "./app.css";
 import "./early-access.css";
 
-export const links: Route.LinksFunction = () => [];
+export const links: Route.LinksFunction = () => [
+  /* The SVG is the real favicon; the .ico is the same mark rasterised, for the
+     browsers that ignore image/svg+xml and for anything that goes straight to
+     /favicon.ico without reading the document at all. `rel="alternate icon"`
+     is what keeps the two from competing. */
+  { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+  { rel: "alternate icon", href: "/favicon.ico", sizes: "32x32" },
+];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
