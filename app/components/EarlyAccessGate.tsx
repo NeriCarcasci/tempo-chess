@@ -1,6 +1,5 @@
-import { useState, type FormEvent, type ReactNode } from "react";
-import { Logo } from "./Logo";
-import { RookMascot } from "./RookMascot";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { RookMascot, type RookHandle } from "./RookMascot";
 
 const ACCESS_CODE = String(import.meta.env.VITE_EARLY_ACCESS_CODE ?? "").trim();
 const ACCESS_KEY = "tempo.early-access.v1";
@@ -11,6 +10,10 @@ const ACCESS_KEY = "tempo.early-access.v1";
  * API's server-side authorization.
  */
 export const earlyAccessEnabled = ACCESS_CODE.length > 0;
+
+/* Long enough for the mascot's success cue to read before the page behind it
+   takes over. Kept short: this is a beat, not a wait. */
+const UNLOCK_MS = 700;
 
 function hasAccess(): boolean {
   if (!earlyAccessEnabled || typeof window === "undefined") return !earlyAccessEnabled;
@@ -43,92 +46,74 @@ export function EarlyAccessBoundary({
 function EarlyAccessGate({ onGrant }: { onGrant: () => void }) {
   const [code, setCode] = useState("");
   const [error, setError] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
+  const rook = useRef<RookHandle>(null);
+  const timer = useRef(0);
+
+  useEffect(() => () => window.clearTimeout(timer.current), []);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (unlocked) return;
     if (code.trim() !== ACCESS_CODE) {
       setError(true);
+      rook.current?.play("error");
       return;
     }
+    setUnlocked(true);
+    rook.current?.play("success");
     grantAccess();
-    onGrant();
+    timer.current = window.setTimeout(onGrant, UNLOCK_MS);
   }
 
   return (
     <main className="early-gate">
-      <header className="early-gate-head">
-        <Logo size={24} />
-        <span>Private preview</span>
-      </header>
+      <div className="early-gate-inner">
+        <RookMascot ref={rook} mood="curious" size={148} track sound />
 
-      <div className="early-gate-grid">
-        <section className="early-gate-story" aria-labelledby="early-title">
-          <p className="early-kicker">Analysis is underway</p>
-          <h1 id="early-title">
-            Your mistakes
-            <br />
-            have a <em>shape</em>.
-          </h1>
-          <p className="early-intro">
-            Forma reads completed games as one connected story, then finds where
-            a player's understanding repeatedly gives way.
-          </p>
+        <h1>
+          Your mistakes have a <em>shape</em>.
+        </h1>
 
-          <ol className="early-phases" aria-label="Forma analysis phases">
-            <li><b>01</b><span>Opening</span><i /></li>
-            <li><b>02</b><span>Middlegame</span><i /></li>
-            <li><b>03</b><span>Endgame</span></li>
-          </ol>
-        </section>
-
-        <section className="early-gate-entry" aria-labelledby="access-title">
-          <div className="early-rook" aria-hidden="true">
-            <RookMascot mood="curious" size={164} />
-          </div>
-          <div className="early-entry-copy">
-            <p className="early-kicker">By invitation</p>
-            <h2 id="access-title">Forma is in early access.</h2>
-            <p>
-              We are keeping the first analysis group deliberately small while
-              the complete three-phase report is being finished.
-            </p>
-          </div>
-
-          <form className="early-code-form" onSubmit={submit}>
-            <label htmlFor="early-code">Early access code</label>
-            <div className={`early-code-row ${error ? "has-error" : ""}`}>
-              <input
-                id="early-code"
-                name="code"
-                value={code}
-                onChange={(event) => {
-                  setCode(event.target.value);
-                  if (error) setError(false);
-                }}
-                autoComplete="one-time-code"
-                autoCapitalize="none"
-                spellCheck={false}
-                aria-invalid={error}
-                aria-describedby={error ? "early-code-error" : undefined}
-                autoFocus
+        <form className="early-form" onSubmit={submit} data-error={error || undefined}>
+          <label htmlFor="early-code" className="sr-only">
+            Access code
+          </label>
+          <input
+            id="early-code"
+            name="code"
+            value={code}
+            onChange={(event) => {
+              setCode(event.target.value);
+              if (error) setError(false);
+            }}
+            placeholder="Access code"
+            autoComplete="one-time-code"
+            autoCapitalize="none"
+            spellCheck={false}
+            disabled={unlocked}
+            aria-invalid={error}
+            aria-describedby="early-code-note"
+            autoFocus
+          />
+          <button type="submit" disabled={unlocked} aria-label="Enter">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M5 12h13M12.5 6l6 6-6 6"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
-              <button type="submit">Enter Forma</button>
-            </div>
-            {error ? (
-              <p id="early-code-error" className="early-code-error" role="alert">
-                That invitation code is not recognised.
-              </p>
-            ) : (
-              <p className="early-code-note">Invited testers and platform reviewers only.</p>
-            )}
-          </form>
-        </section>
-      </div>
+            </svg>
+          </button>
+        </form>
 
-      <footer className="early-gate-foot">
-        <span>Analysis for completed games only.</span>
-        <span>One code unlocks the full preview.</span>
-      </footer>
+        {/* Always present so a rejected code does not shift the form. */}
+        <p id="early-code-note" className="early-note" role="status">
+          {error ? "That code is not recognised." : ""}
+        </p>
+      </div>
     </main>
   );
 }
