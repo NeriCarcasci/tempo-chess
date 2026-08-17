@@ -22,7 +22,9 @@
     "security:migration": "tsx src/security/gates/migration.ts",
     "security:rehearsal": "tsx src/security/gates/rehearsal.ts",
     "security:production-readonly": "tsx src/security/gates/production-readonly.ts",
-    "security:forbidden-scope": "tsx src/security/gates/forbidden-scope.ts"
+    "security:forbidden-scope": "tsx src/security/gates/forbidden-scope.ts",
+    "platform:unit": "tsx src/platform/connection.test.ts",
+    "platform:database": "tsx src/platform/gates/database.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

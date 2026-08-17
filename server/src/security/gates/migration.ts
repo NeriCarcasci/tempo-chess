@@ -34,7 +34,13 @@ import {
   policyName,
 } from "../contract.js";
 import { applyMigration, type Catalogue, type CatalogueFixture, type RoleAttributes } from "../sql-model.js";
-import { describeHits, repoRoot, scanMigratorOperationalPaths } from "../repo-scan.js";
+import {
+  E01_HEAD_COMMIT,
+  describeHits,
+  readTextFileAt,
+  repoRoot,
+  scanMigratorOperationalPaths,
+} from "../repo-scan.js";
 import { catalogueBody } from "./catalogue-bodies.js";
 import type { AccessClass } from "../contract.js";
 
@@ -156,33 +162,45 @@ export function artifactBodies(root: string): Map<string, AssertionBody> {
   return bodies;
 }
 
-/** The journal must gain exactly one entry, and it must be the frozen tuple. */
+/**
+ * E01 must have added exactly one journal entry, and it must still be the
+ * frozen tuple.
+ *
+ * The "exactly one" half is a claim about E01's diff, so it is judged against
+ * E01's merged tree; a later epic adding its own migration is that epic's
+ * scope, not E01 breaking its contract. The "still the frozen tuple" half is
+ * judged against the current tree, because overwriting E01's history is exactly
+ * what no successor may do.
+ */
 export function journalBody(root: string): AssertionBody {
   return async () => {
-    const journal = JSON.parse(readFileSync(`${root}/${JOURNAL_PATH}`, "utf8")) as {
-      entries: JournalEntry[];
-    };
-    const entries = journal.entries;
-    const added = entries.filter((entry) => entry.idx >= 11);
+    const at = (source: string): JournalEntry[] =>
+      (JSON.parse(source) as { entries: JournalEntry[] }).entries;
+    const e01Source = readTextFileAt(root, JOURNAL_PATH, E01_HEAD_COMMIT);
+    if (e01Source === null) throw new Error(`journal is unreadable at ${E01_HEAD_COMMIT}`);
+    const e01 = at(e01Source);
+    const current = at(readFileSync(`${root}/${JOURNAL_PATH}`, "utf8"));
+
+    const added = e01.filter((entry) => entry.idx >= 11);
     if (added.length !== 1) {
-      throw new Error(
-        `journal has ${added.length} entries at or beyond idx=11; E01 adds exactly one`,
-      );
+      throw new Error(`E01's journal has ${added.length} entries at or beyond idx=11; it adds exactly one`);
     }
-    const entry = added[0];
+    if (e01.length !== 12) {
+      throw new Error(`E01's journal has ${e01.length} entries, expected 12 (0000-0011)`);
+    }
+
+    const entry = current.find((candidate) => candidate.idx === 11);
+    if (!entry) throw new Error("the current journal no longer contains idx=11");
     const drift: string[] = [];
-    if (entry.idx !== JOURNAL_ENTRY.idx) drift.push(`idx=${entry.idx}`);
     if (entry.version !== JOURNAL_ENTRY.version) drift.push(`version=${entry.version}`);
     if (entry.when !== JOURNAL_ENTRY.when) drift.push(`when=${entry.when}`);
     if (entry.tag !== JOURNAL_ENTRY.tag) drift.push(`tag=${entry.tag}`);
-    if (entry.breakpoints !== JOURNAL_ENTRY.breakpoints) {
-      drift.push(`breakpoints=${entry.breakpoints}`);
-    }
+    if (entry.breakpoints !== JOURNAL_ENTRY.breakpoints) drift.push(`breakpoints=${entry.breakpoints}`);
     if (drift.length > 0) throw new Error(`journal entry drift: ${drift.join(", ")}`);
-    if (entries.length !== 12) {
-      throw new Error(`journal has ${entries.length} entries, expected 12 (0000-0011)`);
-    }
-    return `only addition is idx=11 version=7 when=${JOURNAL_ENTRY.when} tag=${JOURNAL_ENTRY.tag} breakpoints=true`;
+
+    const preserved = JSON.stringify(current.slice(0, 12)) === JSON.stringify(e01);
+    if (!preserved) throw new Error("entries 0000-0011 were rewritten after E01");
+    return `E01 added only idx=11 version=7 when=${JOURNAL_ENTRY.when} tag=${JOURNAL_ENTRY.tag} breakpoints=true; entries 0000-0011 unchanged in the current tree`;
   };
 }
 

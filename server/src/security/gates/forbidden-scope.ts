@@ -24,12 +24,28 @@ import {
   type AssertionBody,
   type AssertionRecord,
 } from "../assertions.js";
-import { describeHits, readTextFile, repoRoot, scanTracked, trackedFiles, type ScanHit } from "../repo-scan.js";
+import {
+  E01_HEAD_COMMIT,
+  describeHits,
+  readTextFileAt,
+  repoRoot,
+  scanTracked,
+  trackedFiles,
+  type ScanHit,
+} from "../repo-scan.js";
 
 const COMMAND = "cd server && npm run security:forbidden-scope";
 
 /** The clean base this branch started from. Pinned by the contract. */
 export const BASE_COMMIT = "b9b9a27585dc771b7755a07c9a28a66cce9ae520";
+
+/**
+ * The commit E01 was merged at. Addition rules are bounded by it at both ends:
+ * they judge what E01 added between `BASE_COMMIT` and here, and they read file
+ * content as it stood here. A later epic's tree cannot make E01 look guilty of
+ * work E01 did not do, and cannot excuse E01 either — the range is frozen.
+ */
+export const HEAD_COMMIT = E01_HEAD_COMMIT;
 
 /**
  * Named documentation and fixture paths. Each of these exists to *describe* a
@@ -64,14 +80,16 @@ const LEAK_SCAN_OPTIONS = {
 const ADDITION_SCAN_OPTIONS = {
   excludeFiles: [...NAMED_DOC_EXCLUSIONS, "evidence/E01/logs/security-forbidden-scope.stdout.log"],
   excludePrefixes: CANONICAL_PREFIXES,
+  at: HEAD_COMMIT,
 } as const;
 
-/** Files this branch added or modified relative to the pinned base. */
+/** Files E01 added or modified between the pinned base and its merge commit. */
 export function changedFiles(root: string): string[] {
-  const output = execFileSync("git", ["diff", "--name-only", "--diff-filter=ACMR", BASE_COMMIT], {
-    cwd: root,
-    encoding: "utf8",
-  });
+  const output = execFileSync(
+    "git",
+    ["diff", "--name-only", "--diff-filter=ACMR", `${BASE_COMMIT}..${HEAD_COMMIT}`],
+    { cwd: root, encoding: "utf8" },
+  );
   return output.split("\n").filter((path) => path.length > 0);
 }
 
@@ -117,7 +135,7 @@ function rule(
 
 /** The journal must not gain a 0012 or 0013 entry either. */
 function journalHasNo(root: string, tag: string): ScanHit[] {
-  const journal = readTextFile(root, "server/drizzle/meta/_journal.json") ?? "";
+  const journal = readTextFileAt(root, "server/drizzle/meta/_journal.json", HEAD_COMMIT) ?? "";
   return journal.includes(tag)
     ? [{ file: "server/drizzle/meta/_journal.json", line: 0, text: `journal names ${tag}` }]
     : [];

@@ -11,6 +11,17 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
+/**
+ * The commit E01 was merged to `main` at.
+ *
+ * E01's addition rules — "this branch did not add X" — are claims about E01's
+ * own diff. Read against a later epic's working tree they stop testing E01 and
+ * start forbidding every successor from doing its own scope, so the rules that
+ * judge additions read the repository as it stood here. Rules about secrets
+ * still scan the current tree: a credential committed anywhere is committed.
+ */
+export const E01_HEAD_COMMIT = "3bd676b7dd46c3078fef2df1d6150194afbbb648";
+
 export interface ScanHit {
   file: string;
   line: number;
@@ -56,6 +67,34 @@ export interface ScanOptions {
   excludeFiles?: readonly string[];
   /** Path prefixes to skip. */
   excludePrefixes?: readonly string[];
+  /** Read file content as it stood at this commit instead of on disk. */
+  at?: string;
+}
+
+/** Read a tracked text file as it stood at `commit`, or `null` if it was absent. */
+export function readTextFileAt(root: string, file: string, commit: string): string | null {
+  if (BINARY_EXTENSIONS.test(file)) return null;
+  try {
+    const raw = execFileSync("git", ["show", `${commit}:${file}`], {
+      cwd: root,
+      encoding: "buffer",
+      maxBuffer: MAX_SCAN_BYTES,
+    });
+    if (raw.subarray(0, 8000).includes(0)) return null;
+    return raw.toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
+/** Paths tracked at `commit`. */
+export function trackedFilesAt(root: string, commit: string): string[] {
+  return execFileSync("git", ["ls-tree", "-r", "-z", "--name-only", commit], {
+    cwd: root,
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter((path) => path.length > 0);
 }
 
 function excluded(file: string, options: ScanOptions): boolean {
@@ -73,7 +112,9 @@ export function scanTracked(
   const hits: ScanHit[] = [];
   for (const file of files) {
     if (excluded(file, options)) continue;
-    const content = readTextFile(root, file);
+    const content = options.at
+      ? readTextFileAt(root, file, options.at)
+      : readTextFile(root, file);
     if (content === null) continue;
     const lines = content.split("\n");
     for (let index = 0; index < lines.length; index += 1) {
@@ -112,16 +153,23 @@ const MIGRATOR_OPERATIONAL_PATTERNS: readonly RegExp[] = [
   /\bas\s+forma_migrator\b/i,
 ];
 
-export function scanMigratorOperationalPaths(root: string): ScanHit[] {
-  const files = trackedFiles(root);
+/**
+ * E01's contract is that *E01* left the migration role inert. Later epics give
+ * it the operational path that is their outcome, so the scan reads E01's tree.
+ */
+export function scanMigratorOperationalPaths(
+  root: string,
+  commit: string = E01_HEAD_COMMIT,
+): ScanHit[] {
+  const files = trackedFilesAt(root, commit);
   const hits: ScanHit[] = [];
   for (const pattern of MIGRATOR_OPERATIONAL_PATTERNS) {
-    hits.push(...scanTracked(root, pattern, {}, files));
+    hits.push(...scanTracked(root, pattern, { at: commit }, files));
   }
   // Any environment file that names the role at all is a credential surface.
   for (const file of files) {
     if (!/(^|\/)\.env(\.|$)/.test(file)) continue;
-    const content = readTextFile(root, file);
+    const content = readTextFileAt(root, file, commit);
     if (content && /forma_migrator/i.test(content)) {
       hits.push({ file, line: 0, text: "environment file names forma_migrator" });
     }

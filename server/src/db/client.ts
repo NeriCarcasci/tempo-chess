@@ -3,6 +3,7 @@ import postgres from "postgres";
 import * as schema from "./schema.js";
 import { assertRuntimeConfig } from "../security/config.js";
 import { verifyRuntimeIdentity } from "../security/identity.js";
+import { poolOptionsFor } from "../platform/connection.js";
 
 /**
  * The runtime database handle.
@@ -18,8 +19,11 @@ import { verifyRuntimeIdentity } from "../security/identity.js";
  */
 const connection = assertRuntimeConfig(process.env);
 
-// Supabase poolers (transaction mode) don't support prepared statements.
-const client = postgres(process.env.DATABASE_URL!, { prepare: false });
+// Supabase poolers (transaction mode) don't support prepared statements, and
+// the pool size comes from the aggregate connection budget rather than the
+// driver default: an unbounded pool per instance is how a scaled-out service
+// exhausts the database for every other service.
+const client = postgres(process.env.DATABASE_URL!, poolOptionsFor("forma-api"));
 
 export const db = drizzle(client, { schema });
 export { schema };
