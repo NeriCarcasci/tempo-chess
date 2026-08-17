@@ -8,14 +8,26 @@ does not touch a single object in the legacy `public` schema.
 ## Applying it
 
 ```
-DATABASE_URL="postgresql://<deploy-role>@<direct-host>:5432/postgres" npm run db:migrate
+DATABASE_URL="postgresql://<deploy-role>@<session-host>:5432/postgres" npm run db:migrate
 ```
+
+On the automation host, `bin/forma-db-url.sh` prints the correct URL:
+`export DATABASE_URL="$(forma-db-url.sh)"`.
 
 The deploy role for 0012 is the project owner — on Supabase, `postgres`. It is
 **not** a superuser. What it must have:
 
-- **The direct endpoint (5432), never the pooler.** Migrations take DDL locks
-  and must not be multiplexed.
+- **A session, never a multiplexed transaction pool.** Migrations take DDL
+  locks and must hold one backend for the whole connection. Both the direct
+  endpoint on 5432 and the Supavisor **session** pooler on 5432 satisfy this.
+  The **transaction** pooler on 6543 does not, and must never be used here.
+
+  In practice the direct endpoint is unreachable from the automation host:
+  `db.<ref>.supabase.co` publishes only a AAAA record and the host has no
+  IPv6 egress. 0012 was therefore applied over the session pooler
+  (`aws-0-eu-west-1.pooler.supabase.com:5432`, user `postgres.<ref>`), which
+  assigns one dedicated backend per connection. Enabling the Supabase IPv4
+  add-on would restore the documented direct path.
 - **`CREATEROLE`.** 0012 creates the four worker roles and comments on all six;
   `forma_migrator` deliberately cannot, because it holds `NOCREATEROLE`.
 - **Ownership of the database**, so it can grant `CREATE` on the database to
