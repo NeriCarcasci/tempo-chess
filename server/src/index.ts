@@ -53,6 +53,10 @@ import { assertRuntimeIdentity } from "./db/client.js";
 import { betaSignupSchema, rateLimit, recordBetaSignup } from "./beta.js";
 import { logSafeError, safeClientMessage } from "./security/redaction.js";
 import { isDeployed } from "./security/config.js";
+import { mountV1 } from "./v1/kernel.js";
+import { legacyCompatibility } from "./v1/legacy.js";
+import { V1_ROUTES } from "./v1/routes/index.js";
+import { assertKernelConfig } from "./v1/signing.js";
 
 const app = new Hono<{ Variables: { user: AuthUser } }>();
 
@@ -61,6 +65,15 @@ const app = new Hono<{ Variables: { user: AuthUser } }>();
 // `Access-Control-Allow-Origin: *` to everyone.
 const allowedOrigins = resolveAllowedOrigins(process.env, isDeployed(process.env));
 app.use("*", cors(allowedOrigins));
+
+// Deprecation headers and usage measurement for every unversioned route. It
+// runs before the routes so it wraps them, and it exempts `/v1` and `/health`.
+app.use("*", legacyCompatibility());
+
+// The `/v1` kernel, mounted beside the legacy surface rather than in front of
+// it. Registered before the legacy routes so `/v1/*` can never be shadowed by a
+// prototype path, and so its problem-details 404 owns the whole namespace.
+mountV1(app, V1_ROUTES);
 
 /**
  * Anything a handler throws instead of returning. Without this, Hono's default
@@ -617,9 +630,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   // role exits without ever accepting a connection.
   void (async () => {
     try {
+      // The kernel's signing key is checked with the same fail-closed posture:
+      // a deployed process that cannot sign a cursor or an idempotency digest
+      // would silently fall back to a per-process random key, and every cursor
+      // it issued would stop verifying the moment it scaled or restarted.
+      assertKernelConfig(process.env);
       await assertRuntimeIdentity();
     } catch (error) {
-      logSafeError("runtime identity check failed; refusing to serve", error);
+      logSafeError("startup gate failed; refusing to serve", error);
       process.exit(1);
     }
     serve({ fetch: app.fetch, port }, (info) => {

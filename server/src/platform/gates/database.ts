@@ -31,7 +31,34 @@ import {
   grantRolePasswords,
   type DisposableDatabase,
 } from "../harness/postgres.js";
-import { applyMigrations } from "../harness/migrations.js";
+import { applyMigrations, journal } from "../harness/migrations.js";
+
+/**
+ * How many migrations the committed journal holds.
+ *
+ * Derived rather than written down: this gate is about E02's objects, and a
+ * later epic adding a migration must not make it fail. What it does assert is
+ * that every committed migration applied.
+ */
+const JOURNAL_LENGTH = journal().entries.length;
+
+/** The journal timestamp of the migration this gate is about. */
+const MIGRATION_WHEN = (() => {
+  const entry = journal().entries.find((candidate) => candidate.tag === MIGRATION_TAG);
+  if (!entry) throw new Error(`the journal has no entry tagged ${MIGRATION_TAG}`);
+  return entry.when;
+})();
+
+/**
+ * The documented recovery, expressed against a growing journal.
+ *
+ * Drizzle replays every migration recorded *after* the newest ledger row, so
+ * clearing this migration's row means clearing everything at or after it —
+ * otherwise the next run replays only whatever happens to be last, which is a
+ * different migration entirely once a later epic lands one.
+ */
+const CLEAR_LEDGER_FROM_MIGRATION =
+  `delete from drizzle.__drizzle_migrations where created_at >= ${MIGRATION_WHEN}`;
 
 const COMMAND = "cd server && npm run platform:database";
 
@@ -180,8 +207,11 @@ async function main(): Promise<void> {
       const applied = await fresh.query<{ hash: string }>(
         `select hash from drizzle.__drizzle_migrations order by created_at`,
       );
-      assert(applied.length === 13, `expected 13 applied migrations, saw ${applied.length}`);
-      return `0000..${MIGRATION_TAG} applied to an empty database, 13 journal entries recorded`;
+      assert(
+        applied.length === JOURNAL_LENGTH,
+        `expected ${JOURNAL_LENGTH} applied migrations, saw ${applied.length}`,
+      );
+      return `every committed migration applied to an empty database, ${JOURNAL_LENGTH} journal entries recorded`;
     });
     await grantRolePasswords(fresh, ROLE_NAMES);
 
@@ -551,7 +581,10 @@ async function main(): Promise<void> {
       const applied = await fresh.query<{ count: string }>(
         `select count(*)::text from drizzle.__drizzle_migrations`,
       );
-      assert(applied[0].count === "13", `journal grew to ${applied[0].count} entries`);
+      assert(
+        applied[0].count === String(JOURNAL_LENGTH),
+        `journal grew to ${applied[0].count} entries`,
+      );
       const catalogue = await fresh.query<{ count: string }>(
         `select count(*)::text from ops.schema_catalogue`,
       );
@@ -560,9 +593,7 @@ async function main(): Promise<void> {
     });
 
     await check("re-applying the committed SQL over live objects is a no-op", async () => {
-      await fresh.query(
-        `delete from drizzle.__drizzle_migrations where id = (select max(id) from drizzle.__drizzle_migrations)`,
-      );
+      await fresh.query(CLEAR_LEDGER_FROM_MIGRATION);
       await applyMigrations(fresh.adminUrl);
       const catalogue = await fresh.query<{ count: string }>(
         `select count(*)::text from ops.schema_catalogue`,
@@ -582,9 +613,7 @@ async function main(): Promise<void> {
       await fresh.query(`grant usage on schema private to anon`);
       await fresh.query(`drop policy schema_catalogue_runtime_read on ops.schema_catalogue`);
       await fresh.query(`delete from ops.schema_catalogue where schema_name = 'coaching'`);
-      await fresh.query(
-        `delete from drizzle.__drizzle_migrations where id = (select max(id) from drizzle.__drizzle_migrations)`,
-      );
+      await fresh.query(CLEAR_LEDGER_FROM_MIGRATION);
 
       await applyMigrations(fresh.adminUrl);
 
@@ -672,7 +701,10 @@ async function main(): Promise<void> {
       assert(shape.migrator_owned === "8", `only ${shape.migrator_owned} of 8 are owned by ${MIGRATOR_ROLE}`);
       assert(shape.catalogue_owner === MIGRATOR_ROLE, `catalogue is owned by ${shape.catalogue_owner}`);
       assert(shape.ledger_owner === deployer, `ledger ownership moved to ${shape.ledger_owner}`);
-      assert(shape.ledger_rows === "13", `ledger holds ${shape.ledger_rows} rows; the bootstrap insert was lost`);
+      assert(
+        shape.ledger_rows === String(JOURNAL_LENGTH),
+        `ledger holds ${shape.ledger_rows} rows; the bootstrap insert was lost`,
+      );
       assert((await legacyFingerprint(hosted)) === before, "the legacy schema or its rows changed");
       const commented = first<{ count: string }>(
         await hosted.query(
@@ -683,7 +715,7 @@ async function main(): Promise<void> {
         "role comments",
       );
       assert(commented.count === "6", `only ${commented.count} of 6 roles carry a comment`);
-      return `applied by a non-superuser CREATEROLE deploy role: 8 namespaces owned by ${MIGRATOR_ROLE}, catalogue owned by ${MIGRATOR_ROLE}, ledger still ${deployer}'s with 13 rows, legacy data unchanged`;
+      return `applied by a non-superuser CREATEROLE deploy role: 8 namespaces owned by ${MIGRATOR_ROLE}, catalogue owned by ${MIGRATOR_ROLE}, ledger still ${deployer}'s with ${JOURNAL_LENGTH} rows, legacy data unchanged`;
     });
 
     await check("the migrator can then run migrations and the recovery replay", async () => {
@@ -697,9 +729,7 @@ async function main(): Promise<void> {
       // administrator standing in for it.
       const migrator = postgres(migratorUrl, { max: 1, prepare: false, onnotice: () => {} });
       try {
-        await migrator.unsafe(
-          `delete from drizzle.__drizzle_migrations where id = (select max(id) from drizzle.__drizzle_migrations)`,
-        );
+        await migrator.unsafe(CLEAR_LEDGER_FROM_MIGRATION);
       } finally {
         await migrator.end({ timeout: 5 });
       }
@@ -718,8 +748,11 @@ async function main(): Promise<void> {
       );
       assert(repaired.ingestion, "forma_ingestion did not regain USAGE on chess");
       assert(repaired.catalogue === "8", `catalogue recovered to ${repaired.catalogue} rows`);
-      assert(repaired.ledger === "13", `ledger holds ${repaired.ledger} rows after replay`);
-      return `${MIGRATOR_ROLE} ran db:migrate and replayed ${MIGRATION_TAG}: grant and catalogue row restored, ledger back to 13`;
+      assert(
+        repaired.ledger === String(JOURNAL_LENGTH),
+        `ledger holds ${repaired.ledger} rows after replay`,
+      );
+      return `${MIGRATOR_ROLE} ran db:migrate and replayed ${MIGRATION_TAG}: grant and catalogue row restored, ledger back to ${JOURNAL_LENGTH}`;
     });
   } finally {
     // Roles are cluster-wide; the database is not. Hand the database back before

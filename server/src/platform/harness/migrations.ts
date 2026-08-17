@@ -26,7 +26,8 @@ export const MIGRATIONS_FOLDER = join(
 );
 
 interface Journal {
-  entries: { idx: number; tag: string }[];
+  /** `when` is the journal timestamp Drizzle compares the ledger against. */
+  entries: { idx: number; tag: string; when: number }[];
 }
 
 export function journal(): Journal {

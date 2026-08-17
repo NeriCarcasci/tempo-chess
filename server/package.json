@@ -24,7 +24,14 @@
     "security:production-readonly": "tsx src/security/gates/production-readonly.ts",
     "security:forbidden-scope": "tsx src/security/gates/forbidden-scope.ts",
     "platform:unit": "tsx src/platform/connection.test.ts",
-    "platform:database": "tsx src/platform/gates/database.ts"
+    "platform:database": "tsx src/platform/gates/database.ts",
+    "v1:unit": "tsx src/v1/kernel.test.ts",
+    "v1:openapi": "tsx src/v1/gates/openapi.ts",
+    "v1:openapi:check": "tsx src/v1/gates/openapi.ts --check",
+    "v1:integration": "tsx src/v1/gates/integration.ts",
+    "v1:security": "tsx src/v1/gates/security.ts",
+    "v1:migration": "tsx src/v1/gates/migration.ts",
+    "v1:performance": "tsx src/v1/gates/performance.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",
@@ -34,6 +41,7 @@
     "chessops": "^0.15.1",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.30",
+    "jose": "^6.2.9",
     "postgres": "^3.4.9",
     "zod": "^4.4.3"
   },
