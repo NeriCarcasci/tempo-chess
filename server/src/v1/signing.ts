@@ -28,7 +28,12 @@ export const SIGNING_KEY_ENV = "FORMA_API_SIGNING_KEY";
 export const MINIMUM_KEY_BYTES = 32;
 
 /** Domain separation. A signature is only ever valid for the purpose it was made for. */
-export type SigningPurpose = "cursor" | "idempotency-digest" | "rate-limit-subject";
+export type SigningPurpose =
+  | "cursor"
+  | "idempotency-digest"
+  | "rate-limit-subject"
+  /** E04: binds a queue delivery to one work item and one dispatch epoch. */
+  | "attempt-token";
 
 export interface KernelConfigFinding {
   code: string;

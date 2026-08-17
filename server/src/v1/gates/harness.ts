@@ -18,9 +18,11 @@ import { RUNTIME_ROLE } from "../../security/contract.js";
  * cluster created for the command and destroyed when it ends, reusing E02's
  * harness rather than adding a second one.
  *
- * The connection is opened *as* `forma_api`, not as the owner, so every gate
- * result is also a statement about that role's grants. A missing grant fails the
- * test rather than passing under privileges production does not have.
+ * The connection is opened as a named least-privilege role, never the owner, so
+ * every gate result is also a statement about that role's grants. A missing
+ * grant fails the test rather than passing under privileges production does not
+ * have. The role defaults to `forma_api`; E04's ledger gates ask for
+ * `forma_ops`, because the private surface belongs to that deployment.
  *
  * Never points at the live project: the harness refuses a non-loopback target,
  * and these gates create roles and log in with a synthetic password, which is
@@ -55,14 +57,28 @@ export interface KernelHarness {
  * since a process that cannot prove its identity must not serve. Dynamic import
  * is how a test gets to choose the target without weakening that gate.
  */
-export async function startKernelHarness(): Promise<KernelHarness> {
+export interface KernelHarnessOptions {
+  /**
+   * The deployment role this harness's process connects as. Defaults to the
+   * API role. E04's ledger gates use `forma_ops`, because the private
+   * dispatch, recovery and worker endpoints belong to deployments that connect
+   * as themselves — running them as `forma_api` would prove nothing about the
+   * grants they will actually hold.
+   */
+  role?: string;
+}
+
+export async function startKernelHarness(
+  options: KernelHarnessOptions = {},
+): Promise<KernelHarness> {
+  const role = options.role ?? RUNTIME_ROLE;
   const db = await createDisposableDatabase();
   try {
     await applyMigrations(db.adminUrl);
-    await grantRolePasswords(db, [RUNTIME_ROLE]);
+    await grantRolePasswords(db, [RUNTIME_ROLE, role]);
 
-    process.env.DATABASE_URL = db.urlFor(RUNTIME_ROLE);
-    process.env.DATABASE_ROLE = RUNTIME_ROLE;
+    process.env.DATABASE_URL = db.urlFor(role);
+    process.env.DATABASE_ROLE = role;
     process.env.FORMA_API_SIGNING_KEY = GATE_SIGNING_KEY;
     process.env.SUPABASE_URL ??= "https://gate.supabase.invalid";
     process.env.SUPABASE_ANON_KEY ??= "gate-anon-key";

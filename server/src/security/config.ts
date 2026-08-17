@@ -15,7 +15,9 @@ import {
   OWNER_ROLE,
   PRODUCTION,
   ROLE_MARKER_ENV,
+  DEPLOYMENT_ROLES,
   RUNTIME_ROLE,
+  isDeploymentRole,
 } from "./contract.js";
 
 /** A blocking configuration finding. `message` is safe to log verbatim. */
@@ -155,10 +157,10 @@ export function inspectRuntimeConfig(env: RuntimeEnv): ConfigFinding[] {
       code: "DATABASE_ROLE_IS_MIGRATOR",
       message: `DATABASE_URL connects as ${MIGRATOR_ROLE}; only ${RUNTIME_ROLE} may serve requests`,
     });
-  } else if (connection.baseRole !== RUNTIME_ROLE) {
+  } else if (!isDeploymentRole(connection.baseRole)) {
     findings.push({
       code: "DATABASE_ROLE_UNKNOWN",
-      message: `DATABASE_URL connects as an unrecognised role; only ${RUNTIME_ROLE} may serve requests`,
+      message: `DATABASE_URL connects as an unrecognised role; only ${DEPLOYMENT_ROLES.join(", ")} may serve requests`,
     });
   }
 
@@ -173,12 +175,12 @@ export function inspectRuntimeConfig(env: RuntimeEnv): ConfigFinding[] {
   if (!marker) {
     findings.push({
       code: "DATABASE_ROLE_MARKER_MISSING",
-      message: `${ROLE_MARKER_ENV} is not set; it must equal ${RUNTIME_ROLE}`,
+      message: `${ROLE_MARKER_ENV} is not set; it must name this deployment's role`,
     });
-  } else if (marker !== RUNTIME_ROLE) {
+  } else if (!isDeploymentRole(marker)) {
     findings.push({
       code: "DATABASE_ROLE_MARKER_MISMATCH",
-      message: `${ROLE_MARKER_ENV} does not equal ${RUNTIME_ROLE}`,
+      message: `${ROLE_MARKER_ENV} is not one of ${DEPLOYMENT_ROLES.join(", ")}`,
     });
   } else if (findings.length === 0 && marker !== connection.baseRole) {
     findings.push({

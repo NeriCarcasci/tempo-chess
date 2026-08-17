@@ -31,7 +31,13 @@
     "v1:integration": "tsx src/v1/gates/integration.ts",
     "v1:security": "tsx src/v1/gates/security.ts",
     "v1:migration": "tsx src/v1/gates/migration.ts",
-    "v1:performance": "tsx src/v1/gates/performance.ts"
+    "v1:performance": "tsx src/v1/gates/performance.ts",
+    "ops:unit": "tsx src/ops/ledger.test.ts",
+    "ops:integration": "tsx src/ops/gates/integration.ts",
+    "ops:security": "tsx src/ops/gates/security.ts",
+    "ops:migration": "tsx src/ops/gates/migration.ts",
+    "ops:performance": "tsx src/ops/gates/performance.ts",
+    "ops:reconcile": "node --env-file=.env --import tsx src/ops/reconcile-report.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

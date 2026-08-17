@@ -13,6 +13,7 @@ import {
   requireIdempotencyKey,
   type IdempotencyOutcome,
 } from "./idempotency.js";
+import { verifyServiceCaller, type ServiceCaller } from "./auth/oidc.js";
 import { ProblemError, problemDocument, toProblemError, type ProblemCode } from "./problem.js";
 import { clientAddress, consume, type RateLimitStatus } from "./rate-limit.js";
 import { routeKey, requiresIdempotencyKey, type RouteDefinition } from "./registry.js";
@@ -75,6 +76,40 @@ function problemResponse(c: Context, state: RequestState, error: ProblemError): 
   c.header("Cache-Control", "no-store");
   if (error.retryAfterSeconds !== null) c.header("Retry-After", String(error.retryAfterSeconds));
   return c.body(JSON.stringify(document), document.status as never);
+}
+
+/**
+ * Authenticate a private-ingress caller, per plans/v1-api-contract.md §15.
+ *
+ * A failure is `AUTH_REQUIRED` with no detail whichever way it failed: an
+ * internal endpoint tells a caller nothing about why it was refused, because
+ * the only callers that should ever reach it already know they belong. The
+ * audit row is where the distinction lives.
+ */
+async function authenticateService(
+  c: Context,
+  route: RouteDefinition<never, never, never>,
+  state: RequestState,
+): Promise<ServiceCaller> {
+  const token = bearerToken(c.req.header("Authorization"));
+  const result = await verifyServiceCaller(token, route.serviceRole ?? "worker");
+  if (result.ok) {
+    state.authMode = "service";
+    state.actorPresent = true;
+    return result.caller;
+  }
+  await recordAuditEvent({
+    actorKind: "service",
+    action: "internal.caller_rejected",
+    requestId: state.requestId,
+    traceId: state.traceId,
+    result: "denied",
+    reasonCode: result.reason,
+    metadata: { route: routeKey(route), required: route.serviceRole ?? "worker" },
+  });
+  throw new ProblemError(
+    result.reason === "unavailable" ? "PROVIDER_UNAVAILABLE" : "AUTH_REQUIRED",
+  );
 }
 
 async function authenticate(
@@ -175,7 +210,8 @@ export function mountRoute<E extends Env>(
     let recordId: string | null = null;
 
     try {
-      const auth = await authenticate(c, route, state);
+      const service = route.auth === "internal" ? await authenticateService(c, route, state) : null;
+      const auth = route.auth === "internal" ? null : await authenticate(c, route, state);
 
       await applyRateLimits(
         route,
@@ -254,6 +290,7 @@ export function mountRoute<E extends Env>(
         query,
         body: body as never,
         auth,
+        service,
         requestId: state.requestId,
         traceId: state.traceId,
         params: c.req.param() as Record<string, string>,
@@ -282,6 +319,10 @@ export function mountRoute<E extends Env>(
         }
       }
 
+      // A 204 carries no body by definition, and an internal worker
+      // acknowledgement is the only place `/v1` produces one.
+      if (status === 204) return c.body(null, 204);
+
       c.header("Content-Type", "application/json");
       return c.body(JSON.stringify(payload), status as never);
     } catch (error) {
@@ -305,7 +346,7 @@ export function mountRoute<E extends Env>(
         method: route.method,
         status,
         durationMs: performance.now() - startedAt,
-        surface: "v1",
+        surface: route.surface === "internal" ? "internal" : "v1",
         authMode: state.authMode,
         actorPresent: state.actorPresent,
         problemCode,
@@ -342,6 +383,45 @@ function buildBody(
     );
   }
   return resource(result.data, requestId, redactions);
+}
+
+/**
+ * Mount the private surface, and its own catch-all.
+ *
+ * Separate from `mountV1` because the two surfaces answer different questions
+ * about an unknown path: `/v1/nonsense` is a client using an endpoint we do not
+ * have, and `/internal/v1/nonsense` is one of our own deployments calling
+ * something that no longer exists. Both get problem details; keeping the mounts
+ * apart is what stops an internal route from ever being reachable under `/v1`.
+ */
+export function mountInternal<E extends Env>(
+  app: Hono<E>,
+  routes: readonly RouteDefinition<never, never, never>[],
+): void {
+  for (const route of routes) mountRoute(app, route);
+
+  app.all("/internal/*", (c: Context) => {
+    const state = newState(c);
+    const problem = new ProblemError("NOT_FOUND", { detail: "No such endpoint." });
+    observeRequest({
+      requestId: state.requestId,
+      traceId: state.traceId,
+      route: "/internal/*",
+      method: c.req.method,
+      status: 404,
+      durationMs: 0,
+      surface: "internal",
+      authMode: "anonymous",
+      actorPresent: false,
+      problemCode: "NOT_FOUND",
+      idempotency: "none",
+      cursorRejected: false,
+      rateLimit: "ok",
+      redactions: 0,
+      deprecated: false,
+    });
+    return problemResponse(c, state, problem);
+  });
 }
 
 /** Mount every declared route, and the `/v1` catch-all that keeps 404s in contract. */

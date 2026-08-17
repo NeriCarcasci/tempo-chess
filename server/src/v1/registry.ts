@@ -1,5 +1,6 @@
 import type { ZodType } from "zod";
 import type { AuthorizationContext } from "./auth/context.js";
+import type { ServiceCaller, ServiceRole } from "./auth/oidc.js";
 import type { PageBlock, Redaction } from "./envelope.js";
 import type { RateLimitPolicy } from "./rate-limit.js";
 
@@ -22,7 +23,14 @@ export type HttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 /** A read is cacheable and safe. A command changes state and needs a key. */
 export type RouteKind = "read" | "command";
 
-export type RouteAuth = "public" | "required";
+/**
+ * `internal` is E04's addition: a route on `/internal/v1` whose caller is a
+ * Google-signed service account on a named allowlist rather than a user.
+ */
+export type RouteAuth = "public" | "required" | "internal";
+
+/** `v1` is the browser-facing product surface; `internal` is private ingress. */
+export type RouteSurface = "v1" | "internal";
 
 /** Where a rate-limit policy gets the identity it counts against. */
 export type RateLimitSource =
@@ -39,8 +47,10 @@ export interface RouteRateLimit {
 export interface HandlerInput<TQuery, TBody> {
   query: TQuery;
   body: TBody;
-  /** Null on a public route with no bearer token. */
+  /** Null on a public route with no bearer token, and on an internal route. */
   auth: AuthorizationContext | null;
+  /** The verified service account on an internal route; null everywhere else. */
+  service: ServiceCaller | null;
   requestId: string;
   traceId: string;
   /** Raw path parameters, already matched by the router. */
@@ -69,6 +79,16 @@ export interface RouteDefinition<TQuery = unknown, TBody = unknown, TData = unkn
   description?: string;
   kind: RouteKind;
   auth: RouteAuth;
+  /** Defaults to `v1`. An `internal` route is not in the OpenAPI document. */
+  surface?: RouteSurface;
+  /** Which internal allowlist may call this. Required when `auth` is `internal`. */
+  serviceRole?: ServiceRole;
+  /**
+   * `ledger` says this command's idempotency is enforced by the durable work
+   * ledger's conditional transitions rather than by an `Idempotency-Key`
+   * record. Legal only on an internal route — see `requiresIdempotencyKey`.
+   */
+  idempotency?: "key" | "ledger";
   /** Force the `getUser` fallback so the answer reflects revocation. */
   revocationSensitive?: boolean;
   /** `resource` and `collection` are enveloped; `raw` is the body verbatim. */
@@ -95,10 +115,26 @@ export function routeKey(route: Pick<RouteDefinition, "method" | "path">): strin
 }
 
 /**
- * A command must be idempotent. There is no per-route switch, because "this
- * command does not need a key" is a judgement that is wrong the first time a
- * client's connection drops mid-request.
+ * A command must be idempotent.
+ *
+ * There is still no per-route switch on the product surface: "this command does
+ * not need a key" is a judgement that is wrong the first time a client's
+ * connection drops mid-request, so every `/v1` command requires one.
+ *
+ * An internal route may declare `idempotency: "ledger"` instead, and only an
+ * internal route may. The caller there is Cloud Tasks, which has no key to
+ * offer and needs none: the duplicate it will eventually deliver is stopped by
+ * the conditional claim in `ops.work_items`, which is a stronger guarantee than
+ * a header, not a waiver of one. Asserted rather than assumed, because the
+ * value of the `/v1` rule is that it has no exceptions.
  */
-export function requiresIdempotencyKey(route: Pick<RouteDefinition, "kind">): boolean {
-  return route.kind === "command";
+export function requiresIdempotencyKey(
+  route: Pick<RouteDefinition, "kind" | "idempotency" | "surface">,
+): boolean {
+  if (route.kind !== "command") return false;
+  if (route.idempotency !== "ledger") return true;
+  if (route.surface !== "internal") {
+    throw new Error("idempotency: 'ledger' is only available on an internal route");
+  }
+  return false;
 }

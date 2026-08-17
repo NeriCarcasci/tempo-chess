@@ -2,6 +2,7 @@ import { z } from "zod";
 import { generateOpenApiDocument } from "../openapi.js";
 import type { RouteDefinition } from "../registry.js";
 import { PUBLIC_ROUTES } from "./public.js";
+import { WORKFLOW_ROUTES } from "./workflows.js";
 
 /**
  * Every mounted `/v1` route, in one list.
@@ -10,7 +11,7 @@ import { PUBLIC_ROUTES } from "./public.js";
  * document is a description of what is running rather than a parallel artifact.
  */
 
-const PRODUCT_ROUTES = [...PUBLIC_ROUTES] as unknown as RouteDefinition<never, never, never>[];
+const PRODUCT_ROUTES = [...PUBLIC_ROUTES, ...WORKFLOW_ROUTES] as unknown as RouteDefinition<never, never, never>[];
 
 /**
  * `GET /v1/openapi.json` — the generated contract.

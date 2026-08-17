@@ -104,15 +104,17 @@ async function disposable(): Promise<DisposableDatabase> {
 try {
   report.section("the journal addition");
 
-  await report.check("0013 is the single new journal entry, appended in order", () => {
+  await report.check("0013 sits exactly once in the journal, directly after 0012", () => {
     const entries = journal().entries;
-    const last = entries.at(-1)!;
-    assert.equal(last.tag, TAG);
+    const position = entries.findIndex((entry) => entry.tag === TAG);
+    assert.notEqual(position, -1, "0013 is not in the journal");
     // `idx` is zero-based and matches the file's numeric prefix.
-    assert.equal(last.idx, entries.length - 1);
+    assert.equal(entries[position]!.idx, position);
     assert.equal(entries.filter((entry) => entry.tag === TAG).length, 1);
-    // Append-only: 0012 must still be where it was.
-    assert.equal(entries.at(-2)!.tag, "0012_e02_platform_foundation");
+    // Append-only: 0012 must still be where it was. Stated as a position rather
+    // than "the last entry", so a later epic appending its own migration does
+    // not make this gate fail for a reason that has nothing to do with 0013.
+    assert.equal(entries[position - 1]!.tag, "0012_e02_platform_foundation");
   });
 
   await report.check("the migration drops and renames nothing", () => {

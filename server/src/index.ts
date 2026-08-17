@@ -53,9 +53,10 @@ import { assertRuntimeIdentity } from "./db/client.js";
 import { betaSignupSchema, rateLimit, recordBetaSignup } from "./beta.js";
 import { logSafeError, safeClientMessage } from "./security/redaction.js";
 import { isDeployed } from "./security/config.js";
-import { mountV1 } from "./v1/kernel.js";
+import { mountInternal, mountV1 } from "./v1/kernel.js";
 import { legacyCompatibility } from "./v1/legacy.js";
 import { V1_ROUTES } from "./v1/routes/index.js";
+import { INTERNAL_ROUTES } from "./internal/routes.js";
 import { assertKernelConfig } from "./v1/signing.js";
 
 const app = new Hono<{ Variables: { user: AuthUser } }>();
@@ -64,7 +65,12 @@ const app = new Hono<{ Variables: { user: AuthUser } }>();
 // process with an empty or wildcard allowlist fails here rather than serving
 // `Access-Control-Allow-Origin: *` to everyone.
 const allowedOrigins = resolveAllowedOrigins(process.env, isDeployed(process.env));
-app.use("*", cors(allowedOrigins));
+// `/internal/v1` gets no CORS headers at all: plans/v1-api-contract.md §15 says
+// "no browser CORS", and a preflight answered there would be an invitation.
+app.use("*", async (c, next) => {
+  if (c.req.path.startsWith("/internal/")) return next();
+  return cors(allowedOrigins)(c, next);
+});
 
 // Deprecation headers and usage measurement for every unversioned route. It
 // runs before the routes so it wraps them, and it exempts `/v1` and `/health`.
@@ -74,6 +80,9 @@ app.use("*", legacyCompatibility());
 // it. Registered before the legacy routes so `/v1/*` can never be shadowed by a
 // prototype path, and so its problem-details 404 owns the whole namespace.
 mountV1(app, V1_ROUTES);
+
+// The private worker/operator surface. Mounted beside `/v1`, never under it.
+mountInternal(app, INTERNAL_ROUTES);
 
 /**
  * Anything a handler throws instead of returning. Without this, Hono's default

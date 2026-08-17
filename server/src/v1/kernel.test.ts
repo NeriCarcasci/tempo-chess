@@ -590,7 +590,10 @@ check("the document describes no path that is not mounted", () => {
 check("commands document the Idempotency-Key header and its conflicts", () => {
   const paths = document.paths as Record<string, Record<string, never>>;
   for (const route of V1_ROUTES.filter((r) => r.kind === "command")) {
-    const operation = paths[route.path][route.method.toLowerCase()] as {
+    // The document uses OpenAPI's `{param}` spelling, not Hono's `:param`.
+    // Every command had a static path until E04 added one that does not.
+    const key = route.path.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
+    const operation = paths[key][route.method.toLowerCase()] as {
       parameters?: { name: string; required: boolean }[];
       responses: Record<string, unknown>;
     };

@@ -55,6 +55,13 @@ export const PROBLEM_CODES = {
   UNSUPPORTED_GAME: { status: 422, title: "That game is not supported", retryable: false },
   INSUFFICIENT_COVERAGE: { status: 409, title: "More game evidence is needed", retryable: false },
   WORKFLOW_NOT_CANCELLABLE: { status: 409, title: "That work can no longer be cancelled", retryable: false },
+  /**
+   * Internal only. A delivery arrived before the work item's `available_at`,
+   * so the transport should hold it rather than acknowledge it. Distinct from
+   * `PROVIDER_UNAVAILABLE`, which would put "a provider did not respond" in an
+   * operator's log for a clock-skew event that has nothing to do with one.
+   */
+  WORK_NOT_READY: { status: 503, title: "That work is not due yet", retryable: true },
   INTERNAL_ERROR: { status: 500, title: "Something went wrong", retryable: true },
 } as const satisfies Record<string, CodeSpec>;
 

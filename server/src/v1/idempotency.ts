@@ -249,13 +249,15 @@ export async function completeCommand(
   resource?: { type: string; id: string } | null,
   sql = client,
 ): Promise<void> {
-  // The body is encoded here rather than through the driver's `json` helper:
-  // with prepared statements disabled the helper never reaches its serializer.
+  // The body is encoded here rather than through the driver's `json` helper,
+  // and cast `::text::jsonb` rather than `::jsonb`: postgres.js reads the
+  // trailing cast to choose a serializer, and a bare `::jsonb` would make it
+  // JSON-encode the string we already encoded.
   await sql`
     update ops.idempotency_records
     set state = 'completed',
         response_status = ${response.status},
-        response_body = ${JSON.stringify(response.body)}::jsonb,
+        response_body = ${JSON.stringify(response.body)}::text::jsonb,
         resource_type = ${resource?.type ?? null},
         resource_id = ${resource?.id ?? null},
         lease_expires_at = null,

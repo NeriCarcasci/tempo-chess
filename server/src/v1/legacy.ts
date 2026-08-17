@@ -43,7 +43,15 @@ export const LEGACY_SUCCESSORS: Readonly<Record<string, string>> = {
 const EXEMPT = new Set(["/health"]);
 
 function isLegacyPath(path: string): boolean {
-  return !path.startsWith("/v1/") && path !== "/v1" && !EXEMPT.has(path);
+  // `/internal` is E04's private surface. It was never part of the prototype,
+  // so a `Deprecation` header on it would announce a sunset for something that
+  // has no consumer to warn.
+  return (
+    !path.startsWith("/v1/") &&
+    path !== "/v1" &&
+    !path.startsWith("/internal/") &&
+    !EXEMPT.has(path)
+  );
 }
 
 /**

@@ -31,6 +31,33 @@ export type AccessClass = (typeof ACCESS_CLASSES)[number];
 export const OWNER_ROLE = "postgres";
 
 /**
+ * Every least-privilege role a Forma deployment may serve as.
+ *
+ * Added by E04, additive to the frozen E01 values above and changing none of
+ * them. E01's finding was that the runtime connected as the *owner*; E02 then
+ * created one least-privilege role per deployment precisely so each service
+ * could connect as itself. Until this list existed, `inspectRuntimeConfig`
+ * accepted only `forma_api`, which meant the ops and worker deployments E04's
+ * private endpoints belong to could not have started at all.
+ *
+ * `postgres` and `forma_migrator` are still refused, as are `anon`,
+ * `authenticated` and `service_role` — they are not in this list and every role
+ * here is scoped by its own grants in 0012, 0013 and 0014.
+ */
+export const DEPLOYMENT_ROLES = [
+  RUNTIME_ROLE,
+  "forma_ops",
+  "forma_ingestion",
+  "forma_stockfish",
+  "forma_analysis",
+] as const;
+export type DeploymentRole = (typeof DEPLOYMENT_ROLES)[number];
+
+export function isDeploymentRole(role: string | undefined): role is DeploymentRole {
+  return (DEPLOYMENT_ROLES as readonly string[]).includes(role ?? "");
+}
+
+/**
  * The exact 22-table allowlist. All 22 are internal: the public-projection
  * allowlist is empty, so an anonymous `200` on any of them is a failure.
  */

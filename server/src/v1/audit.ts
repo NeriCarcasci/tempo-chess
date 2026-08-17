@@ -20,12 +20,17 @@ import { logSafeError } from "../security/redaction.js";
 export type AuditActorKind = "user" | "anonymous" | "service" | "system";
 export type AuditResult = "allowed" | "denied" | "error";
 
-/** The actions E03 records. A new action is a code change, not a free string. */
+/** The recorded actions. A new action is a code change, not a free string. */
 export type AuditAction =
   | "auth.token_rejected"
   | "auth.subject_denied"
   | "command.idempotency_conflict"
-  | "request.rate_limited";
+  | "request.rate_limited"
+  // E04.
+  | "internal.caller_rejected"
+  | "workflow.access_denied"
+  | "workflow.cancel_requested"
+  | "work_item.stale_delivery";
 
 export interface AuditEvent {
   actorKind: AuditActorKind;
@@ -65,9 +70,11 @@ function safeMetadata(input: AuditEvent["metadata"]): Record<string, string | nu
  */
 export async function recordAuditEvent(event: AuditEvent, sql = client): Promise<void> {
   try {
-    // Encoded here rather than through the driver's `json` helper: with
-    // prepared statements disabled — which the transaction pooler requires —
-    // that helper never reaches its serializer and the object arrives raw.
+    // Encoded here rather than through the driver's `json` helper, and cast
+    // `::text::jsonb` rather than `::jsonb`: postgres.js reads the trailing
+    // cast to pick a serializer, and a bare `::jsonb` makes it JSON-encode the
+    // string we already encoded — which would store the *string* "{}" and fail
+    // this column's `jsonb_typeof(...) = 'object'` constraint.
     await sql`
       insert into ops.audit_events (
         actor_kind, actor_ref, action, target_type, target_ref,
@@ -76,7 +83,7 @@ export async function recordAuditEvent(event: AuditEvent, sql = client): Promise
         ${event.actorKind}, ${event.actorRef ?? null}, ${event.action},
         ${event.targetType ?? null}, ${event.targetRef ?? null},
         ${event.requestId}, ${event.traceId ?? null}, ${event.result},
-        ${event.reasonCode ?? null}, ${JSON.stringify(safeMetadata(event.metadata))}::jsonb
+        ${event.reasonCode ?? null}, ${JSON.stringify(safeMetadata(event.metadata))}::text::jsonb
       )`;
   } catch (error) {
     logSafeError("audit event could not be written", error);

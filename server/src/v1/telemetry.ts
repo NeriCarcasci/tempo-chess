@@ -17,8 +17,9 @@ import type { RateLimitStatus } from "./rate-limit.js";
  * authenticated" is an operational question and "who was it" is not.
  */
 
-export type ApiSurface = "v1" | "legacy";
-export type AuthMode = "anonymous" | "jwks" | "fallback";
+export type ApiSurface = "v1" | "legacy" | "internal";
+/** `service` is a Google-signed service account on `/internal/v1`. */
+export type AuthMode = "anonymous" | "jwks" | "fallback" | "service";
 
 export interface RequestObservation {
   requestId: string;
