@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Context, MiddlewareHandler, Next } from "hono";
 import { client } from "./db/client.js";
+import { CuratedError } from "./security/redaction.js";
 
 /**
  * Identity for the API. The browser holds a Supabase session; every protected
@@ -154,8 +155,14 @@ export async function requireAccountUsername(
   return match.username;
 }
 
-/** Carries the right HTTP status out of the identity helpers. */
-export class AccountError extends Error {
+/**
+ * Carries the right HTTP status out of the identity helpers.
+ *
+ * Marked as a curated message: these strings were written for the caller and
+ * contain nothing but that caller's own input, so the safe-error layer lets them
+ * through instead of collapsing them to the generic sentence.
+ */
+export class AccountError extends CuratedError {
   constructor(message: string, readonly status: 403 | 409) {
     super(message);
     this.name = "AccountError";
@@ -178,7 +185,7 @@ export async function linkAccount(
     where platform = ${platform} and normalized_username = ${normalized}
     limit 1`;
   if (taken[0] && String(taken[0].user_id) !== userId) {
-    throw new Error(`"${username}" is already linked to another Forma account`);
+    throw new AccountError(`"${username}" is already linked to another Forma account`, 409);
   }
   const rows = await client`
     insert into linked_accounts (user_id, platform, username, normalized_username)

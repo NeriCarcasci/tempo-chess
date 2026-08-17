@@ -1,0 +1,186 @@
+
+> security:rehearsal
+> tsx src/security/gates/rehearsal.ts
+
+ENVIRONMENT id=<rehearsal-id> started_at=<timestamp> pooled=postgresql://forma_api.<rehearsal-id>@127.0.0.1:6543/postgres
+PASS REH-MIG-ART-001 server/drizzle/0011_e01_containment.sql 27497 bytes sha256=212a833c84f204460c95f6b1a1eba1ff6d0d22088085a2fdd13a867ac5d9dcb7
+PASS REH-MIG-ART-002 server/drizzle/meta/0011_snapshot.json 94395 bytes sha256=3ae5f06bff21114923984933206ec850d3f82097eccd200c3ba793a4dce7ccc1
+PASS REH-MIG-JRN-001 only addition is idx=11 version=7 when=1786840279694 tag=0011_e01_containment breakpoints=true
+PASS REH-MIG-TBL-001 public.analysis_imports exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-002 public.analysis_tasks exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-003 public.beta_signups exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-004 public.canonical_moves exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-005 public.game_sources exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-006 public.games exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-007 public.lesson_progress exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-008 public.linked_accounts exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-009 public.mistakes exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-010 public.opening_drills exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-011 public.opening_edges exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-012 public.opening_positions exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-013 public.opening_repertoire_moves exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-014 public.opening_training_results exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-015 public.player_opening_observations exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-016 public.player_opening_stats exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-017 public.player_style exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-018 public.position_eval exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-019 public.profiles exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-020 public.puzzles exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-021 public.repertoire_openings exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-TBL-022 public.usage_events exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS REH-MIG-POL-001 analysis_imports_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-002 analysis_tasks_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-003 beta_signups_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-004 canonical_moves_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-005 game_sources_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-006 games_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-007 lesson_progress_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-008 linked_accounts_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-009 mistakes_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-010 opening_drills_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-011 opening_edges_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-012 opening_positions_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-013 opening_repertoire_moves_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-014 opening_training_results_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-015 player_opening_observations_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-016 position_eval_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-017 profiles_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-018 repertoire_openings_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-POL-019 usage_events_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS REH-MIG-GRT-001 forma_api has INSERT on public.analysis_imports; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-002 forma_api has SELECT on public.analysis_imports; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-003 forma_api has UPDATE on public.analysis_imports; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-004 forma_api has INSERT on public.analysis_tasks; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-005 forma_api has SELECT on public.analysis_tasks; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-006 forma_api has UPDATE on public.analysis_tasks; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-007 forma_api has INSERT on public.beta_signups; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-008 forma_api has SELECT on public.beta_signups; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-009 forma_api has UPDATE on public.beta_signups; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-010 forma_api has INSERT on public.game_sources; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-011 forma_api has SELECT on public.game_sources; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-012 forma_api has UPDATE on public.game_sources; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-013 forma_api has INSERT on public.games; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-014 forma_api has SELECT on public.games; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-015 forma_api has UPDATE on public.games; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-016 forma_api has INSERT on public.lesson_progress; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-017 forma_api has SELECT on public.lesson_progress; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-018 forma_api has UPDATE on public.lesson_progress; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-019 forma_api has INSERT on public.linked_accounts; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-020 forma_api has SELECT on public.linked_accounts; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-021 forma_api has UPDATE on public.linked_accounts; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-022 forma_api has INSERT on public.opening_drills; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-023 forma_api has SELECT on public.opening_drills; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-024 forma_api has UPDATE on public.opening_drills; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-025 forma_api has INSERT on public.opening_edges; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-026 forma_api has SELECT on public.opening_edges; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-027 forma_api has UPDATE on public.opening_edges; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-028 forma_api has INSERT on public.opening_positions; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-029 forma_api has SELECT on public.opening_positions; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-030 forma_api has UPDATE on public.opening_positions; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-031 forma_api has INSERT on public.player_opening_observations; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-032 forma_api has SELECT on public.player_opening_observations; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-033 forma_api has UPDATE on public.player_opening_observations; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-034 forma_api has DELETE on public.canonical_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-035 forma_api has INSERT on public.canonical_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-036 forma_api has SELECT on public.canonical_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-037 forma_api has DELETE on public.repertoire_openings; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-038 forma_api has INSERT on public.repertoire_openings; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-039 forma_api has SELECT on public.repertoire_openings; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-040 forma_api has DELETE on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-041 forma_api has INSERT on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-042 forma_api has SELECT on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-043 forma_api has UPDATE on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-044 forma_api has DELETE on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-045 forma_api has INSERT on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-046 forma_api has SELECT on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-047 forma_api has UPDATE on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-048 forma_api has SELECT on public.mistakes; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-049 forma_api has INSERT on public.opening_training_results; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-050 forma_api has SELECT on public.opening_training_results; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-051 forma_api has INSERT on public.position_eval; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-052 forma_api has SELECT on public.position_eval; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-053 forma_api has INSERT on public.usage_events; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-GRT-054 forma_api has SELECT on public.usage_events; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS REH-MIG-DEN-001 no role holds any privilege and no policy of any kind exists on public.player_opening_stats; real disposable Postgres rejected column SELECT on denied public.puzzles for forma_api
+PASS REH-MIG-DEN-002 no role holds any privilege and no policy of any kind exists on public.player_style; real disposable Postgres rejected effective browser column access on denied public.puzzles
+PASS REH-MIG-DEN-003 no role holds any privilege and no policy of any kind exists on public.puzzles; real disposable Postgres rejected SELECT WITH GRANT OPTION drift on public.profiles for forma_api and an unlisted non-r public view
+PASS REH-MIG-ROLE-001 forma_api rolcanlogin=true rolinherit=false rolsuper=false rolcreatedb=false rolcreaterole=false rolbypassrls=false
+PASS REH-MIG-ROLE-002 forma_api owns no table, sequence, routine, or schema in public
+PASS REH-MIG-ROLE-003 forma_migrator rolcanlogin=true rolinherit=false rolsuper=false rolcreatedb=false rolcreaterole=false rolbypassrls=false
+PASS REH-MIG-ROLE-004 forma_migrator has no committed credential, runtime client, job, or executable operational path
+PASS REH-ACL-001 PUBLIC has no effective schema access in public; 2 new default-ACL objects unreachable
+PASS REH-ACL-002 PUBLIC has no effective tables access in public; new objects under both default-ACL grantors are unreachable
+PASS REH-ACL-003 PUBLIC has no effective sequences access in public (no schema USAGE); new default-ACL objects unreachable
+PASS REH-ACL-004 PUBLIC has no effective routines access in public (no schema USAGE); new default-ACL objects unreachable
+PASS REH-ACL-005 anon has no effective schema access in public; 2 new default-ACL objects unreachable
+PASS REH-ACL-006 anon has no effective tables access in public; new objects under both default-ACL grantors are unreachable
+PASS REH-ACL-007 anon has no effective sequences access in public (no schema USAGE); new default-ACL objects unreachable
+PASS REH-ACL-008 anon has no effective routines access in public (no schema USAGE); new default-ACL objects unreachable
+PASS REH-ACL-009 authenticated has no effective schema access in public; 2 new default-ACL objects unreachable
+PASS REH-ACL-010 authenticated has no effective tables access in public; new objects under both default-ACL grantors are unreachable
+PASS REH-ACL-011 authenticated has no effective sequences access in public (no schema USAGE); new default-ACL objects unreachable
+PASS REH-ACL-012 authenticated has no effective routines access in public (no schema USAGE); new default-ACL objects unreachable
+PASS REH-HTTP-001 public.analysis_imports exists; anonymous select denied (http 401)
+PASS REH-HTTP-002 public.analysis_tasks exists; anonymous select denied (http 401)
+PASS REH-HTTP-003 public.beta_signups exists; anonymous select denied (http 401)
+PASS REH-HTTP-004 public.canonical_moves exists; anonymous select denied (http 401)
+PASS REH-HTTP-005 public.game_sources exists; anonymous select denied (http 401)
+PASS REH-HTTP-006 public.games exists; anonymous select denied (http 401)
+PASS REH-HTTP-007 public.lesson_progress exists; anonymous select denied (http 401)
+PASS REH-HTTP-008 public.linked_accounts exists; anonymous select denied (http 401)
+PASS REH-HTTP-009 public.mistakes exists; anonymous select denied (http 401)
+PASS REH-HTTP-010 public.opening_drills exists; anonymous select denied (http 401)
+PASS REH-HTTP-011 public.opening_edges exists; anonymous select denied (http 401)
+PASS REH-HTTP-012 public.opening_positions exists; anonymous select denied (http 401)
+PASS REH-HTTP-013 public.opening_repertoire_moves exists; anonymous select denied (http 401)
+PASS REH-HTTP-014 public.opening_training_results exists; anonymous select denied (http 401)
+PASS REH-HTTP-015 public.player_opening_observations exists; anonymous select denied (http 401)
+PASS REH-HTTP-016 public.player_opening_stats exists; anonymous select denied (http 401)
+PASS REH-HTTP-017 public.player_style exists; anonymous select denied (http 401)
+PASS REH-HTTP-018 public.position_eval exists; anonymous select denied (http 401)
+PASS REH-HTTP-019 public.profiles exists; anonymous select denied (http 401)
+PASS REH-HTTP-020 public.puzzles exists; anonymous select denied (http 401)
+PASS REH-HTTP-021 public.repertoire_openings exists; anonymous select denied (http 401)
+PASS REH-HTTP-022 public.usage_events exists; anonymous select denied (http 401)
+PASS REH-CORS-001 https://forma-chess.pages.dev echoed exactly over HTTP; no wildcard
+PASS REH-CORS-002 https://formachess.com echoed exactly over HTTP; no wildcard
+PASS REH-CORS-003 https://www.formachess.com echoed exactly over HTTP; no wildcard
+PASS REH-CORS-004 Vary contains Origin exactly once over HTTP
+PASS REH-CORS-005 disallowed preflight rejected with 403 and no ACAO
+PASS REH-CORS-006 disallowed origin got HTTP 200 and no ACAO
+PASS REH-CORS-007 server-client request without Origin remains usable and receives no ACAO
+PASS REH-CORS-008 deployed wildcard, arbitrary-only, partial, and approved-plus-extra allowlists rejected at startup
+PASS REH-RT-001 forma_api.<disposable-ref> on 6543 started and served liveness through the pooled endpoint
+PASS REH-RT-002 forma_api on 6543 started and served liveness through the pooled endpoint
+PASS REH-RT-003 owner connection rejected before serving
+PASS REH-RT-004 migrator connection rejected before serving
+PASS REH-RT-005 unknown-role connection rejected before serving
+PASS REH-RT-006 port 5432 rejected before serving, naming 6543
+PASS REH-RT-007 both an absent and a mismatched role marker reject startup
+PASS REH-RT-008 select current_user returned exactly forma_api; a real subprocess misrouted to postgres exited nonzero without ever opening its listener
+PASS REH-SEC-001 DATABASE_URL secretKeyRef name=forma-api-db-url key=1; no literal value; DATABASE_URL_SECRET_VERSION equals the pinned version-1 marker; DATABASE_ROLE is absent from the serving revision (observed live configuration drift, owned by E05; the branch invariant is not deployed); matching and mismatched synthetic role markers both rejected
+PASS REH-SEC-002 a literal DATABASE_URL rejected
+PASS REH-SEC-003 a reference to another secret rejected
+PASS REH-SEC-004 a version other than 1 rejected
+PASS REH-ERR-001 database URL and password removed from log output, client body, and the running API's output
+PASS REH-ERR-002 bearer token and header removed from log output, client body, and the running API's output
+PASS REH-ERR-003 JWT removed from log output, client body, and the running API's output
+PASS REH-ERR-004 API key removed from log output, client body, and the running API's output
+PASS REH-ERR-005 SQL text and driver detail removed from log output, client body, and the running API's output
+PASS REH-ERR-006 row values removed from log output, client body, and the running API's output
+PASS REH-ERR-007 provider body removed from log output, client body, and the running API's output; live AccountError/account-route legacy bodies preserved; caller/provider text, spoofed names, causes, AggregateError descendants, and pipeline payloads omitted from logs and persisted fields
+PASS REH-ERR-008 PGN and FEN payloads removed from log output, client body, and the running API's output
+PASS REH-HLT-001 HTTP 200 {status,service,ts}; no database, revision, or secret disclosure
+PASS REH-HLT-002 real server and private identity checks failed closed with the database denied; no listener opened and liveness disclosed no dependency detail
+PASS REH-HLT-003 startup without DATABASE_URL rejected before serving
+PASS REH-HLT-004 startup with a marker/URL mismatch rejected before serving
+PASS REH-AUTH-001 HTTP 401 with byte-equivalent {"error":"Sign in to continue"}
+PASS REH-AUTH-002 HTTP 401 with byte-equivalent {"error":"Sign in to continue"}
+PASS REH-AUTH-003 global logout 204, then first use denied with the exact 401 body in <elapsed>ms
+PASS REH-OWN-001 a second actor reading the first actor's import got HTTP 404 with {"error":"Import not found"}
+PASS REH-OWN-002 a second actor cancelling the first actor's import got HTTP 404 with {"error":"Import not found"}
+PASS REH-RW-001 one owned synthetic import row written through forma_api
+PASS REH-RW-002 read returned only the owned synthetic row through forma_api
+PASS REH-END-001 environment <rehearsal-id> destroyed; no container or working directory remains and a subsequent connection fails
+RESULT cd server && npm run security:rehearsal 179/179 pass=179 fail=0 skip=0 todo=0 problems=0
+ENVIRONMENT id=<rehearsal-id> destroyed_at=<timestamp>
