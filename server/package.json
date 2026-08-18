@@ -45,7 +45,9 @@
     "identity:reconcile": "tsx src/identity/reconcile.ts",
     "artifacts:unit": "tsx src/artifacts/artifacts.test.ts",
     "artifacts:lifecycle": "tsx src/artifacts/lifecycle.test.ts",
-    "artifacts:buckets": "tsx src/artifacts/provision-buckets.ts"
+    "artifacts:buckets": "tsx src/artifacts/provision-buckets.ts",
+    "sync:unit": "tsx src/sync/sync.test.ts",
+    "sync:commit": "tsx src/sync/commit.test.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",
