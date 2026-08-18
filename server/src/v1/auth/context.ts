@@ -28,17 +28,22 @@ export interface AuthorizationContext {
 /**
  * Resolve the subjects an actor owns.
  *
- * `app.analysis_subjects` does not exist yet — E06 creates it, along with the
- * memberships that let one subject span several linked accounts. Until then the
- * personal subject *is* the profile, because that is genuinely the ownership
- * relationship the current data expresses: every owned row keys to the profile.
+ * E06 created `app.analysis_subjects`, so this now reads the real relationship
+ * rather than standing in for it.
  *
- * This is one function rather than a rule spread across call sites precisely so
- * E06 replaces it in one place. It is not a placeholder: the decision it
- * returns is the correct decision for the data that exists.
+ * The profile id is still included. Legacy rows in `public` key to the profile
+ * and have not been backfilled onto a subject yet, so dropping it would make an
+ * actor's existing data unreachable the moment this shipped. Both are returned
+ * until that backfill lands, which is a scoped, deletable line rather than a
+ * rule spread across call sites.
  */
 async function resolveSubjects(profileId: string): Promise<readonly string[]> {
-  return [profileId];
+  const rows = await client<{ id: string }[]>`
+    select id from app.analysis_subjects
+    where owner_user_id = ${profileId}::uuid and status = 'active'
+  `;
+  const subjects = rows.map((row) => row.id);
+  return subjects.includes(profileId) ? subjects : [profileId, ...subjects];
 }
 
 /**
