@@ -50,6 +50,7 @@ import {
 } from "./billing/service.js";
 import { getDailyDrillUsage, getUsageSummary, recordUsage } from "./usage.js";
 import { assertRuntimeIdentity } from "./db/client.js";
+import { assertDeploymentIdentity } from "./platform/deployment.js";
 import { betaSignupSchema, rateLimit, recordBetaSignup } from "./beta.js";
 import { logSafeError, safeClientMessage } from "./security/redaction.js";
 import { isDeployed } from "./security/config.js";
@@ -638,12 +639,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   // those two disagree. A process that cannot prove it is the least-privilege
   // role exits without ever accepting a connection.
   void (async () => {
+    let deployment: ReturnType<typeof assertDeploymentIdentity> = null;
     try {
       // The kernel's signing key is checked with the same fail-closed posture:
       // a deployed process that cannot sign a cursor or an idempotency digest
       // would silently fall back to a per-process random key, and every cursor
       // it issued would stop verifying the moment it scaled or restarted.
       assertKernelConfig(process.env);
+      // E05: a deployed process must say which of the five services it is, and
+      // its database role must match what the topology deploys it with. An
+      // image that could be any service is how engine work reached the API.
+      deployment = assertDeploymentIdentity(process.env);
       await assertRuntimeIdentity();
     } catch (error) {
       logSafeError("startup gate failed; refusing to serve", error);
@@ -652,7 +658,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     serve({ fetch: app.fetch, port }, (info) => {
       console.log(`forma-chess api listening on :${info.port}`);
     });
-    void recoverPipeline().catch((error) => logSafeError("pipeline recovery failed", error));
+    // The prototype in-process pipeline is not a deployed capability (E05
+    // decision D3): no deployment holds `prototype_pipeline`, so recovering it
+    // inside a deployed service would be exactly the mixing this epic removes.
+    // Locally there is no deployment and the prototype still runs.
+    if (!deployment) {
+      void recoverPipeline().catch((error) => logSafeError("pipeline recovery failed", error));
+    }
   })();
 }
 

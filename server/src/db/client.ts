@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema.js";
 import { assertRuntimeConfig } from "../security/config.js";
+import { resolveDeployment } from "../platform/deployment.js";
 import { verifyRuntimeIdentity } from "../security/identity.js";
 import { poolOptionsFor } from "../platform/connection.js";
 
@@ -23,7 +24,15 @@ const connection = assertRuntimeConfig(process.env);
 // the pool size comes from the aggregate connection budget rather than the
 // driver default: an unbounded pool per instance is how a scaled-out service
 // exhausts the database for every other service.
-const client = postgres(process.env.DATABASE_URL!, poolOptionsFor("forma-api"));
+// Each deployment pools to its own budgeted size. Hardcoding forma-api's pool
+// gave every service the API's 3 connections per instance, so forma-stockfish
+// at 6 instances would have held 18 rather than the 6 it is budgeted — the
+// exact over-allocation the budget exists to prevent.
+const deployment = resolveDeployment(process.env);
+const client = postgres(
+  process.env.DATABASE_URL!,
+  poolOptionsFor(deployment?.name ?? "forma-api"),
+);
 
 export const db = drizzle(client, { schema });
 export { schema };
@@ -35,5 +44,11 @@ export { connection };
  * not a route, and it fails closed rather than reporting a degraded state.
  */
 export async function assertRuntimeIdentity(): Promise<string> {
-  return verifyRuntimeIdentity(() => client`select current_user`);
+  // Each deployment proves it is its own role. Before E05 this was always
+  // forma_api, which is correct for the API and impossible for a worker.
+  return verifyRuntimeIdentity(
+    () => client`select current_user`,
+    undefined,
+    deployment?.databaseRole,
+  );
 }

@@ -8,6 +8,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import {
   assertionsFor,
   classifyHttpProbe,
@@ -180,6 +181,8 @@ function livenessBodies(): Map<string, AssertionBody> {
       async () => {
         const root = repoRoot();
         const result = spawnSync("npx", ["tsx", "src/index.ts"], {
+      // npm and npx are .cmd shims on Windows; spawnSync cannot exec them directly.
+      shell: process.platform === "win32",
           cwd: `${root}/server`,
           encoding: "utf8",
           timeout: 8_000,
@@ -561,7 +564,7 @@ export async function main(): Promise<number> {
   return gateExitCode(outcome);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().then(
     (code) => process.exit(code),
     (error) => {

@@ -37,7 +37,10 @@
     "ops:security": "tsx src/ops/gates/security.ts",
     "ops:migration": "tsx src/ops/gates/migration.ts",
     "ops:performance": "tsx src/ops/gates/performance.ts",
-    "ops:reconcile": "node --env-file=.env --import tsx src/ops/reconcile-report.ts"
+    "ops:reconcile": "node --env-file=.env --import tsx src/ops/reconcile-report.ts",
+    "e05:unit": "tsx src/platform/topology.test.ts",
+    "deploy:render": "tsx src/platform/deploy/render.ts",
+    "deploy:check": "tsx src/platform/deploy/render.ts --check"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

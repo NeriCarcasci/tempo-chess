@@ -405,6 +405,8 @@ export function attemptStart(
   timeoutMs = 9_000,
 ): { status: number | null; output: string } {
   const result = spawnSync("npx", ["tsx", "src/index.ts"], {
+      // npm and npx are .cmd shims on Windows; spawnSync cannot exec them directly.
+      shell: process.platform === "win32",
     cwd: `${repoRoot}/server`,
     encoding: "utf8",
     timeout: timeoutMs,

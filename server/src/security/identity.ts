@@ -12,7 +12,7 @@
  * this file.
  */
 
-import { MAX_PROBE_TIMEOUT_SECONDS, RUNTIME_ROLE } from "./contract.js";
+import { MAX_PROBE_TIMEOUT_SECONDS, RUNTIME_ROLE, isDeploymentRole } from "./contract.js";
 
 /** The narrowest thing that can answer `select current_user`. */
 export type CurrentUserQuery = () => Promise<unknown>;
@@ -43,7 +43,17 @@ function readCurrentUser(rows: unknown): string {
 export async function verifyRuntimeIdentity(
   query: CurrentUserQuery,
   timeoutMs = MAX_PROBE_TIMEOUT_SECONDS * 1000,
+  /**
+   * The role this process is deployed as. E05 runs five services, each with its
+   * own least-privilege role, so the check is "am I the role I was deployed as"
+   * rather than "am I forma_api" — which no worker could ever satisfy. It must
+   * still be a deployment role: the owner and the migrator never serve.
+   */
+  expectedRole: string = RUNTIME_ROLE,
 ): Promise<string> {
+  if (!isDeploymentRole(expectedRole)) {
+    throw new RuntimeIdentityError(`${expectedRole} is not a role any deployment may serve as`);
+  }
   let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(
@@ -63,9 +73,9 @@ export async function verifyRuntimeIdentity(
     if (timer) clearTimeout(timer);
   }
   const currentUser = readCurrentUser(rows);
-  if (currentUser !== RUNTIME_ROLE) {
+  if (currentUser !== expectedRole) {
     throw new RuntimeIdentityError(
-      `runtime connected as an unexpected role; only ${RUNTIME_ROLE} may serve requests`,
+      `runtime connected as an unexpected role; only ${expectedRole} may serve requests`,
     );
   }
   return currentUser;

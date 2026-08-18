@@ -8,6 +8,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import {
   assertionsFor,
   gateExitCode,
@@ -29,6 +30,8 @@ const PIPELINE_SUITES = [
 export function existingSuiteBody(serverRoot: string): AssertionBody {
   return async () => {
     const build = spawnSync("npm", ["run", "build"], {
+      // npm and npx are .cmd shims on Windows; spawnSync cannot exec them directly.
+      shell: process.platform === "win32",
       cwd: serverRoot,
       encoding: "utf8",
       timeout: 60_000,
@@ -39,6 +42,8 @@ export function existingSuiteBody(serverRoot: string): AssertionBody {
 
     for (const suite of PIPELINE_SUITES) {
       const result = spawnSync("npx", ["tsx", suite], {
+      // npm and npx are .cmd shims on Windows; spawnSync cannot exec them directly.
+      shell: process.platform === "win32",
         cwd: serverRoot,
         encoding: "utf8",
         timeout: 60_000,
@@ -89,7 +94,7 @@ export async function main(): Promise<number> {
   return gateExitCode(outcome);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().then(
     (code) => process.exit(code),
     (error) => {
