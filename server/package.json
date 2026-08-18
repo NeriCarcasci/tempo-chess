@@ -42,7 +42,10 @@
     "deploy:render": "tsx src/platform/deploy/render.ts",
     "deploy:check": "tsx src/platform/deploy/render.ts --check",
     "identity:unit": "tsx src/identity/identity.test.ts",
-    "identity:reconcile": "tsx src/identity/reconcile.ts"
+    "identity:reconcile": "tsx src/identity/reconcile.ts",
+    "artifacts:unit": "tsx src/artifacts/artifacts.test.ts",
+    "artifacts:lifecycle": "tsx src/artifacts/lifecycle.test.ts",
+    "artifacts:buckets": "tsx src/artifacts/provision-buckets.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",
