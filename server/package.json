@@ -49,7 +49,8 @@
     "sync:unit": "tsx src/sync/sync.test.ts",
     "sync:commit": "tsx src/sync/commit.test.ts",
     "positions:unit": "tsx src/positions/canonical.test.ts",
-    "positions:materialize": "tsx src/positions/materialize.test.ts"
+    "positions:materialize": "tsx src/positions/materialize.test.ts",
+    "backfill:proof": "tsx src/backfill/provider-proof.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",
