@@ -88,7 +88,9 @@
     "goals:unit": "tsx src/goals/goals.test.ts",
     "goals:migration": "tsx src/goals/gates/migration.ts",
     "practice:unit": "tsx src/practice/practice.test.ts",
-    "practice:migration": "tsx src/practice/gates/migration.ts"
+    "practice:migration": "tsx src/practice/gates/migration.ts",
+    "entitlements:unit": "tsx src/entitlements/entitlements.test.ts",
+    "entitlements:migration": "tsx src/entitlements/gates/migration.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",
