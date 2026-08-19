@@ -76,7 +76,12 @@
     "models:migration": "tsx src/models/gates/migration.ts",
     "models:performance": "tsx src/models/gates/performance.ts",
     "models:live": "tsx src/models/gates/live.ts",
-    "models:promote": "tsx src/models/promote.ts"
+    "models:promote": "tsx src/models/promote.ts",
+    "estimates:unit": "tsx src/estimates/estimates.test.ts",
+    "estimates:integration": "tsx src/estimates/gates/integration.ts",
+    "estimates:security": "tsx src/estimates/gates/security.ts",
+    "estimates:migration": "tsx src/estimates/gates/migration.ts",
+    "estimates:performance": "tsx src/estimates/gates/performance.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",
