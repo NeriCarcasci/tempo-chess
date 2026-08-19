@@ -71,6 +71,16 @@ export type PracticeAttempt = Data<"recordPracticeAttempt">;
 export type PracticeAttemptBody = Body<"recordPracticeAttempt">;
 export type PracticeRefill = Data<"refillPracticeQueue">;
 
+// --- openings ---------------------------------------------------------------
+
+export type OpeningExplorer = Data<"getOpeningExplorer">;
+export type OpeningExplorerCoverage = OpeningExplorer["coverage"];
+export type OpeningFamilySummary = OpeningExplorer["families"][number];
+/** Null when the filtered sample contains no move; the caller must handle it. */
+export type OpeningGraphV1 = NonNullable<OpeningExplorer["graph"]>;
+export type OpeningGraphV1Node = OpeningGraphV1["nodes"][number];
+export type OpeningGraphV1Edge = OpeningGraphV1["edges"][number];
+
 // --- games ------------------------------------------------------------------
 
 export type Game = Data<"getGame">;

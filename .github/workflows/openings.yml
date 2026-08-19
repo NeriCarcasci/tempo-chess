@@ -1,0 +1,105 @@
+# The opening explorer on /v1.
+#
+# The offline half carries the pure parts: the wire encoding, the family
+# summary, and the cross-library invariant the whole read model rests on --
+# that `public.opening_positions.position_key` and `chess.core_positions.core_key`
+# are the same string. The catalogue is built with chess.js and the core key
+# with chessops, and they agree only because both keep an en-passant square just
+# when a capture onto it is legal. Nothing obliges either library to keep doing
+# that, so it is asserted rather than assumed: a version bump that changes it
+# fails here instead of silently emptying every opening name on the screen.
+#
+# The database half is where subject scoping, transposition collapse and the
+# citation of a published verdict are attempted against real rows written by the
+# real materializer.
+#
+# Nothing here authenticates to Supabase, Cloud Run, or any production project,
+# and no secret is read.
+
+name: Openings
+
+on:
+  pull_request:
+  push:
+    branches: [feat/opening-explorer]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      - name: Unit gate
+        working-directory: server
+        run: |
+          npm run openings:test
+          npm run v1:unit
+
+      - name: Typecheck
+        working-directory: server
+        run: npm run typecheck
+
+      - name: The OpenAPI document matches the mounted routes
+        working-directory: server
+        run: npm run v1:openapi:check
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          # Trust auth on a throwaway service container reachable only from this
+          # job. It also keeps a credential-shaped string out of a tracked file,
+          # which the forbidden-scope gate rejects on sight.
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # Loopback and non-Supabase: the harness refuses anything else, and that
+      # guard is deliberately not overridable.
+      FORMA_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      - name: The explorer read over real positions
+        working-directory: server
+        run: npm run openings:integration
+
+      - name: The v1 kernel gates the route is mounted on
+        working-directory: server
+        run: |
+          npm run v1:migration
+          npm run v1:integration
+          npm run v1:security

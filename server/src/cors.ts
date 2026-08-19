@@ -85,6 +85,36 @@ export function resolveAllowedOrigins(env: CorsEnv, deployed: boolean): string[]
   return origins;
 }
 
+/**
+ * The request headers a browser may send cross-origin.
+ *
+ * `Authorization` and `Content-Type` were enough while the API only answered
+ * reads and form posts. They are not enough for `/v1`: the kernel requires an
+ * `Idempotency-Key` on every command, and the browser will not send a header
+ * the preflight did not grant — so with these missing, every command from
+ * formachess.com to the API fails at the preflight and never reaches a handler.
+ * The conditional headers are here for the same reason, since neither is on the
+ * CORS safelist.
+ */
+const ALLOWED_REQUEST_HEADERS = [
+  "Authorization",
+  "Content-Type",
+  "Idempotency-Key",
+  "If-Match",
+  "If-None-Match",
+].join(", ");
+
+/**
+ * The response headers cross-origin script may read.
+ *
+ * Without this the browser hands JavaScript only the six safelisted response
+ * headers, and everything else is silently absent rather than an error. Two of
+ * ours are load-bearing: `Retry-After` is the number the rate-limit notice
+ * shows, and `ETag` is what a later `If-Match` has to quote. A client that
+ * cannot read them degrades into guessing, which looks like working.
+ */
+const EXPOSED_RESPONSE_HEADERS = ["ETag", "Retry-After"].join(", ");
+
 /** True when a preflight is being negotiated rather than a plain OPTIONS request. */
 function isPreflight(c: Context): boolean {
   return c.req.method === "OPTIONS" && c.req.header("Access-Control-Request-Method") !== undefined;
@@ -114,8 +144,8 @@ export function cors(allowedOrigins: readonly string[]): MiddlewareHandler {
         return new Response(null, { status: 403, headers });
       }
       headers.set("Access-Control-Allow-Origin", origin!);
-      headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
-      headers.set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+      headers.set("Access-Control-Allow-Headers", ALLOWED_REQUEST_HEADERS);
+      headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
       headers.set("Access-Control-Max-Age", "86400");
       return new Response(null, { status: 204, headers });
     }
@@ -128,8 +158,10 @@ export function cors(allowedOrigins: readonly string[]): MiddlewareHandler {
     applyVary(c.res.headers);
     if (originAllowed) {
       c.res.headers.set("Access-Control-Allow-Origin", origin!);
+      c.res.headers.set("Access-Control-Expose-Headers", EXPOSED_RESPONSE_HEADERS);
     } else {
       c.res.headers.delete("Access-Control-Allow-Origin");
+      c.res.headers.delete("Access-Control-Expose-Headers");
     }
   };
 }

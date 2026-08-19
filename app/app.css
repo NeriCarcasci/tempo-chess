@@ -2475,3 +2475,66 @@
   .product-back { padding: 0.4rem 0.55rem; }
   .product-back > span:last-child { display: none; }
 }
+
+/* ------------------------------------------------------------------ */
+/* The /v1 opening explorer.                                           */
+/*                                                                     */
+/* Reuses the branch, move-list and engine blocks above; only the       */
+/* pieces the new screen adds live here. Two of them exist because the  */
+/* new API distinguishes something the old one could not.               */
+/*                                                                     */
+/* `tag-unknown` is "nobody has looked at this yet". It must not read   */
+/* as a result, so it takes no semantic hue -- it is the muted ink of   */
+/* the honesty set, and the word "not analysed" carries the meaning.    */
+/* A grey that looked like a quiet win would be the exact lie this      */
+/* screen exists to avoid.                                              */
+/*                                                                     */
+/* The filter chips fill when selected rather than outlining, for the   */
+/* reason the opening chips above already do: their small print is set  */
+/* in accent-ink, which only reads on an accent fill.                   */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .tag-unknown { color: var(--color-ink-muted); font-weight: 600; }
+
+  .explorer-filters {
+    display: flex; flex-wrap: wrap; gap: 1.5rem 2.5rem; align-items: center;
+  }
+  .explorer-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+  .explorer-chips .cap { margin-right: 0.35rem; }
+  .explorer-chip {
+    border-radius: 999px; padding: 0.34rem 0.8rem;
+    background: var(--color-surface); box-shadow: var(--shadow-flat);
+    color: var(--color-ink-muted); font-size: 0.78rem; font-weight: 600;
+    transition: background 130ms ease, color 130ms ease, box-shadow 130ms ease;
+  }
+  .explorer-chip:hover { box-shadow: var(--shadow-soft); color: var(--color-ink); }
+  .explorer-chip.is-active {
+    background: var(--color-accent); color: var(--color-accent-ink);
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* The head of the coverage panel: a heading and the badge that qualifies
+     everything under it. They sit on one line because the badge is not an
+     aside -- it is the scope of the numbers below. */
+  .explorer-insight-head {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    justify-content: space-between; gap: 0.75rem;
+  }
+
+  /* One fact per row: the figure, then what it counts. Separated by space
+     rather than by a rule, and the sunk surface is what makes the block a
+     state rather than a card. */
+  .explorer-facts {
+    margin-top: 0.9rem; display: grid; gap: 0.55rem;
+    border-radius: 12px; padding: 0.9rem 1rem; background: var(--color-surface-2);
+  }
+  .explorer-facts li { display: flex; align-items: baseline; gap: 0.6rem; }
+  .explorer-facts .metric { min-width: 2.5ch; font-size: 1rem; }
+  .explorer-facts .cap { color: var(--color-ink-muted); text-transform: none; letter-spacing: 0; }
+
+  .movelist-wrap { display: grid; gap: 0.4rem; }
+  .movelist-no {
+    margin-right: 0.3rem; color: var(--color-ink-faint);
+    font: 600 0.7rem/1 var(--font-mono);
+  }
+}

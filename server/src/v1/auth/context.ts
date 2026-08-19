@@ -144,6 +144,36 @@ export function assertNoClientIdentity(input: unknown, location: "body" | "query
  * set a custom setting, so a policy that trusted the actor alone would trust
  * the connecting role; the API's own authorization is still the boundary.
  */
+/**
+ * The caller's analysis subject, or null when they have none.
+ *
+ * `AuthorizationContext.subjects` deliberately mixes two kinds of id: the
+ * profile id, for legacy `public` rows that key to it, and the real
+ * `app.analysis_subjects` ids. That mix is correct for `authorizeSubject`,
+ * which only asks "may this actor touch this id" — and wrong for anything that
+ * needs *the* subject, because the profile id is always element zero. A route
+ * reaching for `subjects[0]` gets a profile uuid, queries
+ * `where subject_id = <profile uuid>`, matches nothing, and reports an empty
+ * account rather than an error.
+ *
+ * Takes the transaction rather than the shared client on purpose:
+ * `app.analysis_subjects` carries `force row level security` with a policy on
+ * `private.current_actor_id()`, which is null outside a bound transaction. Read
+ * off the pool, this returns zero rows every time.
+ */
+export async function resolveAnalysisSubject(
+  sql: typeof client,
+  profileId: string,
+): Promise<string | null> {
+  const rows = await sql<{ id: string }[]>`
+    select id from app.analysis_subjects
+    where owner_user_id = ${profileId}::uuid and status = 'active'
+    order by created_at asc
+    limit 1
+  `;
+  return rows[0]?.id ?? null;
+}
+
 export async function withActorContext<T>(
   actorId: string,
   fn: (tx: typeof client) => Promise<T>,

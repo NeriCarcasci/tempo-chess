@@ -17,6 +17,9 @@ import { WithheldNote } from "../components/onboarding/WithheldNote";
 import { ProblemError } from "../lib/v1/problem";
 import { FAILURE_REASONS } from "../lib/onboarding/copy";
 import { CLAIM_STATES, COVERAGE_STATES } from "../lib/v1/types";
+import type { OpeningGraphV1Edge } from "../lib/v1/types";
+import { formatEval, formatLoss, unjudgedOn } from "../components/v1/OpeningExplorer";
+import { explorerEmptyCopy, type ExplorerEmptyReason } from "../lib/v1/openings";
 
 /**
  * `/dev/foundation` — every honesty primitive, in every state it has.
@@ -254,6 +257,90 @@ export default function Foundation() {
           <ProblemNote error={internal} />
         </div>
       </Row>
+
+      <Row
+        title="An opening branch"
+        note="A move nobody analysed is not a move that went well. The two must never read the same, and neither may rely on colour alone."
+      >
+        {EXPLORER_BRANCHES.map(({ label, edge }) => (
+          <div key={label} className="grid gap-1.5">
+            <span className="cap">{label}</span>
+            <BranchTags edge={edge} />
+          </div>
+        ))}
+      </Row>
+
+      <Row
+        title="An explorer with nothing to walk"
+        note="Three different situations produce the same empty graph. Telling someone with four hundred games that they have none, because they clicked Black, is the worst of the three."
+      >
+        {EXPLORER_EMPTY.map((reason) => {
+          const copy = explorerEmptyCopy(reason, 12);
+          return (
+            <div key={reason} className="w-full max-w-[420px]">
+              <EmptyState title={copy.title} detail={copy.detail} />
+            </div>
+          );
+        })}
+      </Row>
+
+      <Row
+        title="An evaluation, from either side"
+        note="The API states White's perspective once. An absent evaluation is a dash, never a zero — a zero is a claim that the position is level."
+      >
+        {([
+          ["White, +1.2", formatEval(120, null, "white")],
+          ["Black, same position", formatEval(120, null, "black")],
+          ["Mate in three", formatEval(null, 3, "white")],
+          ["Not evaluated", formatEval(null, null, "white")],
+        ] as const).map(([label, value]) => (
+          <div key={label} className="grid gap-1">
+            <span className="cap">{label}</span>
+            <span className="metric">{value}</span>
+          </div>
+        ))}
+      </Row>
     </main>
+  );
+}
+
+/** One edge per state a branch can be in. */
+function branch(over: Partial<OpeningGraphV1Edge>): OpeningGraphV1Edge {
+  return {
+    a: 0, b: 1, u: "e2e4", s: "e4", g: 10, sh: 100, ac: "p", op: 10, fa: 0, ...over,
+  } as OpeningGraphV1Edge;
+}
+
+const EXPLORER_BRANCHES: Array<{ label: string; edge: OpeningGraphV1Edge }> = [
+  { label: "Judged, and fine", edge: branch({ g: 10, op: 10, fa: 0 }) },
+  { label: "Judged, and costly", edge: branch({ g: 10, op: 10, fa: 3, dl: 0.062 }) },
+  { label: "Nobody has looked", edge: branch({ g: 10, op: 0 }) },
+  { label: "Partly looked at", edge: branch({ g: 10, op: 4, fa: 1, dl: 0.021 }) },
+  { label: "The opponent's move", edge: branch({ ac: "o", g: 10, op: 0 }) },
+];
+
+const EXPLORER_EMPTY: ExplorerEmptyReason[] = ["no_games", "filtered_out", "not_materialized"];
+
+/**
+ * The tag row of a branch, without the board or the network.
+ *
+ * The invariant on display: every tag names its state in words as well as in
+ * hue, so the meaning survives a monochrome screen.
+ */
+function BranchTags({ edge: subject }: { edge: OpeningGraphV1Edge }) {
+  const unjudged = unjudgedOn(subject);
+  const loss = formatLoss(subject.dl);
+  if (subject.fa === 0 && unjudged === 0) {
+    return <span className="tag tag-sub">nothing outstanding</span>;
+  }
+  return (
+    <span className="flex flex-wrap items-baseline gap-2">
+      {subject.fa > 0 ? (
+        <span className="tag tag-loss">
+          {subject.fa} flagged{loss ? ` · ${loss}` : ""}
+        </span>
+      ) : null}
+      {unjudged > 0 ? <span className="tag tag-unknown">{unjudged} not analysed</span> : null}
+    </span>
   );
 }

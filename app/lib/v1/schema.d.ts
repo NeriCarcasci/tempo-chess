@@ -533,6 +533,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/openings/explorer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your opening tree, from the positions your games actually reached
+         * @description The transposition-aware position graph for your own games, bounded to the opening. Every node is a core position, so two move orders reaching the same board are one node. Decision verdicts are cited from the published analysis of each game, and games with no published analysis are counted in coverage rather than treated as clean.
+         */
+        get: operations["getOpeningExplorer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/players/{handle}": {
         parameters: {
             query?: never;
@@ -3417,6 +3437,154 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getOpeningExplorer: {
+        parameters: {
+            query?: {
+                provider?: "lichess" | "chesscom";
+                speed?: "bullet" | "blitz" | "rapid" | "classical" | "correspondence";
+                color?: "white" | "black";
+                since?: string;
+                family?: string;
+            };
+            header?: {
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Your opening tree, from the positions your games actually reached */
+            200: {
+                headers: {
+                    /** @description Strong validator for If-None-Match. */
+                    ETag?: string;
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            asOf: string | null;
+                            coverage: {
+                                games: number;
+                                observations: number;
+                                playerDecisions: number;
+                                scoredDecisions: number;
+                                unanalysedGames: number;
+                            };
+                            families: {
+                                failures: number;
+                                family: string;
+                                games: number;
+                                playerDecisions: number;
+                                scoredDecisions: number;
+                            }[];
+                            filters: {
+                                color: ("white" | "black") | null;
+                                family: string | null;
+                                provider: string | null;
+                                since: string | null;
+                                speed: string | null;
+                            };
+                            graph: {
+                                edges: {
+                                    a: number;
+                                    /** @enum {string} */
+                                    ac: "p" | "o" | "m";
+                                    b: number;
+                                    /** @constant */
+                                    bm?: 1;
+                                    dl?: number;
+                                    ev?: number;
+                                    fa: number;
+                                    g: number;
+                                    lb?: string;
+                                    op: number;
+                                    s: string;
+                                    sh: number;
+                                    u: string;
+                                }[];
+                                games: number;
+                                nodes: {
+                                    f: number;
+                                    g: number;
+                                    k: string;
+                                    nm?: string;
+                                    o: number;
+                                    p: number;
+                                    t: number;
+                                    x: 0 | 1;
+                                }[];
+                                root: number;
+                            } | null;
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description The caller's copy is current. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request could not be accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
             };
             /** @description Something went wrong */
             500: {

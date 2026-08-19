@@ -7147,6 +7147,542 @@
         "summary": "The generated OpenAPI 3.1 document for this API"
       }
     },
+    "/v1/openings/explorer": {
+      "get": {
+        "description": "The transposition-aware position graph for your own games, bounded to the opening. Every node is a core position, so two move orders reaching the same board are one node. Decision verdicts are cited from the published analysis of each game, and games with no published analysis are counted in coverage rather than treated as clean.",
+        "operationId": "getOpeningExplorer",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider",
+            "required": false,
+            "schema": {
+              "enum": [
+                "lichess",
+                "chesscom"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "speed",
+            "required": false,
+            "schema": {
+              "enum": [
+                "bullet",
+                "blitz",
+                "rapid",
+                "classical",
+                "correspondence"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "color",
+            "required": false,
+            "schema": {
+              "enum": [
+                "white",
+                "black"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "family",
+            "required": false,
+            "schema": {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "asOf": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "coverage": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "games": {
+                              "maximum": 9007199254740991,
+                              "minimum": -9007199254740991,
+                              "type": "integer"
+                            },
+                            "observations": {
+                              "maximum": 9007199254740991,
+                              "minimum": -9007199254740991,
+                              "type": "integer"
+                            },
+                            "playerDecisions": {
+                              "maximum": 9007199254740991,
+                              "minimum": -9007199254740991,
+                              "type": "integer"
+                            },
+                            "scoredDecisions": {
+                              "maximum": 9007199254740991,
+                              "minimum": -9007199254740991,
+                              "type": "integer"
+                            },
+                            "unanalysedGames": {
+                              "maximum": 9007199254740991,
+                              "minimum": -9007199254740991,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "games",
+                            "observations",
+                            "scoredDecisions",
+                            "playerDecisions",
+                            "unanalysedGames"
+                          ],
+                          "type": "object"
+                        },
+                        "families": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "failures": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "family": {
+                                "type": "string"
+                              },
+                              "games": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "playerDecisions": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "scoredDecisions": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "family",
+                              "games",
+                              "playerDecisions",
+                              "scoredDecisions",
+                              "failures"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "filters": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "color": {
+                              "anyOf": [
+                                {
+                                  "enum": [
+                                    "white",
+                                    "black"
+                                  ],
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "family": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "provider": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "since": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "speed": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "speed",
+                            "color",
+                            "since",
+                            "family"
+                          ],
+                          "type": "object"
+                        },
+                        "graph": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "edges": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "a": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "ac": {
+                                        "enum": [
+                                          "p",
+                                          "o",
+                                          "m"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "b": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "bm": {
+                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "dl": {
+                                        "type": "number"
+                                      },
+                                      "ev": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "fa": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "g": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "lb": {
+                                        "type": "string"
+                                      },
+                                      "op": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "s": {
+                                        "type": "string"
+                                      },
+                                      "sh": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "u": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "a",
+                                      "b",
+                                      "u",
+                                      "s",
+                                      "g",
+                                      "sh",
+                                      "ac",
+                                      "op",
+                                      "fa"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "games": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                },
+                                "nodes": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "f": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "g": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "k": {
+                                        "type": "string"
+                                      },
+                                      "nm": {
+                                        "type": "string"
+                                      },
+                                      "o": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "p": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "t": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "x": {
+                                        "anyOf": [
+                                          {
+                                            "const": 0,
+                                            "type": "number"
+                                          },
+                                          {
+                                            "const": 1,
+                                            "type": "number"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "k",
+                                      "p",
+                                      "g",
+                                      "o",
+                                      "f",
+                                      "t",
+                                      "x"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "root": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "games",
+                                "root",
+                                "nodes",
+                                "edges"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "asOf",
+                        "filters",
+                        "coverage",
+                        "families",
+                        "graph"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Your opening tree, from the positions your games actually reached",
+            "headers": {
+              "ETag": {
+                "description": "Strong validator for If-None-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The caller's copy is current."
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The request could not be accepted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "Your opening tree, from the positions your games actually reached"
+      }
+    },
     "/v1/players/{handle}": {
       "get": {
         "description": "Returns only the explicit public projection. A profile that has not opted into discovery is indistinguishable from one that does not exist.",

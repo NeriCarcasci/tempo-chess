@@ -25,6 +25,10 @@ export default [
   route("dashboard", "routes/dashboard-redirect.tsx"),
   route("openings", "routes/openings.tsx"),
   route("openings/:familySlug", "routes/opening-family.tsx"),
+  // The /v1 explorer, beside the legacy screens rather than over them: the tear
+  // sheet, the repertoire stars and the drill queue still have no /v1 surface,
+  // so replacing `/openings` today would remove working features.
+  route("explorer", "routes/explorer.tsx"),
   route("middlegame", "routes/middlegame.tsx"),
   route("endgame", "routes/endgame.tsx"),
   route("lessons", "routes/lessons.tsx"),
