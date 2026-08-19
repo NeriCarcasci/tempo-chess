@@ -30,7 +30,9 @@ export type AuditAction =
   | "internal.caller_rejected"
   | "workflow.access_denied"
   | "workflow.cancel_requested"
-  | "work_item.stale_delivery";
+  | "work_item.stale_delivery"
+  // E11.
+  | "game.access_denied";
 
 export interface AuditEvent {
   actorKind: AuditActorKind;

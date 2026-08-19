@@ -2,6 +2,7 @@ import { z } from "zod";
 import { generateOpenApiDocument } from "../openapi.js";
 import type { RouteDefinition } from "../registry.js";
 import { ARTIFACT_ROUTES } from "./artifacts.js";
+import { GAME_ROUTES } from "./games.js";
 import { IDENTITY_ROUTES } from "./identity.js";
 import { PUBLIC_ROUTES } from "./public.js";
 import { WORKFLOW_ROUTES } from "./workflows.js";
@@ -13,7 +14,13 @@ import { WORKFLOW_ROUTES } from "./workflows.js";
  * document is a description of what is running rather than a parallel artifact.
  */
 
-const PRODUCT_ROUTES = [...PUBLIC_ROUTES, ...IDENTITY_ROUTES, ...ARTIFACT_ROUTES, ...WORKFLOW_ROUTES] as unknown as RouteDefinition<never, never, never>[];
+const PRODUCT_ROUTES = [
+  ...PUBLIC_ROUTES,
+  ...IDENTITY_ROUTES,
+  ...ARTIFACT_ROUTES,
+  ...WORKFLOW_ROUTES,
+  ...GAME_ROUTES,
+] as unknown as RouteDefinition<never, never, never>[];
 
 /**
  * `GET /v1/openapi.json` — the generated contract.

@@ -114,6 +114,20 @@ export interface PublishResult {
   supersededRunId: string | null;
   /** Set when a prior run existed and its checksum differs. */
   checksumChanged: boolean;
+  /** The history row that recorded this switch. Null when nothing moved. */
+  publicationId: string | null;
+}
+
+/** Why the pointer moved. E11 records this beside every switch. */
+export type MaterializationPublicationReason =
+  | "first_publication"
+  | "new_run"
+  | "rollback"
+  | "reconciliation";
+
+export interface PublishOptions {
+  reason?: MaterializationPublicationReason;
+  actor?: { kind: "user" | "system"; id?: string | null };
 }
 
 /**
@@ -121,8 +135,19 @@ export interface PublishResult {
  *
  * The prior run is marked superseded rather than deleted, so the chain an older
  * analysis cited is still there to be read.
+ *
+ * E11 adds the history row. The pointer itself stays where E09 put it — the one
+ * run with `state = 'published'`, kept single by a partial unique index — but
+ * until now nothing recorded *that* it moved, away from what, or on whose
+ * authority. The row is written in the same transaction as the switch, so a
+ * pointer that moved without a history row is not a state this code can reach.
  */
-export async function publishRun(sql: Sql, runId: string): Promise<PublishResult> {
+export async function publishRun(
+  sql: Sql,
+  runId: string,
+  options: PublishOptions = {},
+): Promise<PublishResult> {
+  const actor = options.actor ?? { kind: "system" as const, id: null };
   return sql.begin(async (tx) => {
     const [run] = await tx<{ id: string; replay_revision_id: string; checksum: string; state: string }[]>`
       select id, replay_revision_id, checksum, state
@@ -130,7 +155,7 @@ export async function publishRun(sql: Sql, runId: string): Promise<PublishResult
     `;
     if (!run) throw new Error("no such materialization run");
     if (run.state === "published") {
-      return { published: true, supersededRunId: null, checksumChanged: false };
+      return { published: true, supersededRunId: null, checksumChanged: false, publicationId: null };
     }
     if (run.state === "failed") throw new Error("a failed run cannot be published");
 
@@ -149,12 +174,83 @@ export async function publishRun(sql: Sql, runId: string): Promise<PublishResult
       update chess.materialization_runs set state = 'published', published_at = now()
       where id = ${runId}
     `;
+    const [history] = await tx<{ id: string }[]>`
+      insert into chess.replay_materialization_publication_history (
+        replay_revision_id, previous_run_id, run_id, reason, actor_kind, actor_id
+      ) values (
+        ${run.replay_revision_id}, ${prior?.id ?? null}, ${runId},
+        ${prior ? (options.reason ?? "new_run") : "first_publication"},
+        ${actor.kind}, ${actor.id ?? null}
+      )
+      returning id
+    `;
     return {
       published: true,
       supersededRunId: prior?.id ?? null,
       checksumChanged: Boolean(prior && prior.checksum !== run.checksum),
+      publicationId: history.id,
     };
   });
+}
+
+export interface MaterializationHistoryEntry {
+  publicationId: string;
+  runId: string;
+  previousRunId: string | null;
+  reason: string;
+  publishedAt: string;
+}
+
+export async function materializationHistory(
+  sql: Sql,
+  replayRevisionId: string,
+  limit = 50,
+): Promise<MaterializationHistoryEntry[]> {
+  const rows = await sql<
+    { id: string; run_id: string; previous_run_id: string | null; reason: string; published_at: string }[]
+  >`
+    select id, run_id, previous_run_id, reason, published_at
+    from chess.replay_materialization_publication_history
+    where replay_revision_id = ${replayRevisionId}
+    order by published_at desc, id desc
+    limit ${limit}
+  `;
+  return rows.map((row) => ({
+    publicationId: row.id,
+    runId: row.run_id,
+    previousRunId: row.previous_run_id,
+    reason: row.reason,
+    publishedAt: new Date(row.published_at).toISOString(),
+  }));
+}
+
+/**
+ * Republish the run the current publication displaced.
+ *
+ * A forward move, not an undo: the superseded run becomes published again and a
+ * new history row says why. The run that was rolled away from keeps its own
+ * rows and becomes superseded in turn, so a rebuild that turned out to be wrong
+ * is recoverable without either version being destroyed.
+ */
+export async function rollbackMaterialization(
+  sql: Sql,
+  replayRevisionId: string,
+  actor: { kind: "user" | "system"; id?: string | null } = { kind: "system" },
+): Promise<PublishResult> {
+  const [current] = await sql<{ id: string }[]>`
+    select id from chess.materialization_runs
+    where replay_revision_id = ${replayRevisionId} and state = 'published'
+  `;
+  if (!current) throw new Error("the revision has no published materialization run");
+  const [installing] = await sql<{ previous_run_id: string | null }[]>`
+    select previous_run_id from chess.replay_materialization_publication_history
+    where run_id = ${current.id} and replay_revision_id = ${replayRevisionId}
+    order by published_at desc, id desc limit 1
+  `;
+  if (!installing?.previous_run_id) {
+    throw new Error("the current materialization publication is the first one");
+  }
+  return publishRun(sql, installing.previous_run_id, { reason: "rollback", actor });
 }
 
 export interface OccurrenceHit {

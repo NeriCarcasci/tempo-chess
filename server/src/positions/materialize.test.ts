@@ -201,6 +201,16 @@ await sql`delete from chess.position_transitions where run_id in (
   select id from chess.materialization_runs where replay_revision_id = any(${revisionIds}))`;
 await sql`delete from chess.position_occurrences where run_id in (
   select id from chess.materialization_runs where replay_revision_id = any(${revisionIds}))`;
+// E11's publication history references these runs and refuses its own DELETE,
+// so the probe's history rows come out first and through the same privileged
+// route the replay-revision trigger already needs below. Without this the runs
+// are undeletable and the probe leaves rows behind it cannot clean up.
+await sql`alter table chess.replay_materialization_publication_history
+  disable trigger materialization_history_immutable`;
+await sql`delete from chess.replay_materialization_publication_history
+  where replay_revision_id = any(${revisionIds})`;
+await sql`alter table chess.replay_materialization_publication_history
+  enable trigger materialization_history_immutable`;
 await sql`delete from chess.materialization_runs where replay_revision_id = any(${revisionIds})`;
 await sql`alter table chess.game_replay_revisions disable trigger replay_revisions_immutable`;
 await sql`update chess.provider_games set current_replay_revision_id = null where id = any(${gameIds})`;
@@ -208,7 +218,11 @@ await sql`delete from chess.game_replay_revisions where id = any(${revisionIds})
 await sql`alter table chess.game_replay_revisions enable trigger replay_revisions_immutable`;
 await sql`delete from chess.provider_games where id = any(${gameIds})`;
 const [{ left }] = await sql<{ left: number }[]>`
-  select count(*)::int as left from chess.provider_games where provider_game_id like ${`e09-probe-${STAMP}%`}
+  select (
+    (select count(*) from chess.provider_games where provider_game_id like ${`e09-probe-${STAMP}%`})
+    + (select count(*) from chess.replay_materialization_publication_history
+       where replay_revision_id = any(${revisionIds}))
+  )::int as left
 `;
 await sql.end();
 
