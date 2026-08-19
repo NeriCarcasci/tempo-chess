@@ -721,6 +721,740 @@
         "summary": "One owned game, with the version block of its published analysis"
       }
     },
+    "/v1/games/{gameId}/analysis": {
+      "post": {
+        "description": "Returns 200 with the existing publication when the current replay revision is already analysed, and 202 with a workflow otherwise. The recipe and every search limit are selected server-side; there is no parameter for depth, threads or MultiPV.",
+        "operationId": "requestGameAnalysis",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "gameId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Opaque client-generated value. An identical retry replays the original response; a different request under the same key is a conflict.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "const": "user_request",
+                    "type": "string"
+                  },
+                  "recipe": {
+                    "const": "current",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "publicationId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "runId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "state": {
+                          "enum": [
+                            "published",
+                            "scheduled"
+                          ],
+                          "type": "string"
+                        },
+                        "workflowId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "runId",
+                        "workflowId",
+                        "publicationId"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Analyse one owned game, or return the analysis that already covers it",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The request could not be accepted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "This idempotency key was already used for a different request"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "Analyse one owned game, or return the analysis that already covers it"
+      }
+    },
+    "/v1/games/{gameId}/review": {
+      "get": {
+        "description": "Transition assessments and critical moments for the run the publication pointer currently names. `sections` states what each part of the review can say: `unavailable` means the component has not run, which is different from an empty result. `decisionLoss` is actor-perspective expected score given up, measured against the tolerance rule the run pinned; it is not a `mistake` label.",
+        "operationId": "getGameReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "gameId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "criticalMoments": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "criticality": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "fromPly": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "reasons": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "fromPly",
+                              "criticality",
+                              "reasons"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "gameId": {
+                          "type": "string"
+                        },
+                        "moves": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "acceptable": {
+                                "type": "boolean"
+                              },
+                              "acceptableMoveCount": {
+                                "anyOf": [
+                                  {
+                                    "maximum": 9007199254740991,
+                                    "minimum": -9007199254740991,
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "actorColor": {
+                                "enum": [
+                                  "white",
+                                  "black"
+                                ],
+                                "type": "string"
+                              },
+                              "bestMoveUci": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "criticality": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "decisionLoss": {
+                                "type": "number"
+                              },
+                              "deep": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "candidates": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "expectedScore": {
+                                          "type": "number"
+                                        },
+                                        "pv": {
+                                          "items": {
+                                            "type": "string"
+                                          },
+                                          "type": "array"
+                                        },
+                                        "rank": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": -9007199254740991,
+                                          "type": "integer"
+                                        },
+                                        "uci": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "rank",
+                                        "uci",
+                                        "expectedScore",
+                                        "pv"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "reasons": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "code": {
+                                          "type": "string"
+                                        },
+                                        "observed": {
+                                          "anyOf": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "string"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "code",
+                                        "observed"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "enum": [
+                                      "not_selected",
+                                      "selected",
+                                      "completed",
+                                      "unavailable"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "reasons",
+                                  "candidates"
+                                ],
+                                "type": "object"
+                              },
+                              "evidence": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "afterScope": {
+                                    "type": "string"
+                                  },
+                                  "beforeScope": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "beforeScope",
+                                  "afterScope"
+                                ],
+                                "type": "object"
+                              },
+                              "expectedScoreAfter": {
+                                "type": "number"
+                              },
+                              "expectedScoreBefore": {
+                                "type": "number"
+                              },
+                              "fromPly": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "onlyMove": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "phase": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "playedMoveRank": {
+                                "anyOf": [
+                                  {
+                                    "maximum": 9007199254740991,
+                                    "minimum": -9007199254740991,
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "san": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "uci": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "fromPly",
+                              "uci",
+                              "san",
+                              "actorColor",
+                              "phase",
+                              "expectedScoreBefore",
+                              "expectedScoreAfter",
+                              "decisionLoss",
+                              "acceptable",
+                              "bestMoveUci",
+                              "playedMoveRank",
+                              "acceptableMoveCount",
+                              "onlyMove",
+                              "criticality",
+                              "evidence",
+                              "deep"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "replayRevisionId": {
+                          "type": "string"
+                        },
+                        "runId": {
+                          "type": "string"
+                        },
+                        "sections": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "concepts": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "criticalMoments": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "events": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "explanations": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "trajectory": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "transitions": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "transitions",
+                            "criticalMoments",
+                            "events",
+                            "concepts",
+                            "explanations",
+                            "trajectory"
+                          ],
+                          "type": "object"
+                        },
+                        "stale": {
+                          "type": "boolean"
+                        },
+                        "version": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "generatedAt": {
+                              "type": "string"
+                            },
+                            "policyVersions": {
+                              "additionalProperties": {
+                                "type": "string"
+                              },
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "type": "object"
+                            },
+                            "publicationId": {
+                              "type": "string"
+                            },
+                            "recipeVersionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "subjectSnapshotId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "publicationId",
+                            "generatedAt",
+                            "subjectSnapshotId",
+                            "recipeVersionId",
+                            "policyVersions"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "gameId",
+                        "runId",
+                        "replayRevisionId",
+                        "stale",
+                        "sections",
+                        "moves",
+                        "criticalMoments",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The published objective review of one owned game",
+            "headers": {
+              "ETag": {
+                "description": "Strong validator for If-None-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The caller's copy is current."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "The published objective review of one owned game"
+      }
+    },
     "/v1/me": {
       "get": {
         "operationId": "getMe",
@@ -1553,6 +2287,314 @@
         "summary": "Look up an opt-in public player profile"
       }
     },
+    "/v1/positions/evaluations": {
+      "post": {
+        "description": "Returns 200 with a cached result or 202 with a workflow. The server validates the FEN as a legal standard chess position and selects a fixed profile; depth, threads and MultiPV are not request parameters. The result is isolated from the historical-analysis pipeline and never becomes evidence about a player.",
+        "operationId": "evaluatePosition",
+        "parameters": [
+          {
+            "description": "Opaque client-generated value. An identical retry replays the original response; a different request under the same key is a conflict.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "additionalProperties": false,
+                "properties": {
+                  "fen": {
+                    "maxLength": 120,
+                    "minLength": 10,
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "explore",
+                      "review_position",
+                      "practice_check"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "fen",
+                  "purpose"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "evaluation": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "bestMoveUci": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "candidates": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "expectedScore": {
+                                        "type": "number"
+                                      },
+                                      "uci": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "uci",
+                                      "expectedScore"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "expectedScore": {
+                                  "type": "number"
+                                },
+                                "mateIn": {
+                                  "anyOf": [
+                                    {
+                                      "maximum": 9007199254740991,
+                                      "minimum": -9007199254740991,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "profile": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "limitType": {
+                                      "type": "string"
+                                    },
+                                    "limitValue": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": -9007199254740991,
+                                      "type": "integer"
+                                    },
+                                    "multipv": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": -9007199254740991,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "limitType",
+                                    "limitValue",
+                                    "multipv"
+                                  ],
+                                  "type": "object"
+                                },
+                                "scope": {
+                                  "type": "string"
+                                },
+                                "scoreCp": {
+                                  "anyOf": [
+                                    {
+                                      "maximum": 9007199254740991,
+                                      "minimum": -9007199254740991,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "expectedScore",
+                                "scoreCp",
+                                "mateIn",
+                                "bestMoveUci",
+                                "candidates",
+                                "profile",
+                                "scope"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "state": {
+                          "enum": [
+                            "ready",
+                            "scheduled"
+                          ],
+                          "type": "string"
+                        },
+                        "workflowId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "workflowId",
+                        "evaluation"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "One bounded engine evaluation of a supplied position",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The request could not be accepted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "This idempotency key was already used for a different request"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "One bounded engine evaluation of a supplied position"
+      }
+    },
     "/v1/public/beta-signups": {
       "post": {
         "description": "Public command with distributed address and email abuse controls. Requires an Idempotency-Key. The response never reveals whether the address was already on the list.",
@@ -2157,7 +3199,8 @@
                 "game_analysis",
                 "model_backfill",
                 "subject_estimation",
-                "maintenance"
+                "maintenance",
+                "position_evaluation"
               ],
               "type": "string"
             }
@@ -2242,7 +3285,8 @@
                               "game_analysis",
                               "model_backfill",
                               "subject_estimation",
-                              "maintenance"
+                              "maintenance",
+                              "position_evaluation"
                             ],
                             "type": "string"
                           },
@@ -2567,7 +3611,8 @@
                             "game_analysis",
                             "model_backfill",
                             "subject_estimation",
-                            "maintenance"
+                            "maintenance",
+                            "position_evaluation"
                           ],
                           "type": "string"
                         },
@@ -2886,7 +3931,8 @@
                             "game_analysis",
                             "model_backfill",
                             "subject_estimation",
-                            "maintenance"
+                            "maintenance",
+                            "position_evaluation"
                           ],
                           "type": "string"
                         },

@@ -27,11 +27,18 @@ export interface RateLimitPolicy {
   readonly max: number;
 }
 
-/** The policies E03 ships. Adding one is a code change, not a runtime knob. */
+/** The policies the API ships. Adding one is a code change, not a runtime knob. */
 export const POLICIES = {
   publicRead: { name: "public_read", windowSeconds: 60, max: 120 },
   betaSignupAddress: { name: "public_beta_signup_ip", windowSeconds: 3_600, max: 5 },
   betaSignupEmail: { name: "public_beta_signup_email", windowSeconds: 86_400, max: 3 },
+  /**
+   * E12's bounded interactive evaluation. Counted per actor rather than per
+   * address, because what this endpoint spends is engine time and engine time
+   * is spent by whoever is signed in — an address limit would let one account
+   * behind a changing address run the worker pool flat.
+   */
+  interactiveEvaluation: { name: "interactive_evaluation", windowSeconds: 60, max: 30 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 export type RateLimitStatus = "ok" | "limited" | "degraded";

@@ -48,7 +48,37 @@ async function apply0022(url: string): Promise<void> {
   }
 }
 
-const EXPECTED_TABLES = 20;
+/**
+ * The tables 0022 creates, by name.
+ *
+ * Named rather than counted. A count would make this gate fail every time a
+ * later epic adds a table to the `analysis` schema — which is E12 adding
+ * `position_evaluations` and friends, not E11 losing one — and a green gate
+ * that has to be edited for someone else's correct change teaches people to
+ * edit gates.
+ */
+const EXPECTED_TABLES = [
+  "cohort_definition_versions",
+  "component_lifecycle_events",
+  "component_version_dependencies",
+  "component_versions",
+  "components",
+  "recipe_components",
+  "recipe_promotions",
+  "recipe_versions",
+  "run_artifacts",
+  "run_dependencies",
+  "runs",
+  "subject_data_snapshot_games",
+  "subject_data_snapshots",
+  "subject_game_publication_history",
+  "subject_game_publications",
+  "subject_live_publication_history",
+  "subject_live_publications",
+  "validation_datasets",
+  "validation_metrics",
+  "validation_runs",
+] as const;
 
 // --- from empty -------------------------------------------------------------
 
@@ -59,10 +89,14 @@ try {
   await applyMigrations(fresh.adminUrl);
 
   await report.check("every analysis table exists", async () => {
-    const rows = await fresh.query<{ count: string }>(
-      "select count(*)::text as count from information_schema.tables where table_schema = 'analysis'",
+    const rows = await fresh.query<{ table_name: string }>(
+      "select table_name from information_schema.tables where table_schema = 'analysis'",
     );
-    assert.equal(rows[0].count, String(EXPECTED_TABLES));
+    const present = new Set(rows.map((row) => row.table_name));
+    assert.deepEqual(
+      EXPECTED_TABLES.filter((table) => !present.has(table)),
+      [],
+    );
   });
 
   await report.check("the materialization history table exists beside E09's pointer", async () => {
@@ -299,10 +333,14 @@ try {
     // and nothing else moves.
     await prior.query("drop table analysis.validation_metrics");
     await apply0022(prior.adminUrl);
-    const rows = await prior.query<{ count: string }>(
-      "select count(*)::text as count from information_schema.tables where table_schema = 'analysis'",
+    const rows = await prior.query<{ table_name: string }>(
+      "select table_name from information_schema.tables where table_schema = 'analysis'",
     );
-    assert.equal(rows[0].count, String(EXPECTED_TABLES));
+    const present = new Set(rows.map((row) => row.table_name));
+    assert.deepEqual(
+      EXPECTED_TABLES.filter((table) => !present.has(table)),
+      [],
+    );
     const history = await prior.query<{ count: string }>(
       "select count(*)::text as count from chess.replay_materialization_publication_history",
     );

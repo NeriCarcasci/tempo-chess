@@ -32,7 +32,10 @@ export type AuditAction =
   | "workflow.cancel_requested"
   | "work_item.stale_delivery"
   // E11.
-  | "game.access_denied";
+  | "game.access_denied"
+  // E12.
+  | "game_review.access_denied"
+  | "game_analysis.access_denied";
 
 export interface AuditEvent {
   actorKind: AuditActorKind;

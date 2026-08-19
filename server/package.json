@@ -60,7 +60,13 @@
     "analysis:security": "tsx src/analysis/gates/security.ts",
     "analysis:migration": "tsx src/analysis/gates/migration.ts",
     "analysis:performance": "tsx src/analysis/gates/performance.ts",
-    "analysis:api": "tsx src/analysis/gates/api.ts"
+    "analysis:api": "tsx src/analysis/gates/api.ts",
+    "engine:unit": "tsx src/engine/contract.test.ts && tsx src/engine/stockfish.test.ts && tsx src/engine/critical-position.test.ts && tsx src/engine/attacks.test.ts",
+    "engine:integration": "tsx src/engine/gates/integration.ts",
+    "engine:security": "tsx src/engine/gates/security.ts",
+    "engine:migration": "tsx src/engine/gates/migration.ts",
+    "engine:performance": "tsx src/engine/gates/performance.ts",
+    "engine:api": "tsx src/engine/gates/api.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

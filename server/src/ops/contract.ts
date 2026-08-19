@@ -77,6 +77,10 @@ export const WORKFLOW_KINDS = [
   "model_backfill",
   "subject_estimation",
   "maintenance",
+  // E12. API contract §14's bounded interactive evaluation is a durable
+  // operation with an owner and a work item, and it is not a game analysis --
+  // labelling it one would make "how many game analyses ran today" wrong.
+  "position_evaluation",
 ] as const;
 export type WorkflowKind = (typeof WORKFLOW_KINDS)[number];
 

@@ -1,6 +1,6 @@
 import "../v1/gates/unit-env.js";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -72,10 +72,21 @@ function check(name: string, run: () => void): void {
 
 setSigningKeyForTest(Buffer.from("e04-unit-gate-signing-key-0123456789abcdef", "utf8"));
 
-const MIGRATION = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "..", "..", "drizzle", "0014_e04_work_ledger.sql"),
-  "utf8",
-);
+/**
+ * 0014 and every migration that has widened one of its check constraints since.
+ *
+ * Read as a set rather than as one file because a later epic may legitimately
+ * add a value to a closed vocabulary — E12 adds the `position_evaluation`
+ * workflow kind — and it does so by replacing the constraint in its own
+ * migration, which is the only safe way to widen an applied one. Pinning this
+ * to 0014 would make a correct additive change look like drift.
+ */
+const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "drizzle");
+const MIGRATION = readdirSync(MIGRATIONS_DIR)
+  .filter((name) => name.endsWith(".sql"))
+  .sort()
+  .map((name) => readFileSync(join(MIGRATIONS_DIR, name), "utf8"))
+  .join("\n");
 
 console.log("frozen vocabularies match the migration\n");
 
@@ -99,7 +110,7 @@ for (const [label, values] of [
     for (const value of values) {
       assert.ok(
         MIGRATION.includes(`'${value}'`),
-        `${value} is declared in code but not constrained in 0014`,
+        `${value} is declared in code but constrained by no migration`,
       );
     }
   });
