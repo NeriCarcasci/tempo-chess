@@ -47,6 +47,14 @@ export const POLICIES = {
    */
   onboardingRead: { name: "onboarding_read", windowSeconds: 60, max: 120 },
   onboardingCommand: { name: "onboarding_command", windowSeconds: 60, max: 20 },
+  /**
+   * E20's public player directory. Much tighter than `publicRead`, and per
+   * address, because a prefix search over handles is the one public read whose
+   * abuse case is enumeration rather than load: thirty queries a minute is
+   * plenty for a person looking somebody up and useless for walking the
+   * alphabet.
+   */
+  directorySearch: { name: "public_directory_search", windowSeconds: 60, max: 30 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 export type RateLimitStatus = "ok" | "limited" | "degraded";

@@ -2,6 +2,8 @@ import { z } from "zod";
 import { generateOpenApiDocument } from "../openapi.js";
 import type { RouteDefinition } from "../registry.js";
 import { ARTIFACT_ROUTES } from "./artifacts.js";
+import { CASE_STUDY_ROUTES } from "./case-studies.js";
+import { DIRECTORY_ROUTES } from "./directory.js";
 import { GAME_ROUTES } from "./games.js";
 import { IDENTITY_ROUTES } from "./identity.js";
 import { GOAL_ROUTES } from "./goals.js";
@@ -19,6 +21,8 @@ import { WORKFLOW_ROUTES } from "./workflows.js";
 
 const PRODUCT_ROUTES = [
   ...PUBLIC_ROUTES,
+  ...DIRECTORY_ROUTES,
+  ...CASE_STUDY_ROUTES,
   ...IDENTITY_ROUTES,
   ...ARTIFACT_ROUTES,
   ...WORKFLOW_ROUTES,

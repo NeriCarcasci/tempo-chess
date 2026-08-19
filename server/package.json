@@ -90,7 +90,12 @@
     "practice:unit": "tsx src/practice/practice.test.ts",
     "practice:migration": "tsx src/practice/gates/migration.ts",
     "entitlements:unit": "tsx src/entitlements/entitlements.test.ts",
-    "entitlements:migration": "tsx src/entitlements/gates/migration.ts"
+    "entitlements:migration": "tsx src/entitlements/gates/migration.ts",
+    "public:unit": "tsx src/public/public.test.ts",
+    "public:migration": "tsx src/public/gates/migration.ts",
+    "public:security": "tsx src/public/gates/security.ts",
+    "public:integration": "tsx src/public/gates/integration.ts",
+    "editorial": "node --env-file=.env --import tsx src/public/cli.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

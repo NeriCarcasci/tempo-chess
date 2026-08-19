@@ -524,6 +524,499 @@
         "summary": "The immutable baseline report"
       }
     },
+    "/v1/case-studies": {
+      "get": {
+        "description": "Public. Only studies that are currently published and whose consent, where one underpins them, still stands. Withdrawing a study or its consent removes it from this list on the next request.",
+        "operationId": "listCaseStudies",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 512,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "editorial": {
+                            "const": true,
+                            "type": "boolean"
+                          },
+                          "permissionBasis": {
+                            "enum": [
+                              "public_domain",
+                              "licence",
+                              "consent",
+                              "own_material"
+                            ],
+                            "type": "string"
+                          },
+                          "publishedAt": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "slug",
+                          "title",
+                          "summary",
+                          "publishedAt",
+                          "editorial",
+                          "permissionBasis"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    },
+                    "page": {
+                      "properties": {
+                        "hasMore": {
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "nextCursor",
+                        "hasMore"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "page",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Published editorial case studies, newest first",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The request could not be accepted"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [],
+        "summary": "Published editorial case studies, newest first"
+      }
+    },
+    "/v1/case-studies/{slug}": {
+      "get": {
+        "description": "Public. Carries the editorial source and the basis on which it may be republished, the exact analysis publication behind the claims, the caveats a reader needs, and a redaction block naming what this surface does not carry.",
+        "operationId": "getCaseStudy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "caveats": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "contentChecksum": {
+                          "type": "string"
+                        },
+                        "editorial": {
+                          "const": true,
+                          "type": "boolean"
+                        },
+                        "permissionBasis": {
+                          "enum": [
+                            "public_domain",
+                            "licence",
+                            "consent",
+                            "own_material"
+                          ],
+                          "type": "string"
+                        },
+                        "publishedAt": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "attribution": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "kind": {
+                              "enum": [
+                                "historic_archive",
+                                "provider_public_profile",
+                                "licensed_dataset",
+                                "player_submission"
+                              ],
+                              "type": "string"
+                            },
+                            "licence": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "key",
+                                    "url"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "publisher": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "retrievedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "title",
+                            "publisher",
+                            "url",
+                            "retrievedAt",
+                            "licence",
+                            "attribution"
+                          ],
+                          "type": "object"
+                        },
+                        "subject": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "enum": [
+                                "editorial",
+                                "case_study"
+                              ],
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "kind"
+                          ],
+                          "type": "object"
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "version": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "generatedAt": {
+                              "type": "string"
+                            },
+                            "publicationId": {
+                              "type": "string"
+                            },
+                            "recipeVersionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "redactionPolicyVersion": {
+                              "type": "string"
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "publicationId",
+                            "runId",
+                            "generatedAt",
+                            "recipeVersionId",
+                            "redactionPolicyVersion"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "slug",
+                        "title",
+                        "summary",
+                        "publishedAt",
+                        "editorial",
+                        "permissionBasis",
+                        "subject",
+                        "caveats",
+                        "source",
+                        "version",
+                        "contentChecksum"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "One published case study, with its source, permission basis and version",
+            "headers": {
+              "ETag": {
+                "description": "Strong validator for If-None-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The caller's copy is current."
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [],
+        "summary": "One published case study, with its source, permission basis and version"
+      }
+    },
     "/v1/diagnostic-sessions/{sessionId}": {
       "get": {
         "description": "The current item carries the explanation of what it is testing and never the expected move. Platform spec 14.7's pre-explanation guarantee costs a little signal and buys the difference between an examination and a trap.",
@@ -1008,6 +1501,380 @@
           }
         ],
         "summary": "Answer one diagnostic item"
+      }
+    },
+    "/v1/directory/players": {
+      "get": {
+        "description": "Public, minimum query length 2, rate limited per address. Returns public profile summaries only, and provider handles only for profiles that have opted into showing them.",
+        "operationId": "searchDirectory",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 40,
+              "minLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 512,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "avatarUrl": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "displayName": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "handle": {
+                            "type": "string"
+                          },
+                          "providerHandles": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "handle": {
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "provider",
+                                "handle"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "handle",
+                          "displayName",
+                          "avatarUrl",
+                          "providerHandles"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    },
+                    "page": {
+                      "properties": {
+                        "hasMore": {
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "nextCursor",
+                        "hasMore"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "page",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Prefix search of opted-in Forma handles",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The request could not be accepted"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [],
+        "summary": "Prefix search of opted-in Forma handles"
+      }
+    },
+    "/v1/directory/players/{handle}": {
+      "get": {
+        "description": "Public. Public profile fields and opted-in provider handles. It never returns email, linked-account identifiers, findings, goals, ratings or game history. A profile that is not discoverable is indistinguishable from a handle nobody has taken.",
+        "operationId": "getDirectoryProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "handle",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "avatarUrl": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "displayName": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "handle": {
+                          "type": "string"
+                        },
+                        "providerHandles": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "handle": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "provider",
+                              "handle"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "handle",
+                        "displayName",
+                        "avatarUrl",
+                        "providerHandles"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "One public player profile",
+            "headers": {
+              "ETag": {
+                "description": "Strong validator for If-None-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The caller's copy is current."
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [],
+        "summary": "One public player profile"
       }
     },
     "/v1/games/{gameId}": {
@@ -7120,6 +7987,74 @@
                           ],
                           "type": "object"
                         },
+                        "byPlatform": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "games": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "platform": {
+                                "enum": [
+                                  "lichess",
+                                  "chesscom"
+                                ],
+                                "type": "string"
+                              },
+                              "players": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "disclosure": {
+                                        "const": "exact",
+                                        "type": "string"
+                                      },
+                                      "value": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "disclosure",
+                                      "value"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "below": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "disclosure": {
+                                        "const": "suppressed",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "disclosure",
+                                      "below"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "platform",
+                              "players",
+                              "games"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
                         "counted": {
                           "additionalProperties": false,
                           "properties": {
@@ -7129,9 +8064,46 @@
                               "type": "integer"
                             },
                             "players": {
-                              "maximum": 9007199254740991,
-                              "minimum": -9007199254740991,
-                              "type": "integer"
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "disclosure": {
+                                      "const": "exact",
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": -9007199254740991,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "disclosure",
+                                    "value"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "below": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": -9007199254740991,
+                                      "type": "integer"
+                                    },
+                                    "disclosure": {
+                                      "const": "suppressed",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "disclosure",
+                                    "below"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
                             }
                           },
                           "required": [
@@ -7146,32 +8118,46 @@
                           "type": "integer"
                         },
                         "players": {
-                          "maximum": 9007199254740991,
-                          "minimum": -9007199254740991,
-                          "type": "integer"
-                        },
-                        "playersList": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "platform": {
-                                "enum": [
-                                  "lichess",
-                                  "chesscom"
-                                ],
-                                "type": "string"
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "disclosure": {
+                                  "const": "exact",
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                }
                               },
-                              "username": {
-                                "type": "string"
-                              }
+                              "required": [
+                                "disclosure",
+                                "value"
+                              ],
+                              "type": "object"
                             },
-                            "required": [
-                              "username",
-                              "platform"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "below": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                },
+                                "disclosure": {
+                                  "const": "suppressed",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "disclosure",
+                                "below"
+                              ],
+                              "type": "object"
+                            }
+                          ]
                         },
                         "updatedAt": {
                           "type": "string"
@@ -7182,7 +8168,7 @@
                         "games",
                         "counted",
                         "baseline",
-                        "playersList",
+                        "byPlatform",
                         "updatedAt"
                       ],
                       "type": "object"

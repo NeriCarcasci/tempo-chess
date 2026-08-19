@@ -560,8 +560,14 @@ check("a public read is never marked private and an authenticated read never pub
   for (const route of V1_ROUTES) {
     if (route.kind !== "read") continue;
     const directive = route.cacheControl ?? "";
+    // `no-store` is legitimate on either side. E20's player directory is public
+    // and must still never sit in a shared cache: the risk on that endpoint is
+    // enumeration rather than load, and a CDN holding "who matches `an`" is an
+    // enumeration cache in front of it. What must never happen is a public read
+    // marked private, or an authenticated read marked public.
+    const allowed = route.auth === "public" ? "public" : "private";
     assert.equal(
-      directive.startsWith(route.auth === "public" ? "public" : "private"),
+      directive.startsWith(allowed) || directive.startsWith("no-store"),
       true,
       `${route.path}: ${directive}`,
     );

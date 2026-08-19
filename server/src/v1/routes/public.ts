@@ -3,6 +3,7 @@ import { PLAN_LIST } from "../../billing/plans.js";
 import { billingConfigured } from "../../billing/service.js";
 import { PLATFORM_CHOICES, RATING_CHOICES, recordBetaSignup } from "../../beta.js";
 import { getPublicReach } from "../../players/reach.js";
+import { suppressSmallCells } from "../../public/suppression.js";
 import { POLICIES } from "../rate-limit.js";
 import type { RouteDefinition } from "../registry.js";
 
@@ -18,13 +19,28 @@ import type { RouteDefinition } from "../registry.js";
  * frontend byte-for-byte. Migrating a consumer is a later epic's work.
  */
 
+/**
+ * A published figure: the number, or an honest refusal to give it.
+ *
+ * Not `number | null`. A null reads as "we do not know", and a suppressed cell
+ * is something we know perfectly well and have decided not to say.
+ */
+const figureSchema = z.union([
+  z.object({ disclosure: z.literal("exact"), value: z.number().int() }),
+  z.object({ disclosure: z.literal("suppressed"), below: z.number().int() }),
+]);
+
 const reachSchema = z.object({
-  players: z.number().int(),
+  players: figureSchema,
   games: z.number().int(),
-  counted: z.object({ players: z.number().int(), games: z.number().int() }),
+  counted: z.object({ players: figureSchema, games: z.number().int() }),
   baseline: z.object({ players: z.number().int(), games: z.number().int() }),
-  playersList: z.array(
-    z.object({ username: z.string(), platform: z.enum(["lichess", "chesscom"]) }),
+  byPlatform: z.array(
+    z.object({
+      platform: z.enum(["lichess", "chesscom"]),
+      players: figureSchema,
+      games: z.number().int(),
+    }),
   ),
   updatedAt: z.string(),
 });
@@ -34,6 +50,22 @@ const reachSchema = z.object({
  *
  * Cacheable and ETagged: it changes when the pipeline finishes work, which is
  * far less often than the landing page is loaded.
+ *
+ * E20 changed two things about it, and both are subtractions.
+ *
+ * The player counts are segmented by platform and run through small-cell
+ * suppression first. A breakdown that reads "lichess 4, chess.com 1" is not a
+ * statistic, it is five people — and publishing the total beside all-but-one
+ * cell would hand back any cell we withheld. §3 says "no exact small-cell
+ * counts", and this is that rule doing arithmetic rather than being quoted.
+ *
+ * The roster of handles is gone from this surface. The legacy `/stats/reach`
+ * route still serves it to the current landing page byte-for-byte, but the
+ * accounts on it are real people who were screened from public arena results
+ * and never opted into being listed. §3's own rule for the `/v1` directory is
+ * that provider handles require opt-in, and a statistic is not the place that
+ * rule stops applying. It is named in the redaction block rather than dropped
+ * silently, and the runbook records the decision the landing page now needs.
  */
 const publicStats: RouteDefinition<never, never, z.infer<typeof reachSchema>> = {
   method: "GET",
@@ -52,18 +84,41 @@ const publicStats: RouteDefinition<never, never, z.infer<typeof reachSchema>> = 
   rateLimits: [{ policy: POLICIES.publicRead, source: "address" }],
   async handler() {
     const reach = await getPublicReach();
+    const suppression = suppressSmallCells(
+      reach.by_platform.map((row) => ({ key: row.platform, count: row.players })),
+    );
+    const gamesByPlatform = new Map(reach.by_platform.map((row) => [row.platform, row.games]));
+
+    // The baseline is work the pipeline did before the database reset, not a
+    // population, so it is added to a disclosed total and cannot rescue a
+    // suppressed one.
+    const totalPlayers: z.infer<typeof figureSchema> =
+      suppression.total.disclosure === "exact"
+        ? { disclosure: "exact", value: suppression.total.value + reach.baseline.players }
+        : suppression.total;
+
+    const redactions = [
+      { path: "data.playersList", reason: "projection" as const },
+      ...suppression.suppressedKeys.map((key) => ({
+        path: `data.byPlatform.${key}.players`,
+        reason: "projection" as const,
+      })),
+    ];
+
     return {
       data: {
-        players: reach.players,
+        players: totalPlayers,
         games: reach.games,
-        counted: reach.counted,
+        counted: { players: suppression.total, games: reach.counted.games },
         baseline: reach.baseline,
-        // Renamed from the legacy body's `players_list`: §16 of the platform
-        // spec fixes camelCase for `/v1`, and the legacy route keeps its own
-        // spelling for the client that still reads it.
-        playersList: reach.players_list,
+        byPlatform: suppression.cells.map((cell) => ({
+          platform: cell.key as "lichess" | "chesscom",
+          players: cell.figure,
+          games: gamesByPlatform.get(cell.key as "lichess" | "chesscom") ?? 0,
+        })),
         updatedAt: reach.updatedAt,
       },
+      redactions,
     };
   },
 };
