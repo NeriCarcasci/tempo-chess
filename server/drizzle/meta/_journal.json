@@ -218,6 +218,13 @@
       "when": 1787550000000,
       "tag": "0030_e17_goals_cycles",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1787560000000,
+      "tag": "0031_e18_practice_transfer",
+      "breakpoints": true
     }
   ]
 }
