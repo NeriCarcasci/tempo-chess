@@ -55,7 +55,7 @@
     "backfill:games": "tsx src/backfill/cli.ts games",
     "backfill:reconcile": "tsx src/backfill/cli.ts reconcile",
     "backfill:cutover": "tsx src/backfill/cli.ts cutover",
-    "analysis:unit": "tsx src/analysis/contract.test.ts",
+    "analysis:unit": "tsx src/analysis/observations.test.ts",
     "analysis:integration": "tsx src/analysis/gates/integration.ts",
     "analysis:security": "tsx src/analysis/gates/security.ts",
     "analysis:migration": "tsx src/analysis/gates/migration.ts",
@@ -66,7 +66,8 @@
     "engine:security": "tsx src/engine/gates/security.ts",
     "engine:migration": "tsx src/engine/gates/migration.ts",
     "engine:performance": "tsx src/engine/gates/performance.ts",
-    "engine:api": "tsx src/engine/gates/api.ts"
+    "engine:api": "tsx src/engine/gates/api.ts",
+    "analysis:live": "tsx src/analysis/observations.live.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",
