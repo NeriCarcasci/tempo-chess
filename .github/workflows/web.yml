@@ -1,18 +1,41 @@
 # The web app: typecheck, tests, build, and the generated API client.
 #
-# Until now no CI job ran the frontend at all — a broken screen or a stale
+# Until recently no CI job ran the frontend at all — a broken screen or a stale
 # generated client reached `main` without anything objecting. The one check that
-# is easy to miss is the last: `app/lib/v1/schema.d.ts` is generated from
+# is easy to miss is the first: `app/lib/v1/schema.d.ts` is generated from
 # `server/openapi/v1.json`, which is itself generated from the router, so a
 # route change that skips the regeneration leaves the client typed against an
-# API that no longer exists.
+# API that no longer exists. That is why `server/openapi/**` is in the paths
+# below: a server change that moves the contract has to re-prove the client.
 
 name: Web
 
 on:
   pull_request:
+    paths:
+      - "app/**"
+      - "public/**"
+      - "server/openapi/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "vite.config.ts"
+      - "react-router.config.ts"
+      - ".node-version"
+      - ".github/workflows/web.yml"
   push:
     branches: [main]
+    paths:
+      - "app/**"
+      - "public/**"
+      - "server/openapi/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "vite.config.ts"
+      - "react-router.config.ts"
+      - ".node-version"
+      - ".github/workflows/web.yml"
   workflow_dispatch:
 
 permissions:
@@ -20,6 +43,7 @@ permissions:
 
 jobs:
   web:
+    name: Typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

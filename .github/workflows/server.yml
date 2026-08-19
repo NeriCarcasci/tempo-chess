@@ -1,0 +1,199 @@
+# The server: every gate that needs nothing but the repository, and every gate
+# that needs a database.
+#
+# This replaces the per-epic workflows (E01, E03, E05, E14-E20, openings). Those
+# were partitioned by epic, which is a planning unit with a start and an end —
+# once an epic merged, "E17's gates" stopped naming anything a reader could act
+# on, and because each file triggered on an unfiltered `pull_request` they all
+# ran on every PR anyway. Thirteen workflows and twenty-three jobs re-ran
+# `typecheck` fourteen times and the v1 kernel gates eight times, each in its own
+# container, to reach the same verdict this file reaches once.
+#
+# The split here is by cost, not by authorship: `offline` needs a checkout,
+# `database` needs Postgres. That is the only distinction that changes how long
+# you wait or what can go wrong.
+#
+# Two gates stay deliberately out of CI, as they were before:
+#   - `security:production-readonly` reads live production and cannot run
+#     without credentials. It is a final-evidence gate, run by hand.
+#   - `security:rehearsal` builds and destroys its own containers; it belongs to
+#     the local evidence lifecycle, and wiring it here would buy a CI runner a
+#     container runtime for no new signal.
+# Nothing in this file authenticates to anything. No secret is read.
+
+name: Server
+
+on:
+  pull_request:
+    paths:
+      - "server/**"
+      - ".node-version"
+      - ".github/workflows/server.yml"
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".node-version"
+      - ".github/workflows/server.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    name: Offline gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Full history: the forbidden-scope gate reads past commits with
+      # `git ls-tree` and `git show`, so a shallow clone makes it vacuous
+      # rather than failing it.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      - name: Typecheck and build
+        working-directory: server
+        run: |
+          npm run typecheck
+          npm run build
+
+      - name: Unit gates
+        working-directory: server
+        run: |
+          npm run security:unit
+          npm run platform:unit
+          npm run e05:unit
+          npm run v1:unit
+          npm run identity:unit
+          npm run positions:unit
+          npm run artifacts:unit
+          npm run sync:unit
+          npm run ingest:test
+          npm run backfill:unit
+          npm run engine:unit
+          npm run analysis:unit
+          npm run models:unit
+          npm run estimates:unit
+          npm run onboarding:unit
+          npm run goals:unit
+          npm run practice:unit
+          npm run entitlements:unit
+          npm run public:unit
+          npm run ops:unit
+          npm run openings:test
+          npm run benchmark:test
+
+      - name: Generated artifacts are generated, not hand-edited
+        working-directory: server
+        run: |
+          npm run v1:openapi:check
+          npm run deploy:check
+
+      - name: Containment (static schema, forbidden scope, pipeline contract)
+        working-directory: server
+        run: |
+          npm run security:migration
+          npm run security:forbidden-scope
+          npm run pipeline:test
+
+      - name: Production dependency audits
+        run: |
+          npm audit --omit=dev
+          cd server && npm audit --omit=dev
+
+  database:
+    name: Database gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          # Trust auth on a throwaway service container reachable only from this
+          # job. It also keeps a credential-shaped string out of a tracked file,
+          # which the forbidden-scope gate rejects on sight.
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # Loopback and non-Supabase: the harness refuses anything else, and that
+      # guard is deliberately not overridable.
+      FORMA_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      # The kernel first. Everything below mounts routes on it or writes through
+      # it, so when it breaks the failures underneath are consequences and this
+      # step is the one to read.
+      - name: The v1 kernel
+        working-directory: server
+        run: |
+          npm run v1:migration
+          npm run v1:integration
+          npm run v1:security
+          npm run v1:performance
+
+      - name: Engine and human context
+        working-directory: server
+        run: |
+          npm run engine:migration
+          npm run engine:integration
+          npm run models:migration
+          npm run models:integration
+          npm run models:security
+          npm run models:performance
+
+      - name: Estimates and findings
+        working-directory: server
+        run: |
+          npm run estimates:migration
+          npm run estimates:integration
+          npm run estimates:security
+          npm run estimates:performance
+
+      - name: Onboarding, goals, practice, entitlements
+        working-directory: server
+        run: |
+          npm run onboarding:migration
+          npm run onboarding:security
+          npm run goals:migration
+          npm run practice:migration
+          npm run entitlements:migration
+
+      - name: Public projections
+        working-directory: server
+        run: |
+          npm run public:migration
+          npm run public:security
+          npm run public:integration
+
+      - name: Opening explorer
+        working-directory: server
+        run: npm run openings:integration

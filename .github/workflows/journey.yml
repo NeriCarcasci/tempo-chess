@@ -6,6 +6,16 @@
 # nothing opened a coaching cycle, nothing wrote a progress reading and nothing
 # created a practice assignment.
 #
+# It stays its own workflow because its failure means something the server
+# gates cannot tell you. Those answer "is this piece broken"; this answers "are
+# the pieces wired to each other", and a red check named Journey says which
+# question you are looking at without opening it.
+#
+# Its former `offline` job is gone: it ran the unit gates and the OpenAPI check
+# that `Server / Offline gates` now runs once for the whole repository, and its
+# trailing "the gates whose modules this changed" step re-ran the v1, engine and
+# estimate gates that `Server / Database gates` now runs once.
+#
 # It runs a real HTTP provider on loopback and a real Postgres. No external
 # service is contacted and no secret is read.
 
@@ -13,44 +23,24 @@ name: Journey
 
 on:
   pull_request:
+    paths:
+      - "server/**"
+      - ".node-version"
+      - ".github/workflows/journey.yml"
   push:
-    branches: [feat/journey-wiring]
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".node-version"
+      - ".github/workflows/journey.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  offline:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .node-version
-          cache: npm
-      - name: Install
-        run: |
-          npm ci
-          cd server && npm ci
-      - name: Unit gates for everything this touches
-        working-directory: server
-        run: |
-          npm run sync:unit
-          npm run onboarding:unit
-          npm run goals:unit
-          npm run practice:unit
-          npm run ops:unit
-          npm run v1:unit
-      - name: Typecheck
-        working-directory: server
-        run: npm run typecheck
-      - name: The OpenAPI document matches the mounted routes
-        working-directory: server
-        run: npm run v1:openapi:check
-
   journey:
+    name: End to end
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -69,21 +59,17 @@ jobs:
       FORMA_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: npm
+
       - name: Install
         run: |
           npm ci
           cd server && npm ci
+
       - name: The journey, end to end
         working-directory: server
         run: npm run journey:gate
-      - name: The gates whose modules this changed
-        working-directory: server
-        run: |
-          npm run v1:integration
-          npm run v1:security
-          npm run engine:integration
-          npm run estimates:integration
