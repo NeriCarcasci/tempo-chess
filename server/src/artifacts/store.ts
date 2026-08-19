@@ -145,7 +145,8 @@ export class SupabaseArtifactStore implements ArtifactStore {
     const response = await this.http(`${this.base}/object/${bucket}/${key}`, {
       headers: this.headers(),
     });
-    if (response.status === 404) return null;
+    // Supabase Storage answers 400 for an object that is not there, not 404.
+    if (response.status === 404 || response.status === 400) return null;
     if (!response.ok) throw new Error(`storage could not be read (${response.status})`);
     const body = new Uint8Array(await response.arrayBuffer());
     return { bytes: body.byteLength, sha256: createHash("sha256").update(body).digest("hex") };
@@ -169,9 +170,22 @@ export class SupabaseArtifactStore implements ArtifactStore {
       headers: this.headers(),
     });
     // A body that is already absent is a successful deletion, not a failure:
-    // the janitor retries, and a retry must converge.
-    if (response.status === 404) return true;
-    if (!response.ok) return false;
-    return (await this.stat(bucket, key)) === null;
+    // the janitor retries, and a retry must converge. Supabase uses 400 here.
+    if (response.status === 404 || response.status === 400) return true;
+
+    // The delete response is the authority, and deliberately so.
+    //
+    // This used to read the object back and treat "still readable" as a failed
+    // deletion. Against real Supabase Storage that never confirms on the first
+    // pass: DELETE answers 200 "Successfully deleted" and an immediate GET
+    // still returns 200 with the body, because the delete is eventually
+    // consistent. The read-back reported every successful deletion as a
+    // failure, stamped deletion_failure_class on it, and made the delete-failure
+    // metric permanently noisy -- while still converging on the next sweep, so
+    // nothing appeared broken.
+    //
+    // A provider that accepted the delete has taken responsibility for it. If
+    // it did not, the row stays sweepable and the next pass tries again.
+    return response.ok;
   }
 }
