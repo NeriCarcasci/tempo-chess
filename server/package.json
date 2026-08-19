@@ -67,7 +67,16 @@
     "engine:migration": "tsx src/engine/gates/migration.ts",
     "engine:performance": "tsx src/engine/gates/performance.ts",
     "engine:api": "tsx src/engine/gates/api.ts",
-    "analysis:live": "tsx src/analysis/observations.live.ts"
+    "analysis:live": "tsx src/analysis/observations.live.ts",
+    "models:unit": "tsx src/models/models.test.ts",
+    "models:holdout": "tsx src/models/fetch-holdout.ts",
+    "models:benchmark": "tsx src/models/benchmark.ts",
+    "models:integration": "tsx src/models/gates/integration.ts",
+    "models:security": "tsx src/models/gates/security.ts",
+    "models:migration": "tsx src/models/gates/migration.ts",
+    "models:performance": "tsx src/models/gates/performance.ts",
+    "models:live": "tsx src/models/gates/live.ts",
+    "models:promote": "tsx src/models/promote.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

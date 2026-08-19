@@ -1,0 +1,109 @@
+# E14 calibrated human context and practical counterplay gates.
+#
+# Two halves, in the shape E03 established. The offline half needs nothing but
+# the repository. The database half runs against a PostgreSQL service container
+# — a disposable target by construction, which is what the harness insists on.
+#
+# Nothing here authenticates to Supabase, Cloud Run, or any production project,
+# and no secret is read. The live conformance gate (`models:live`) is
+# deliberately absent: it needs the production connection string, so it is run by
+# hand and its result is recorded in the epic's runbook rather than being wired
+# into a workflow that would then need a production credential.
+#
+# Neither half runs Lc0 or downloads a network. The benchmark is a one-off that
+# produced evidence rows; re-running it in CI would spend real time to reproduce
+# a number that is already recorded, and would make every build depend on a
+# third-party download staying up.
+
+name: E14 human context
+
+on:
+  pull_request:
+  push:
+    branches: [epic/e14]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      - name: Unit gate
+        working-directory: server
+        run: npm run models:unit
+
+      - name: Typecheck
+        working-directory: server
+        run: npm run typecheck
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          # Trust auth on a throwaway service container reachable only from this
+          # job. It also keeps a credential-shaped string out of a tracked file,
+          # which the forbidden-scope gate rejects on sight.
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # Loopback and non-Supabase: the harness refuses anything else, and that
+      # guard is deliberately not overridable.
+      FORMA_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      - name: Migration gate (empty, prior state, repeat)
+        working-directory: server
+        run: npm run models:migration
+
+      - name: Integration gate
+        working-directory: server
+        run: npm run models:integration
+
+      - name: Security gate
+        working-directory: server
+        run: npm run models:security
+
+      - name: Performance gate
+        working-directory: server
+        run: npm run models:performance
+
+      - name: Engine gates, which E14 changed
+        working-directory: server
+        run: |
+          npm run engine:migration
+          npm run engine:integration

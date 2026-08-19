@@ -52,7 +52,43 @@ export interface ReviewMove {
     reasons: { code: string; observed: number | string }[];
     candidates: { rank: number; uci: string; expectedScore: number; pv: string[] }[];
   };
+  /**
+   * How hard the position this move created is for *this* opponent, or why
+   * Forma will not say. Always present, never omitted: an absent field reads as
+   * "no pressure" and this one has to be able to say "we do not know".
+   */
+  practicalContext: PracticalContextView;
 }
+
+/**
+ * The human layer, kept structurally separate from the objective one.
+ *
+ * `unavailable` carries the reason rather than an empty object, because the
+ * product's answer to an uncalibrated player is a sentence about Forma's
+ * coverage and not a blank space. Pressure is an interval: the lower bound
+ * assumes every move the model did not retain was adequate and the upper bound
+ * assumes none was, and quoting either alone would be an assumption presented
+ * as a measurement.
+ */
+export type PracticalContextView =
+  | { status: "unavailable"; reason: string }
+  | {
+      status: "available";
+      adequateReplyCount: number;
+      adequateReplyProbability: number;
+      unretainedProbabilityMass: number;
+      practicalPressureLower: number;
+      practicalPressureUpper: number;
+      policyEntropyBits: number;
+      entropyIsLowerBound: boolean;
+      bestRefutationUci: string | null;
+      bestRefutationProbability: number | null;
+      bestRefutationRank: number | null;
+      humanExpectedScore: number | null;
+      outOfDomain: boolean;
+      opponentConceded: boolean | null;
+      subjectCapitalized: boolean | null;
+    };
 
 export interface GameReview {
   gameId: string;
@@ -67,6 +103,7 @@ export interface GameReview {
     concepts: SectionState;
     explanations: SectionState;
     trajectory: SectionState;
+    practicalContext: SectionState;
   };
   moves: ReviewMove[];
   criticalMoments: { fromPly: number; criticality: number | null; reasons: string[] }[];
@@ -142,6 +179,7 @@ export async function readGameReview(
 
   const deepIds = rows.map((row) => row.deep_evaluation_id).filter((id): id is string => id !== null);
   const candidates = await readCandidates(sql, deepIds);
+  const practical = await readPracticalContext(sql, publication.run_id);
 
   const moves: ReviewMove[] = rows.map((row) => ({
     fromPly: row.from_ply,
@@ -170,6 +208,13 @@ export async function readGameReview(
       })),
       candidates: row.deep_evaluation_id ? (candidates.get(row.deep_evaluation_id) ?? []) : [],
     },
+    // A run written before E14, or one whose step has not landed yet, has no
+    // row for this ply. `unavailable` with a named reason is the honest reading
+    // of that, and it is the same shape the computed refusals take.
+    practicalContext: practical.get(row.from_ply) ?? {
+      status: "unavailable",
+      reason: "no_promoted_model",
+    },
   }));
 
   return {
@@ -185,6 +230,10 @@ export async function readGameReview(
       // one that did not happen.
       transitions: "published",
       criticalMoments: "published",
+      // Published in the sense that the section was computed and every move
+      // carries an answer. Whether that answer is a number or a reason is a
+      // per-move fact, not a section-level one.
+      practicalContext: practical.size > 0 ? "published" : "unavailable",
       // E13 and E15. Named rather than omitted, and `unavailable` rather than
       // empty, so a client cannot read "not analysed yet" as "nothing found".
       events: "unavailable",
@@ -244,4 +293,80 @@ async function policyVersions(sql: Queryable, recipeVersionId: string): Promise<
     order by rc.role
   `;
   return Object.fromEntries(rows.map((row) => [row.role, `${row.component_key}@${row.version}`]));
+}
+
+/**
+ * The practical context of one run, by ply.
+ *
+ * Read in one query and keyed by ply rather than joined per move: a review is a
+ * page, and a per-move round trip is how a page becomes a hundred queries.
+ */
+async function readPracticalContext(
+  sql: Queryable,
+  runId: string,
+): Promise<Map<number, PracticalContextView>> {
+  const rows = await sql<
+    {
+      from_ply: number;
+      status: "available" | "unavailable";
+      unavailable_reason: string | null;
+      adequate_reply_count: number | null;
+      adequate_reply_probability: string | null;
+      unretained_probability_mass: string | null;
+      practical_pressure_lower: string | null;
+      practical_pressure_upper: string | null;
+      policy_entropy_bits: string | null;
+      entropy_is_lower_bound: boolean | null;
+      best_refutation_uci: string | null;
+      best_refutation_probability: string | null;
+      best_refutation_rank: number | null;
+      human_expected_score: string | null;
+      out_of_domain: boolean;
+      opponent_conceded: boolean | null;
+      subject_capitalized: boolean | null;
+    }[]
+  >`
+    select ta.from_ply, pc.status, pc.unavailable_reason, pc.adequate_reply_count,
+           pc.adequate_reply_probability, pc.unretained_probability_mass,
+           pc.practical_pressure_lower, pc.practical_pressure_upper,
+           pc.policy_entropy_bits, pc.entropy_is_lower_bound, pc.best_refutation_uci,
+           pc.best_refutation_probability, pc.best_refutation_rank,
+           pc.human_expected_score, pc.out_of_domain, pc.opponent_conceded,
+           pc.subject_capitalized
+    from analysis.practical_context_assessments pc
+    join analysis.transition_assessments ta on ta.id = pc.transition_assessment_id
+    where pc.analysis_run_id = ${runId}
+    order by ta.from_ply
+  `;
+
+  const byPly = new Map<number, PracticalContextView>();
+  for (const row of rows) {
+    if (row.status === "unavailable") {
+      byPly.set(row.from_ply, {
+        status: "unavailable",
+        reason: row.unavailable_reason ?? "no_promoted_model",
+      });
+      continue;
+    }
+    byPly.set(row.from_ply, {
+      status: "available",
+      adequateReplyCount: row.adequate_reply_count ?? 0,
+      adequateReplyProbability: Number(row.adequate_reply_probability),
+      unretainedProbabilityMass: Number(row.unretained_probability_mass),
+      practicalPressureLower: Number(row.practical_pressure_lower),
+      practicalPressureUpper: Number(row.practical_pressure_upper),
+      policyEntropyBits: Number(row.policy_entropy_bits),
+      entropyIsLowerBound: row.entropy_is_lower_bound ?? true,
+      bestRefutationUci: row.best_refutation_uci,
+      bestRefutationProbability:
+        row.best_refutation_probability === null ? null : Number(row.best_refutation_probability),
+      bestRefutationRank: row.best_refutation_rank,
+      humanExpectedScore:
+        row.human_expected_score === null ? null : Number(row.human_expected_score),
+      outOfDomain: row.out_of_domain,
+      opponentConceded: row.opponent_conceded,
+      subjectCapitalized: row.subject_capitalized,
+    });
+  }
+  return byPly;
 }

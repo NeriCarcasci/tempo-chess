@@ -178,6 +178,22 @@ export async function registerEngineVersions(
     ],
   });
 
+  // The licence review has to exist before the profile can claim to be cleared:
+  // analysis.enforce_licence_review() refuses the insert otherwise. Stockfish is
+  // GPL-3.0-or-later and we run it, unmodified, as a separate process over UCI.
+  await sql`
+    insert into analysis.model_licence_reviews (
+      component_version_id, decision, licence_spdx, source_url, obligations,
+      distribution_posture, reviewer
+    ) values (
+      ${engine.id}, 'cleared', 'GPL-3.0-or-later',
+      'https://github.com/official-stockfish/Stockfish',
+      'Copyleft. We invoke an unmodified binary as a separate process over UCI and do not link against it, so no combined work is created. We do not redistribute the binary; if that ever changes, the corresponding source must be offered under the same licence.',
+      'server_side_only', 'forma-platform'
+    )
+    on conflict (component_version_id) do nothing
+  `;
+
   await sql`
     insert into analysis.model_profiles (
       component_version_id, role, binary_sha256, network_hash, hardware_class,

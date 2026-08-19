@@ -21,6 +21,7 @@ import { currentRecipeFor } from "../analysis/validation.js";
 import { planRun } from "../analysis/runs.js";
 import { readEngineRoles, publishedMaterializationRun } from "./recipe.js";
 import { ASSESS_TASK, DEEP_TASK, SCREEN_TASK } from "./worker.js";
+import { PRACTICAL_TASK } from "../models/worker.js";
 
 export interface PlanGameAnalysisInput {
   subjectGameId: string;
@@ -149,6 +150,20 @@ export async function planGameAnalysis(
             payload: { runId: run.id },
             weight: 4,
             dependsOn: [1],
+          },
+          {
+            // E14's human layer. It runs on cpu_model rather than cpu_engine
+            // because a human policy is not an engine, and it depends on the
+            // assessment because it annotates assessments: a run with no
+            // objective answer has nothing for it to be practical about.
+            taskType: PRACTICAL_TASK,
+            resourceClass: "cpu_model",
+            queue: "analysis",
+            idempotencyKey: `e14:${PRACTICAL_TASK}:${run.id}`,
+            inputRef: `run:${run.id}`,
+            payload: { runId: run.id },
+            weight: 4,
+            dependsOn: [2],
           },
         ],
       }),

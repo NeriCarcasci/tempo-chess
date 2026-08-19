@@ -168,6 +168,9 @@ try {
         [SCREEN_TASK, "stockfish-screen", "cpu_engine"],
         [DEEP_TASK, "stockfish-deep", "cpu_engine"],
         [ASSESS_TASK, "analysis", "aggregation"],
+        // E14's human layer, last and on cpu_model: it annotates assessments,
+        // so it cannot run before there are any.
+        ["analysis_practical_context", "analysis", "cpu_model"],
       ],
     );
   });
