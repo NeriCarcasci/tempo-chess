@@ -27,6 +27,8 @@
 
 import type { Sql } from "postgres";
 import { registerHandler, type WorkContext, type WorkResult } from "../ops/handlers.js";
+import { WorkFailure } from "../ops/retry.js";
+import { withActor } from "../db/actor.js";
 import {
   accountLockKey,
   acquireLock,
@@ -242,14 +244,33 @@ export async function syncAccount(
 async function runSyncItem(context: WorkContext, sql: Sql): Promise<WorkResult> {
   const startedAt = Date.now();
   const payload = payloadOf(context.item.payload);
-  const summary = await syncAccount(
-    {
-      payload,
-      holder: `work-item:${context.item.id}`,
-      workflowId: context.item.workflowId ?? null,
-      checkpoint: () => context.checkpoint(),
-    },
-    sql,
+
+  // Bound to the subject's owner, like every other worker. A sync writes
+  // `chess.subject_games` and `chess.subject_game_sources`, both of which force
+  // row level security against `private.current_actor_id()`. Unbound, the
+  // policy refuses the insert with 42501 -- indistinguishable from a missing
+  // grant, and reported as `db_permission_denied` -- so the games were fetched
+  // from the provider and then silently dropped on the floor.
+  //
+  // The actor comes from the workflow the API wrote, never from the queue
+  // payload: a forged id has to meet a policy, not a check somebody remembered.
+  const [workflow] = await sql<{ owner_profile_id: string | null }[]>`
+    select owner_profile_id from ops.workflows where id = ${context.item.workflowId}
+  `;
+  if (!workflow?.owner_profile_id) {
+    throw new WorkFailure("invalid_input", "unowned_workflow", "the workflow names no owner");
+  }
+
+  const summary = await withActor(sql, workflow.owner_profile_id, (tx) =>
+    syncAccount(
+      {
+        payload,
+        holder: `work-item:${context.item.id}`,
+        workflowId: context.item.workflowId ?? null,
+        checkpoint: () => context.checkpoint(),
+      },
+      tx,
+    ),
   );
   return {
     outputRef: `linked-account:${payload.linkedAccountId}`,
