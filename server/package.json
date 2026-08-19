@@ -81,7 +81,10 @@
     "estimates:integration": "tsx src/estimates/gates/integration.ts",
     "estimates:security": "tsx src/estimates/gates/security.ts",
     "estimates:migration": "tsx src/estimates/gates/migration.ts",
-    "estimates:performance": "tsx src/estimates/gates/performance.ts"
+    "estimates:performance": "tsx src/estimates/gates/performance.ts",
+    "onboarding:unit": "tsx src/onboarding/onboarding.test.ts",
+    "onboarding:migration": "tsx src/onboarding/gates/migration.ts",
+    "onboarding:security": "tsx src/onboarding/gates/security.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

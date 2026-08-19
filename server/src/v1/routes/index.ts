@@ -4,6 +4,7 @@ import type { RouteDefinition } from "../registry.js";
 import { ARTIFACT_ROUTES } from "./artifacts.js";
 import { GAME_ROUTES } from "./games.js";
 import { IDENTITY_ROUTES } from "./identity.js";
+import { ONBOARDING_ROUTES } from "./onboarding.js";
 import { PUBLIC_ROUTES } from "./public.js";
 import { REVIEW_ROUTES } from "./review.js";
 import { WORKFLOW_ROUTES } from "./workflows.js";
@@ -22,6 +23,7 @@ const PRODUCT_ROUTES = [
   ...WORKFLOW_ROUTES,
   ...GAME_ROUTES,
   ...REVIEW_ROUTES,
+  ...ONBOARDING_ROUTES,
 ] as unknown as RouteDefinition<never, never, never>[];
 
 /**

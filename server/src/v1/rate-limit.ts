@@ -39,6 +39,14 @@ export const POLICIES = {
    * behind a changing address run the worker pool flat.
    */
   interactiveEvaluation: { name: "interactive_evaluation", windowSeconds: 60, max: 30 },
+  /**
+   * E16's onboarding surface. Counted per actor: an onboarding screen polls
+   * while a sync runs, so the read limit is generous, and the command limit is
+   * tight because every command here either starts real work or records a
+   * decision a person made once.
+   */
+  onboardingRead: { name: "onboarding_read", windowSeconds: 60, max: 120 },
+  onboardingCommand: { name: "onboarding_command", windowSeconds: 60, max: 20 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 export type RateLimitStatus = "ok" | "limited" | "degraded";

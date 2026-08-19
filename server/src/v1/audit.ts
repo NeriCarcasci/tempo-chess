@@ -35,7 +35,10 @@ export type AuditAction =
   | "game.access_denied"
   // E12.
   | "game_review.access_denied"
-  | "game_analysis.access_denied";
+  | "game_analysis.access_denied"
+  // E16.
+  | "onboarding.access_denied"
+  | "diagnostic_attempt.rejected";
 
 export interface AuditEvent {
   actorKind: AuditActorKind;
