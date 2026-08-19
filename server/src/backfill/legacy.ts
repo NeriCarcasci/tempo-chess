@@ -29,6 +29,76 @@ export interface BackfillReport {
   manifest: Record<string, unknown>;
 }
 
+export interface CountRow {
+  readonly key: string;
+  readonly n: number;
+}
+
+export interface CountComparison {
+  /** Categories only; an owner is never named outside a checksum. */
+  readonly mismatches: string[];
+  /** Rows canonical holds that legacy does not. Progress, not a defect. */
+  readonly ahead: number;
+}
+
+/**
+ * Compare legacy counts with canonical ones.
+ *
+ * Extracted and pure because this asymmetry is the load-bearing decision of the
+ * epic and the kind a later edit inverts silently. A mismatch is *loss*: fewer
+ * canonical rows than legacy. Canonical being ahead is what a successful sync
+ * looks like -- those games were never in the legacy table -- and counting it
+ * would keep the cutover gate permanently red for exactly the reason it should
+ * eventually go green.
+ */
+export function compareCounts(
+  source: readonly CountRow[],
+  target: readonly CountRow[],
+  category: (key: string) => string,
+): CountComparison {
+  const mismatches: string[] = [];
+  let ahead = 0;
+  const targetMap = new Map(target.map((row) => [row.key, row.n]));
+  for (const row of source) {
+    const got = targetMap.get(row.key) ?? 0;
+    if (got < row.n) mismatches.push(`missing_canonical:${category(row.key)}`);
+    else if (got > row.n) ahead += got - row.n;
+  }
+  return { mismatches, ahead };
+}
+
+export interface CutoverManifest {
+  readonly legacyGames: number;
+  readonly canonicalSubjectGames: number;
+  readonly canonicalGamesWithReplay: number;
+  readonly mismatchCount: number;
+}
+
+/**
+ * Why canonical reads may not replace legacy ones yet.
+ *
+ * Pure, so the gate's reasoning can be exercised for states the live database
+ * does not currently hold -- including the one where it finally passes.
+ */
+export function cutoverBlockers(manifest: CutoverManifest): string[] {
+  const blockers: string[] = [];
+  if (manifest.canonicalSubjectGames < manifest.legacyGames) {
+    blockers.push(
+      `only ${manifest.canonicalSubjectGames} of ${manifest.legacyGames} legacy games have a canonical row`,
+    );
+  }
+  const withoutReplay = manifest.canonicalSubjectGames - manifest.canonicalGamesWithReplay;
+  if (withoutReplay > 0) {
+    blockers.push(
+      `${withoutReplay} canonical games have no replay revision; the legacy system stored no moves, so these must come from a provider re-fetch`,
+    );
+  }
+  if (manifest.mismatchCount > 0) {
+    blockers.push(`${manifest.mismatchCount} reconciliation mismatches are unresolved`);
+  }
+  return blockers;
+}
+
 const BATCH = 100;
 
 /**
@@ -195,21 +265,13 @@ export async function reconcile(sql: Sql): Promise<{
   const sourceRows = source.map((r) => `${r.user_id}:${r.platform}:${r.n}`);
   const targetRows = target.map((r) => `${r.owner}:${r.slug}:${r.n}`);
 
-  // A mismatch is *loss*: fewer canonical rows than legacy for an owner and
-  // provider. Having more is not a defect -- it is what a successful sync looks
-  // like, since games fetched from the provider were never in the legacy table.
-  // Counting "ahead" as a mismatch would make the cutover gate permanently red
-  // for the very reason it should eventually go green.
-  const mismatches: string[] = [];
-  let ahead = 0;
-  const targetMap = new Map(target.map((r) => [`${r.owner}:${r.slug}`, r.n]));
-  for (const row of source) {
-    const key = `${row.user_id}:${row.platform}`;
-    const got = targetMap.get(key) ?? 0;
-    // Categories only: which owner is never named outside the checksum.
-    if (got < row.n) mismatches.push(`missing_canonical:${row.platform}`);
-    else if (got > row.n) ahead += got - row.n;
-  }
+  const comparison = compareCounts(
+    source.map((r) => ({ key: `${r.user_id}:${r.platform}`, n: r.n })),
+    target.map((r) => ({ key: `${r.owner}:${r.slug}`, n: r.n })),
+    (key) => key.split(":")[1] ?? "unknown",
+  );
+  const mismatches = comparison.mismatches;
+  const ahead = comparison.ahead;
 
   const [{ replays }] = await sql<{ replays: number }[]>`
     select count(*)::int as replays from chess.provider_games where current_replay_revision_id is not null
@@ -252,23 +314,12 @@ export interface CutoverAssessment {
  */
 export async function assessCutover(sql: Sql): Promise<CutoverAssessment> {
   const { manifest } = await reconcile(sql);
-  const blockers: string[] = [];
-
-  const legacy = Number(manifest.legacyGames ?? 0);
-  const canonical = Number(manifest.canonicalSubjectGames ?? 0);
-  const withReplay = Number(manifest.canonicalGamesWithReplay ?? 0);
-
-  if (canonical < legacy) {
-    blockers.push(`only ${canonical} of ${legacy} legacy games have a canonical row`);
-  }
-  if (withReplay < canonical) {
-    blockers.push(
-      `${canonical - withReplay} canonical games have no replay revision; the legacy system stored no moves, so these must come from a provider re-fetch`,
-    );
-  }
-  if (Number(manifest.mismatchCount ?? 0) > 0) {
-    blockers.push(`${manifest.mismatchCount} reconciliation mismatches are unresolved`);
-  }
+  const blockers = cutoverBlockers({
+    legacyGames: Number(manifest.legacyGames ?? 0),
+    canonicalSubjectGames: Number(manifest.canonicalSubjectGames ?? 0),
+    canonicalGamesWithReplay: Number(manifest.canonicalGamesWithReplay ?? 0),
+    mismatchCount: Number(manifest.mismatchCount ?? 0),
+  });
 
   return { ready: blockers.length === 0, blockers, manifest };
 }

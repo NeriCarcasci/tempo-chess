@@ -50,7 +50,11 @@
     "sync:commit": "tsx src/sync/commit.test.ts",
     "positions:unit": "tsx src/positions/canonical.test.ts",
     "positions:materialize": "tsx src/positions/materialize.test.ts",
-    "backfill:proof": "tsx src/backfill/provider-proof.ts"
+    "backfill:proof": "tsx src/backfill/provider-proof.ts",
+    "backfill:unit": "tsx src/backfill/backfill.test.ts",
+    "backfill:games": "tsx src/backfill/cli.ts games",
+    "backfill:reconcile": "tsx src/backfill/cli.ts reconcile",
+    "backfill:cutover": "tsx src/backfill/cli.ts cutover"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",
