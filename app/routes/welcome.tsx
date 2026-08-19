@@ -97,8 +97,15 @@ export async function clientAction({ request }: Route.ClientActionArgs): Promise
         message: "That chess site did not answer. It is usually brief — try again in a moment.",
       };
     }
-    const candidate = (await response.json()) as Candidate;
-    return { kind: "candidate", candidate };
+    // The route answers `{ found: false }` with a 200, not a 404: "we asked and
+    // there is no such player" is a successful lookup. It also wraps the account
+    // in an envelope. Reading the envelope as the account itself is what made
+    // every field undefined and crashed the screen on `games.toLocaleString()`.
+    const body = (await response.json()) as
+      | { found: false }
+      | { found: true; account: Candidate };
+    if (!body.found || !body.account) return { kind: "not-found", platform, username };
+    return { kind: "candidate", candidate: body.account };
   }
 
   // --- confirm ------------------------------------------------------------
@@ -177,10 +184,10 @@ export default function Welcome() {
                 {candidate.username}
               </strong>
               <p className="tag-note">
-                {candidate.games === null
+                {candidate.games == null
                   ? "Public games available"
                   : `${candidate.games.toLocaleString()} public games`}
-                {candidate.rating === null ? "" : ` · rated ${candidate.rating}`}
+                {candidate.rating == null ? "" : ` · rated ${candidate.rating}`}
               </p>
               {candidate.closed ? (
                 <p className="tag-note">This account is closed. Its games can still be read.</p>
