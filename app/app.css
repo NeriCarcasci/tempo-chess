@@ -2538,3 +2538,28 @@
     font: 600 0.7rem/1 var(--font-mono);
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Connecting more than one account.                                    */
+/*                                                                      */
+/* Somebody who plays on both sites gets one report over both, so the    */
+/* screen has to show what is already connected while asking for the     */
+/* next one. The list is a sunk panel rather than a card: it is state,   */
+/* not a thing, and it sits under the question rather than competing     */
+/* with it.                                                              */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .connected-list {
+    margin-top: 1.1rem; display: grid; gap: 0.6rem;
+    border-radius: 12px; padding: 0.9rem 1rem; background: var(--color-surface-2);
+  }
+  .connected-list ul { display: grid; gap: 0.45rem; }
+  .connected-row { display: flex; align-items: center; gap: 0.55rem; }
+  .connected-row strong { font-size: 0.92rem; }
+  .connected-mark { display: grid; place-items: center; flex: 0 0 auto; }
+  .auth-note {
+    margin-top: 0.7rem; border-radius: 10px; padding: 0.6rem 0.75rem;
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+    font-size: 0.85rem; line-height: 1.5; color: var(--color-ink);
+  }
+}

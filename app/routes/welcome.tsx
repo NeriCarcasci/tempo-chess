@@ -4,9 +4,11 @@ import type { Route } from "./+types/welcome";
 import { OnboardingShell } from "../components/onboarding/OnboardingShell";
 import { ProviderChoice, type Provider } from "../components/onboarding/ProviderChoice";
 import { RouteError } from "../components/RouteError";
-import { getOnboarding, linkAndStart } from "../lib/onboarding/api";
+import { getMe, getOnboarding, linkAccount, startRun } from "../lib/onboarding/api";
 import { nextScreen } from "../lib/onboarding/nextScreen";
 import { ProblemError } from "../lib/v1/problem";
+import { newIdempotencyKey } from "../lib/v1/client";
+import type { LinkedAccount } from "../lib/v1/types";
 import { apiFetch } from "../lib/api";
 import { invalidateSession, requireUser, setActiveAccount } from "../lib/session";
 import { invalidateCache } from "../lib/loaderCache";
@@ -53,9 +55,15 @@ interface Candidate {
 type ActionResult =
   | { kind: "not-found"; platform: Provider; username: string }
   | { kind: "candidate"; candidate: Candidate }
+  | { kind: "added"; handle: string }
   | { kind: "error"; message: string; code?: string };
 
-export async function clientLoader() {
+interface LoaderData {
+  /** Everything already connected, so the list survives adding the next one. */
+  accounts: LinkedAccount[];
+}
+
+export async function clientLoader(): Promise<LoaderData> {
   await requireUser();
   const state = await getOnboarding();
 
@@ -73,7 +81,11 @@ export async function clientLoader() {
   if (state.stage !== "not_started" && live && destination.kind !== "welcome") {
     throw redirect("/onboarding");
   }
-  return null;
+  // The list is read from the server rather than accumulated in component
+  // state: adding an account is a write on two surfaces, and a client-side
+  // list would happily show one that only half-landed.
+  const me = await getMe().catch(() => null);
+  return { accounts: me?.accounts ?? [] };
 }
 
 export async function clientAction({ request }: Route.ClientActionArgs): Promise<ActionResult> {
@@ -84,7 +96,9 @@ export async function clientAction({ request }: Route.ClientActionArgs): Promise
     : "lichess") as Provider;
   const username = String(form.get("username") ?? "").trim();
 
-  if (!username) return { kind: "error", message: "Enter the name you play under." };
+  if (intent !== "start" && !username) {
+    return { kind: "error", message: "Enter the name you play under." };
+  }
 
   if (intent === "lookup") {
     const response = await apiFetch(
@@ -108,34 +122,55 @@ export async function clientAction({ request }: Route.ClientActionArgs): Promise
     return { kind: "candidate", candidate: body.account };
   }
 
-  // --- confirm ------------------------------------------------------------
-  try {
-    // 1-3: the legacy surface, so the session and the unported screens work.
-    const legacy = await apiFetch("/me/accounts", {
-      json: { username, platform },
-    });
-    if (legacy.ok || legacy.status === 409) {
-      const body = (await legacy.json().catch(() => null)) as { id?: string; userId?: string } | null;
-      if (body?.id && body.userId) setActiveAccount(body.userId, body.id);
-      invalidateSession();
-      invalidateCache();
-      await apiFetch("/imports/lichess", {
-        // `platform` is not optional: without it the importer assumed Lichess
-        // for everybody, which imported nothing for a Chess.com player.
-        json: { username, platform, games: "all" },
-      }).catch(() => null);
+  // --- add -----------------------------------------------------------------
+  // Linking and starting are separate intents now. Somebody who plays on both
+  // sites gets one report covering both, and the planner already emits a sync
+  // task per account and holds the baseline until every one of them lands --
+  // starting after the first would freeze a snapshot over half an archive.
+  if (intent === "add") {
+    try {
+      // The legacy surface too, so the session and the unported screens see the
+      // account. Goes first: `requireSession()` reads the legacy list, and an
+      // account that exists only on /v1 leaves the person bounced out of every
+      // product route with nothing on screen explaining why.
+      const legacy = await apiFetch("/me/accounts", { json: { username, platform } });
+      if (legacy.ok || legacy.status === 409) {
+        const body = (await legacy.json().catch(() => null)) as
+          | { id?: string; userId?: string }
+          | null;
+        if (body?.id && body.userId) setActiveAccount(body.userId, body.id);
+        invalidateSession();
+        invalidateCache();
+        await apiFetch("/imports/lichess", {
+          // `platform` is not optional: without it the importer assumed Lichess
+          // for everybody, which imported nothing for a Chess.com player.
+          json: { username, platform, games: "all" },
+        }).catch(() => null);
+      }
+      await linkAccount({
+        provider: platform,
+        handle: username,
+        idempotencyKey: newIdempotencyKey(),
+      });
+      return { kind: "added", handle: username };
+    } catch (error) {
+      if (error instanceof ProblemError) {
+        return { kind: "error", message: error.message, code: error.code };
+      }
+      return { kind: "error", message: "That did not go through. Try again." };
     }
+  }
 
-    // 4-5: the versioned surface, which is what the examination reads.
-    const state = await linkAndStart({ provider: platform, handle: username });
-
+  // --- start ---------------------------------------------------------------
+  try {
+    const state = await startRun({ idempotencyKey: newIdempotencyKey() });
     // A 2xx does not mean it started: with no active linked account the planner
     // fails the run inside the same request.
     if (state.status === "failed") {
       return {
         kind: "error",
         message:
-          "That account linked, but there was nothing to read from it. Check the name and try again.",
+          "Those accounts linked, but there was nothing to read from them. Check the names and try again.",
         code: state.failureReason ?? undefined,
       };
     }
@@ -153,7 +188,8 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   return <RouteError title="Could not open this page" error={error} />;
 }
 
-export default function Welcome() {
+export default function Welcome({ loaderData }: Route.ComponentProps) {
+  const { accounts } = loaderData as LoaderData;
   const result = useActionData<ActionResult>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -197,11 +233,11 @@ export default function Welcome() {
         </div>
 
         <Form method="post" className="onboarding-actions">
-          <input type="hidden" name="intent" value="confirm" />
+          <input type="hidden" name="intent" value="add" />
           <input type="hidden" name="platform" value={candidate.platform} />
           <input type="hidden" name="username" value={candidate.username} />
           <button className="primary-button btn-lg" disabled={busy}>
-            {busy ? "Starting…" : "Yes, read my games"}
+            {busy ? "Connecting…" : "Yes, that's me"}
           </button>
           <Link to="/welcome" className="chip-btn">
             Not me
@@ -211,11 +247,43 @@ export default function Welcome() {
     );
   }
 
+  const connected = accounts.filter((account) => account.status === "active");
+
   return (
     <OnboardingShell
-      title="Connect your chess account"
-      sub="Forma reads the games you have already played. Nothing is posted, and only public game data is read."
+      title={connected.length ? "Add another account?" : "Connect your chess account"}
+      sub={
+        connected.length
+          ? "Add every site you play on and the first report covers all of them together. You can start whenever you are ready."
+          : "Forma reads the games you have already played. Nothing is posted, and only public game data is read."
+      }
     >
+      {connected.length > 0 ? (
+        <div className="connected-list">
+          <p className="cap">Connected</p>
+          <ul>
+            {connected.map((account) => (
+              <li key={account.id} className="connected-row">
+                <span className="connected-mark" aria-hidden="true">
+                  {account.provider === "chesscom" ? <ChessComMark size={16} /> : <LichessMark size={16} />}
+                </span>
+                <strong>{account.handle ?? "Connected account"}</strong>
+                <span className="tag tag-sub">
+                  {account.provider === "chesscom" ? "Chess.com" : "Lichess"}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <Form method="post" className="onboarding-actions">
+            <input type="hidden" name="intent" value="start" />
+            <button className="primary-button btn-lg" disabled={busy}>
+              {busy ? "Starting…" : `Read my games`}
+            </button>
+          </Form>
+        </div>
+      ) : null}
+
       <Form method="post" className="auth-reset">
         <input type="hidden" name="intent" value="lookup" />
         <ProviderChoice value={provider} onChange={setProvider} />
@@ -251,6 +319,11 @@ export default function Welcome() {
           `ProblemError` whose code decides the copy, and here the server has
           already told us what went wrong. */}
         {result?.kind === "error" ? <p className="auth-error">{result.message}</p> : null}
+        {result?.kind === "added" ? (
+          <p className="auth-note">
+            <strong>{result.handle}</strong> is connected. Add another site, or read your games.
+          </p>
+        ) : null}
       </div>
     </OnboardingShell>
   );
