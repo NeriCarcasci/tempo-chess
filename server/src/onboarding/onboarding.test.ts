@@ -59,6 +59,7 @@ function runState(over: Partial<RunState> = {}): RunState {
     syncComplete: false,
     analysisComplete: false,
     diagnosticComplete: false,
+    diagnosticSessionId: null,
     baselineReportId: null,
     reportViewedAt: null,
     goalSelectedAt: null,
@@ -66,6 +67,36 @@ function runState(over: Partial<RunState> = {}): RunState {
     ...over,
   };
 }
+
+test("an adaptive run with no diagnostic session does not wait for one", () => {
+  // The default choice is `adaptive`, and nothing in the product creates a
+  // session yet. Waiting for one that cannot arrive left every journey sitting
+  // on `start_diagnostic` with its report built and unread.
+  const state = runState({
+    hasLinkedAccount: true,
+    syncComplete: true,
+    analysisComplete: true,
+    diagnosticChoice: "adaptive",
+    diagnosticSessionId: null,
+    baselineReportId: "report-1",
+  });
+  assert.equal(deriveStage(state), "report_ready");
+  assert.equal(nextAction(state).action, "view_report");
+});
+
+test("an adaptive run with a session still waits for it", () => {
+  const state = runState({
+    hasLinkedAccount: true,
+    syncComplete: true,
+    analysisComplete: true,
+    diagnosticChoice: "adaptive",
+    diagnosticSessionId: "session-1",
+    diagnosticComplete: false,
+    baselineReportId: "report-1",
+  });
+  assert.equal(deriveStage(state), "diagnostic");
+  assert.equal(nextAction(state).action, "start_diagnostic");
+});
 
 const READY = runState({
   stage: "goal_setting",

@@ -19,6 +19,7 @@
  * happen.
  */
 
+import { ensureIdentity } from "../../identity/service.js";
 import { activateGoal } from "../../goals/activate.js";
 import { planProgressForSubject } from "../../goals/progress-worker.js";
 import type { ResolvedTarget } from "../../goals/resolve.js";
@@ -178,8 +179,8 @@ const listRoute: RouteDefinition<never, never, GoalView[]> = {
 // POST /v1/goals
 // ---------------------------------------------------------------------------
 
+/** No `subjectId`: the kernel refuses one, and identity comes from the token. */
 const createBody = z.object({
-  subjectId: z.uuid(),
   templateVersionId: z.uuid().nullable().default(null),
   statedObjective: z.string().min(3).max(500),
   comparisonFrame: z.enum(["personal_current", "peer_current", "peer_stretch", "objective"]),
@@ -241,9 +242,9 @@ const createRoute: RouteDefinition<never, z.infer<typeof createBody>, z.infer<ty
   rateLimits: [{ policy: POLICIES.onboardingCommand, source: "actor" }],
   async handler({ auth, body }) {
     if (!auth) throw new ProblemError("AUTH_REQUIRED");
-    if (!auth.subjects.includes(body.subjectId)) {
-      throw new ProblemError("NOT_FOUND", { detail: "No such subject." });
-    }
+    // The caller's own personal subject, created on first sight.
+    const subjectId = await ensureIdentity(auth.profileId);
+    if (!subjectId) throw new ProblemError("NOT_FOUND", { detail: "No such subject." });
     const horizon = checkHorizon(body.horizonDays);
     if (!horizon.ok) {
       throw new ProblemError("VALIDATION_FAILED", { detail: horizon.detail });
@@ -265,7 +266,7 @@ const createRoute: RouteDefinition<never, z.infer<typeof createBody>, z.infer<ty
         from analysis.player_skill_estimates e
         join analysis.skill_dimensions d on d.id = e.skill_dimension_id
         join analysis.subject_live_publications p on p.run_id = e.analysis_run_id
-        where p.subject_id = ${body.subjectId} and e.window_kind = 'lifetime'
+        where p.subject_id = ${subjectId} and e.window_kind = 'lifetime'
       `;
       const byMetric = new Map(baselines.map((row) => [row.dimension_key, row]));
 
@@ -308,7 +309,7 @@ const createRoute: RouteDefinition<never, z.infer<typeof createBody>, z.infer<ty
       }
 
       const goalId = await createGoal(sql, {
-        subjectId: body.subjectId,
+        subjectId,
         templateVersionId: body.templateVersionId,
         statedObjective: body.statedObjective,
         comparisonFrame: body.comparisonFrame,
@@ -323,7 +324,7 @@ const createRoute: RouteDefinition<never, z.infer<typeof createBody>, z.infer<ty
       // nothing ever created the cycle it reads.
       const activation = await activateGoal(sql, {
         goalId,
-        subjectId: body.subjectId,
+        subjectId,
         targets: resolvedTargets,
         horizonDays: body.horizonDays,
       });
@@ -333,7 +334,7 @@ const createRoute: RouteDefinition<never, z.infer<typeof createBody>, z.infer<ty
       // set the goal. Planned here because only the API may create work.
       if (activation.activated) {
         await planProgressForSubject(client, {
-          subjectId: body.subjectId,
+          subjectId,
           ownerProfileId: auth.profileId,
           reason: `cycle-opened:${activation.cycleId}`,
         });

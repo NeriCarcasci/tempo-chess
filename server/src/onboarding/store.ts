@@ -58,6 +58,7 @@ export async function loadRun(
       sync_complete: boolean;
       analysis_complete: boolean;
       diagnostic_complete: boolean;
+      diagnostic_session_id: string | null;
       baseline_report_id: string | null;
     })[]
   >`
@@ -72,6 +73,7 @@ export async function loadRun(
            (w.state = 'succeeded') as sync_complete,
            (ar.status = 'succeeded') as analysis_complete,
            coalesce(ds.status = 'completed', false) as diagnostic_complete,
+           ds.id as diagnostic_session_id,
            br.id as baseline_report_id
     from coaching.onboarding_runs r
     left join ops.workflows w on w.id = r.sync_workflow_id
@@ -91,6 +93,7 @@ export async function loadRun(
     syncComplete: row.sync_complete === true,
     analysisComplete: row.analysis_complete === true,
     diagnosticComplete: row.diagnostic_complete === true,
+    diagnosticSessionId: row.diagnostic_session_id,
     baselineReportId: row.baseline_report_id,
     reportViewedAt: row.report_viewed_at,
     goalSelectedAt: row.goal_selected_at,

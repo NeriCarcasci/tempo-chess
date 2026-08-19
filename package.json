@@ -8,7 +8,10 @@
     "dev:api": "cd server && node --env-file=.env --import tsx src/index.ts",
     "dev:all": "concurrently -n api,web -c blue,green \"npm run dev:api\" \"npm run dev\"",
     "start": "react-router-serve ./build/server/index.js",
-    "typecheck": "react-router typegen && tsc"
+    "typecheck": "react-router typegen && tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "api:types": "openapi-typescript server/openapi/v1.json -o app/lib/v1/schema.d.ts"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
@@ -31,14 +34,19 @@
   "devDependencies": {
     "@react-router/dev": "8.3.0",
     "@tailwindcss/vite": "^4.2.2",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "concurrently": "^10.0.3",
     "drizzle-kit": "^0.31.10",
+    "happy-dom": "^20.11.2",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4.2.2",
     "tsx": "^4.23.1",
     "typescript": "^5.9.3",
-    "vite": "^8.0.3"
+    "vite": "^8.0.3",
+    "vitest": "^4.1.11"
   }
 }

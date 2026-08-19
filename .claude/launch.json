@@ -4,7 +4,19 @@
     {
       "name": "forma",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:all"],
+      "runtimeArgs": [
+        "run",
+        "dev:all"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "forma-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173
     }
   ]

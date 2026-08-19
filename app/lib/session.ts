@@ -234,13 +234,16 @@ export function getSession(): Promise<Session | null> {
 
 /**
  * For protected loaders: return the session or redirect to sign-in. A signed-in
- * user with no linked chess account is sent to onboarding instead, since every
+ * user with no linked chess account is sent to `/welcome` instead, since every
  * study surface needs games to work from.
  */
 export async function requireSession(): Promise<Session> {
   const session = await getSession();
   if (!session) throw redirect("/login");
-  if (!session.username) throw redirect("/account/connect");
+  // `/welcome` is where a new person connects an account and the examination
+  // starts. `/account/connect` is still mounted for "link another account",
+  // which is a different errand.
+  if (!session.username) throw redirect("/welcome");
   return session;
 }
 

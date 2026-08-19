@@ -26,6 +26,17 @@ export interface RunState {
   syncComplete: boolean;
   analysisComplete: boolean;
   diagnosticComplete: boolean;
+  /**
+   * The open diagnostic session, when there is one.
+   *
+   * A run waits on the diagnostic only if a session actually exists. Waiting on
+   * one that was never created is how `adaptive` — the default — used to hang a
+   * journey permanently: nothing in the product creates a session yet, so every
+   * run that reached this point sat on `start_diagnostic` for ever, report
+   * built and unread. When the selector lands, this branch starts working again
+   * with no further change.
+   */
+  diagnosticSessionId: string | null;
   baselineReportId: string | null;
   reportViewedAt: Date | null;
   goalSelectedAt: Date | null;
@@ -60,7 +71,13 @@ export function deriveStage(state: RunState): Stage {
   if (!state.hasLinkedAccount) return "linking";
   if (!state.syncComplete) return "syncing";
   if (!state.analysisComplete) return "analysing";
-  if (state.diagnosticChoice === "adaptive" && !state.diagnosticComplete) return "diagnostic";
+  if (
+    state.diagnosticChoice === "adaptive" &&
+    typeof state.diagnosticSessionId === "string" &&
+    !state.diagnosticComplete
+  ) {
+    return "diagnostic";
+  }
   // The report is built after the diagnostic, so a run with the diagnostic done
   // and no report yet is still doing analysis work rather than waiting on a
   // person.
@@ -95,7 +112,11 @@ export function nextAction(state: RunState): NextAction {
   if (!state.analysisComplete) {
     return { action: "wait", reason: "analysing your games" };
   }
-  if (state.diagnosticChoice === "adaptive" && !state.diagnosticComplete) {
+  if (
+    state.diagnosticChoice === "adaptive" &&
+    typeof state.diagnosticSessionId === "string" &&
+    !state.diagnosticComplete
+  ) {
     return { action: "start_diagnostic", reason: "the diagnostic can reduce uncertainty" };
   }
   if (state.baselineReportId === null) {

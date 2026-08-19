@@ -3535,11 +3535,6 @@
                     "minLength": 3,
                     "type": "string"
                   },
-                  "subjectId": {
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-                    "type": "string"
-                  },
                   "targetProvider": {
                     "anyOf": [
                       {
@@ -3624,7 +3619,6 @@
                   }
                 },
                 "required": [
-                  "subjectId",
                   "statedObjective",
                   "comparisonFrame"
                 ],
@@ -5934,6 +5928,16 @@
                             }
                           ]
                         },
+                        "diagnosticSessionId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "failureReason": {
                           "anyOf": [
                             {
@@ -5996,6 +6000,7 @@
                         "diagnosticChoice",
                         "syncWorkflowId",
                         "baselineReportId",
+                        "diagnosticSessionId",
                         "failureReason",
                         "nextAction"
                       ],
@@ -6181,6 +6186,16 @@
                                 }
                               ]
                             },
+                            "diagnosticSessionId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
                             "failureReason": {
                               "anyOf": [
                                 {
@@ -6243,6 +6258,7 @@
                             "diagnosticChoice",
                             "syncWorkflowId",
                             "baselineReportId",
+                            "diagnosticSessionId",
                             "failureReason",
                             "nextAction"
                           ],
@@ -6406,16 +6422,8 @@
                       "skip"
                     ],
                     "type": "string"
-                  },
-                  "subjectId": {
-                    "format": "uuid",
-                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
-                    "type": "string"
                   }
                 },
-                "required": [
-                  "subjectId"
-                ],
                 "type": "object"
               }
             }
@@ -6443,6 +6451,16 @@
                           ]
                         },
                         "diagnosticChoice": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "diagnosticSessionId": {
                           "anyOf": [
                             {
                               "type": "string"
@@ -6514,6 +6532,7 @@
                         "diagnosticChoice",
                         "syncWorkflowId",
                         "baselineReportId",
+                        "diagnosticSessionId",
                         "failureReason",
                         "nextAction"
                       ],
@@ -6683,6 +6702,16 @@
                             }
                           ]
                         },
+                        "diagnosticSessionId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "failureReason": {
                           "anyOf": [
                             {
@@ -6745,6 +6774,7 @@
                         "diagnosticChoice",
                         "syncWorkflowId",
                         "baselineReportId",
+                        "diagnosticSessionId",
                         "failureReason",
                         "nextAction"
                       ],

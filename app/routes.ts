@@ -14,10 +14,13 @@ export default [
   route("signup", "routes/signup.tsx"),
   route("reset-password", "routes/reset-password.tsx"),
   route("account/connect", "routes/connect.tsx"),
+  route("welcome", "routes/welcome.tsx"),
 
   // --- product: everything below needs a session -----------------------
   // The primary nav is the three phases of a game, plus the queue that draws
   // from all three. Lessons and the drill surfaces live under them.
+  route("onboarding", "routes/onboarding.tsx"),
+  route("report", "routes/report.tsx"),
   route("today", "routes/dashboard.tsx"),
   route("dashboard", "routes/dashboard-redirect.tsx"),
   route("openings", "routes/openings.tsx"),
@@ -32,5 +35,6 @@ export default [
   route("train", "routes/train.tsx"),
   route("dev/operations", "routes/operations.tsx"),
   route("dev/preview-rook", "routes/__preview-rook.tsx"),
+  route("dev/foundation", "routes/__foundation.tsx"),
   route("game/:id", "routes/game.tsx"),
 ] satisfies RouteConfig;

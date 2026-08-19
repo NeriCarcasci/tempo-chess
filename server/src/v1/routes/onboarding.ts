@@ -14,6 +14,7 @@
  */
 
 import { beginOnboarding } from "../../onboarding/planner.js";
+import { ensureIdentity } from "../../identity/service.js";
 import { requiredIso } from "../../db/timestamps.js";
 import { z } from "zod";
 
@@ -61,6 +62,13 @@ const onboardingStateSchema = z.object({
   diagnosticChoice: z.string().nullable(),
   syncWorkflowId: z.string().nullable(),
   baselineReportId: z.string().nullable(),
+  /**
+   * The open diagnostic session, when there is one.
+   *
+   * Without this a client that was told to `start_diagnostic` had no way to
+   * reach the session: nothing lists them and the session endpoint needs an id.
+   */
+  diagnosticSessionId: z.string().nullable(),
   failureReason: z.string().nullable(),
   nextAction: nextActionSchema,
 });
@@ -74,6 +82,7 @@ const NOT_STARTED: OnboardingStateView = {
   diagnosticChoice: null,
   syncWorkflowId: null,
   baselineReportId: null,
+  diagnosticSessionId: null,
   failureReason: null,
   nextAction: { action: "link_account", reason: "no account is linked yet" },
 };
@@ -116,6 +125,7 @@ function viewOf(run: NonNullable<Awaited<ReturnType<typeof loadRun>>>): Onboardi
     diagnosticChoice: run.row.diagnostic_choice,
     syncWorkflowId: run.row.sync_workflow_id,
     baselineReportId: run.baselineReportId,
+    diagnosticSessionId: run.state.diagnosticSessionId,
     failureReason: run.row.failure_reason,
     nextAction: nextAction(run.state),
   };
@@ -125,8 +135,16 @@ function viewOf(run: NonNullable<Awaited<ReturnType<typeof loadRun>>>): Onboardi
 // POST /v1/onboarding/runs
 // ---------------------------------------------------------------------------
 
+/**
+ * No `subjectId`.
+ *
+ * The kernel refuses any body carrying one — identity comes from the token and
+ * cannot be set on a request (auth/context.ts, CLIENT_FORBIDDEN_IDENTITY_FIELDS)
+ * — so a schema that *required* it made this route uncallable: sending the
+ * field was a 400 and omitting it was a 400. It was never noticed because the
+ * journey gate calls `startRun` directly rather than going through the route.
+ */
 const startBody = z.object({
-  subjectId: z.uuid(),
   diagnostic: z.enum(["adaptive", "skip"]).default("adaptive"),
 });
 
@@ -147,13 +165,14 @@ const startRoute: RouteDefinition<never, z.infer<typeof startBody>, OnboardingSt
   rateLimits: [{ policy: POLICIES.onboardingCommand, source: "actor" }],
   async handler({ auth, body, traceId }) {
     if (!auth) throw new ProblemError("AUTH_REQUIRED");
-    // Subject ownership is the caller's own list, never the request's claim.
-    if (!auth.subjects.includes(body.subjectId)) {
-      throw new ProblemError("NOT_FOUND", { detail: "No such subject." });
-    }
+    // The caller's own personal subject, created on first sight. There is no
+    // parameter that selects another one, which is the whole point.
+    const subjectId = await ensureIdentity(auth.profileId);
+    if (!subjectId) throw new ProblemError("NOT_FOUND", { detail: "No such subject." });
+
     const started = await startRun(client, {
       userId: auth.profileId,
-      subjectId: body.subjectId,
+      subjectId,
       diagnosticChoice: body.diagnostic,
     });
     // Starting is planning the work, not writing a row and hoping. A resumed
@@ -164,7 +183,7 @@ const startRoute: RouteDefinition<never, z.infer<typeof startBody>, OnboardingSt
       await beginOnboarding(client, {
         runId: started.runId,
         userId: auth.profileId,
-        subjectId: body.subjectId,
+        subjectId,
       });
     }
     const run = await withActorContext(auth.profileId, (sql) =>

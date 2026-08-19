@@ -34,7 +34,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
   // Linking a chess account is a separate, skippable step — asking for it on the
   // same form as the password made signup feel like a form to fill in rather
   // than a thing to try.
-  throw redirect("/account/connect");
+  throw redirect("/welcome");
 }
 
 export default function Signup({ actionData }: Route.ComponentProps) {
