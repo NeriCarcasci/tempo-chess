@@ -84,7 +84,9 @@
     "estimates:performance": "tsx src/estimates/gates/performance.ts",
     "onboarding:unit": "tsx src/onboarding/onboarding.test.ts",
     "onboarding:migration": "tsx src/onboarding/gates/migration.ts",
-    "onboarding:security": "tsx src/onboarding/gates/security.ts"
+    "onboarding:security": "tsx src/onboarding/gates/security.ts",
+    "goals:unit": "tsx src/goals/goals.test.ts",
+    "goals:migration": "tsx src/goals/gates/migration.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

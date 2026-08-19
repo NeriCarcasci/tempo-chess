@@ -2200,6 +2200,2198 @@
         "summary": "The published objective review of one owned game"
       }
     },
+    "/v1/goal-templates": {
+      "get": {
+        "description": "`requiresCalibratedCohort` is the caveat made explicit: a template that needs a calibrated cohort cannot state a numeric target for a player outside the calibrated band, and the client should say so rather than offering a promise Forma cannot keep.",
+        "operationId": "listGoalTemplates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "category": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "requiresCalibratedCohort": {
+                            "type": "boolean"
+                          },
+                          "supportedOutcome": {
+                            "type": "string"
+                          },
+                          "templateKey": {
+                            "type": "string"
+                          },
+                          "templateVersionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "templateVersionId",
+                          "templateKey",
+                          "category",
+                          "displayName",
+                          "supportedOutcome",
+                          "requiresCalibratedCohort"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    },
+                    "page": {
+                      "properties": {
+                        "hasMore": {
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "nextCursor",
+                        "hasMore"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "page",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The promoted goal templates and what each one needs",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "The promoted goal templates and what each one needs"
+      }
+    },
+    "/v1/goals": {
+      "get": {
+        "operationId": "listGoals",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "activatedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "closeNote": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "closeOutcome": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "closedAt": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "comparisonFrame": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "goalId": {
+                            "type": "string"
+                          },
+                          "horizonDays": {
+                            "anyOf": [
+                              {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "statedObjective": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "subjectId": {
+                            "type": "string"
+                          },
+                          "targetProvider": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "targetSpeed": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "uncalibratedCaveat": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "goalId",
+                          "subjectId",
+                          "status",
+                          "statedObjective",
+                          "comparisonFrame",
+                          "targetProvider",
+                          "targetSpeed",
+                          "horizonDays",
+                          "uncalibratedCaveat",
+                          "createdAt",
+                          "activatedAt",
+                          "closedAt",
+                          "closeOutcome",
+                          "closeNote"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    },
+                    "page": {
+                      "properties": {
+                        "hasMore": {
+                          "type": "boolean"
+                        },
+                        "nextCursor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "nextCursor",
+                        "hasMore"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "page",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The caller's goals",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "The caller's goals"
+      },
+      "post": {
+        "description": "A requested target inside the noise floor is moved out to the smallest change that can actually be measured, and `adjustedFromRequested` says what was asked for. A target that cannot be resolved at all is returned in `rejected` with a stable code rather than silently dropped.",
+        "operationId": "createGoal",
+        "parameters": [
+          {
+            "description": "Opaque client-generated value. An identical retry replays the original response; a different request under the same key is a conflict.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "properties": {
+                  "comparisonFrame": {
+                    "enum": [
+                      "personal_current",
+                      "peer_current",
+                      "peer_stretch",
+                      "objective"
+                    ],
+                    "type": "string"
+                  },
+                  "horizonDays": {
+                    "anyOf": [
+                      {
+                        "maximum": 9007199254740991,
+                        "minimum": -9007199254740991,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "statedObjective": {
+                    "maxLength": 500,
+                    "minLength": 3,
+                    "type": "string"
+                  },
+                  "subjectId": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "targetProvider": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "lichess",
+                          "chesscom"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "targetSpeed": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "bullet",
+                          "blitz",
+                          "rapid",
+                          "classical",
+                          "correspondence"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "targets": {
+                    "default": [],
+                    "items": {
+                      "properties": {
+                        "direction": {
+                          "enum": [
+                            "increase",
+                            "decrease"
+                          ],
+                          "type": "string"
+                        },
+                        "metricKey": {
+                          "pattern": "^[a-z][a-z0-9_]{2,63}$",
+                          "type": "string"
+                        },
+                        "requestedValue": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "metricKey",
+                        "direction"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 6,
+                    "type": "array"
+                  },
+                  "templateVersionId": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "subjectId",
+                  "statedObjective",
+                  "comparisonFrame"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "goal": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "activatedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "closeNote": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "closeOutcome": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "closedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "comparisonFrame": {
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "goalId": {
+                              "type": "string"
+                            },
+                            "horizonDays": {
+                              "anyOf": [
+                                {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "statedObjective": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "subjectId": {
+                              "type": "string"
+                            },
+                            "targetProvider": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "targetSpeed": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "uncalibratedCaveat": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "goalId",
+                            "subjectId",
+                            "status",
+                            "statedObjective",
+                            "comparisonFrame",
+                            "targetProvider",
+                            "targetSpeed",
+                            "horizonDays",
+                            "uncalibratedCaveat",
+                            "createdAt",
+                            "activatedAt",
+                            "closedAt",
+                            "closeOutcome",
+                            "closeNote"
+                          ],
+                          "type": "object"
+                        },
+                        "rejected": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "code": {
+                                "type": "string"
+                              },
+                              "detail": {
+                                "type": "string"
+                              },
+                              "metricKey": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "metricKey",
+                              "code",
+                              "detail"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "targets": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "adjustedFromRequested": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "baselineValue": {
+                                "type": "number"
+                              },
+                              "direction": {
+                                "type": "string"
+                              },
+                              "metricKey": {
+                                "type": "string"
+                              },
+                              "targetValue": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "metricKey",
+                              "baselineValue",
+                              "targetValue",
+                              "direction",
+                              "adjustedFromRequested"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "goal",
+                        "targets",
+                        "rejected"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Draft a goal and resolve its targets",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The request could not be accepted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "This idempotency key was already used for a different request"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "Draft a goal and resolve its targets"
+      }
+    },
+    "/v1/goals/{goalId}": {
+      "get": {
+        "operationId": "getGoal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goalId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "activatedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "closeNote": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "closeOutcome": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "closedAt": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "comparisonFrame": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "goalId": {
+                          "type": "string"
+                        },
+                        "horizonDays": {
+                          "anyOf": [
+                            {
+                              "maximum": 9007199254740991,
+                              "minimum": -9007199254740991,
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "statedObjective": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "subjectId": {
+                          "type": "string"
+                        },
+                        "targetProvider": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "targetSpeed": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "uncalibratedCaveat": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "goalId",
+                        "subjectId",
+                        "status",
+                        "statedObjective",
+                        "comparisonFrame",
+                        "targetProvider",
+                        "targetSpeed",
+                        "horizonDays",
+                        "uncalibratedCaveat",
+                        "createdAt",
+                        "activatedAt",
+                        "closedAt",
+                        "closeOutcome",
+                        "closeNote"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "One goal",
+            "headers": {
+              "ETag": {
+                "description": "Strong validator for If-None-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The caller's copy is current."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "One goal"
+      }
+    },
+    "/v1/goals/{goalId}/close": {
+      "post": {
+        "description": "The goal closes as the user asked — it is theirs. What the product will not do is record `achieved` when the evidence does not support it: closing something as complete without demonstrated real-game evidence closes it with a note saying exactly that.",
+        "operationId": "closeGoal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goalId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Opaque client-generated value. An identical retry replays the original response; a different request under the same key is a conflict.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "properties": {
+                  "note": {
+                    "anyOf": [
+                      {
+                        "maxLength": 500,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "outcome": {
+                    "enum": [
+                      "completed",
+                      "abandoned",
+                      "replaced"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "outcome"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "closed": {
+                          "type": "boolean"
+                        },
+                        "demonstrated": {
+                          "type": "boolean"
+                        },
+                        "goal": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "activatedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "closeNote": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "closeOutcome": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "closedAt": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "comparisonFrame": {
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "goalId": {
+                              "type": "string"
+                            },
+                            "horizonDays": {
+                              "anyOf": [
+                                {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "statedObjective": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "subjectId": {
+                              "type": "string"
+                            },
+                            "targetProvider": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "targetSpeed": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "uncalibratedCaveat": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "goalId",
+                            "subjectId",
+                            "status",
+                            "statedObjective",
+                            "comparisonFrame",
+                            "targetProvider",
+                            "targetSpeed",
+                            "horizonDays",
+                            "uncalibratedCaveat",
+                            "createdAt",
+                            "activatedAt",
+                            "closedAt",
+                            "closeOutcome",
+                            "closeNote"
+                          ],
+                          "type": "object"
+                        },
+                        "note": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "closed",
+                        "demonstrated",
+                        "note",
+                        "goal"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Close a goal, and say whether the target was actually demonstrated",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The request could not be accepted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "This idempotency key was already used for a different request"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "Close a goal, and say whether the target was actually demonstrated"
+      }
+    },
+    "/v1/goals/{goalId}/commitments/{commitmentKey}": {
+      "put": {
+        "description": "Append-only: a change writes a new revision rather than editing the last one, and the confirmation time is required. A commitment is never inferred from what somebody actually did — that would be the product deciding what they signed up for and then holding them to it.",
+        "operationId": "setGoalCommitment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goalId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "commitmentKey",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Opaque client-generated value. An identical retry replays the original response; a different request under the same key is a conflict.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "properties": {
+                  "acceptedRequirementKeys": {
+                    "default": [],
+                    "items": {
+                      "pattern": "^[a-z][a-z0-9_]{2,63}$",
+                      "type": "string"
+                    },
+                    "maxItems": 20,
+                    "type": "array"
+                  },
+                  "cadence": {
+                    "enum": [
+                      "daily",
+                      "weekly",
+                      "fortnightly"
+                    ],
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "target": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000,
+                    "type": "number"
+                  },
+                  "unit": {
+                    "enum": [
+                      "games",
+                      "reviews",
+                      "sessions",
+                      "minutes"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "target",
+                  "cadence",
+                  "unit"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "commitmentKey": {
+                          "type": "string"
+                        },
+                        "confirmedAt": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "commitmentKey",
+                        "revision",
+                        "confirmedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Record what the user is committing to",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The request could not be accepted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "This idempotency key was already used for a different request"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "Record what the user is committing to"
+      }
+    },
+    "/v1/goals/{goalId}/plan": {
+      "get": {
+        "description": "Every requirement carries the rationale it was generated with. There is no universal rule here: the plan is derived from the gaps this person's own report found, and a requirement that cannot say which gap it addresses would be a chore rather than coaching.",
+        "operationId": "getGoalPlan",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goalId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "commitments": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "cadence": {
+                                "type": "string"
+                              },
+                              "commitmentKey": {
+                                "type": "string"
+                              },
+                              "confirmedAt": {
+                                "type": "string"
+                              },
+                              "enabled": {
+                                "type": "boolean"
+                              },
+                              "revision": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "target": {
+                                "type": "number"
+                              },
+                              "unit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "commitmentKey",
+                              "revision",
+                              "target",
+                              "cadence",
+                              "unit",
+                              "enabled",
+                              "confirmedAt"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "cycleId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "requirements": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "displayRank": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "essential": {
+                                "type": "boolean"
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "quantity": {
+                                "type": "number"
+                              },
+                              "rationale": {
+                                "type": "string"
+                              },
+                              "requirementKey": {
+                                "type": "string"
+                              },
+                              "unit": {
+                                "type": "string"
+                              },
+                              "windowDays": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "requirementKey",
+                              "kind",
+                              "quantity",
+                              "unit",
+                              "windowDays",
+                              "essential",
+                              "rationale",
+                              "displayRank"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "state": {
+                          "enum": [
+                            "published",
+                            "unavailable"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "cycleId",
+                        "requirements",
+                        "commitments"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The ranked plan for a goal's active cycle",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "The ranked plan for a goal's active cycle"
+      }
+    },
+    "/v1/goals/{goalId}/progress": {
+      "get": {
+        "description": "Three separate members on purpose. Adherence is what the user did against what they committed to; readiness is how close the estimate is to the target; real-game evidence is the only thing that can complete a goal. A client cannot render progress from the activity counter, because the activity counter is a different field.",
+        "operationId": "getGoalProgress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "goalId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "adherence": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "note": {
+                              "type": "string"
+                            },
+                            "ratio": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "ratio",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "metrics": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "claimState": {
+                                "type": "string"
+                              },
+                              "currentValue": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "metricKey": {
+                                "type": "string"
+                              },
+                              "readiness": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "targetAchieved": {
+                                "type": "boolean"
+                              },
+                              "unavailableReason": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "metricKey",
+                              "currentValue",
+                              "readiness",
+                              "claimState",
+                              "targetAchieved",
+                              "unavailableReason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "practiceEvidence": {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        "realGameEvidence": {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        "state": {
+                          "enum": [
+                            "published",
+                            "unavailable"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "metrics",
+                        "adherence",
+                        "realGameEvidence",
+                        "practiceEvidence"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Metric progress, adherence and real-game evidence, kept apart",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "Metric progress, adherence and real-game evidence, kept apart"
+      }
+    },
     "/v1/me": {
       "get": {
         "operationId": "getMe",
