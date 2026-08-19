@@ -199,53 +199,14 @@ export default function Welcome({ loaderData }: Route.ComponentProps) {
   // they pressed is disabled while it runs — which drops focus to <body>. Move
   // it to the new heading so a keyboard or screen-reader user is told where
   // they now are instead of being silently returned to the top of the document.
+  // The screen no longer swaps under the person, so there is no new heading to
+  // move focus to. The result region is what changed, and it is what a keyboard
+  // or screen-reader user needs to be taken to.
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (result) headingRef.current?.focus();
+    if (result) resultRef.current?.focus();
   }, [result]);
-
-  if (result?.kind === "candidate") {
-    const { candidate } = result;
-    return (
-      <OnboardingShell
-        title="Is this you?"
-        sub="Forma will read this account's public games and build your first report from them."
-        headingRef={headingRef}
-      >
-        <div className="line-list" style={{ marginTop: "1.2rem" }}>
-          <div className="line-row">
-            <div className="coverage-dimension">
-              <strong>
-                {candidate.platform === "chesscom" ? <ChessComMark size={16} /> : <LichessMark size={16} />}{" "}
-                {candidate.username}
-              </strong>
-              <p className="tag-note">
-                {candidate.games == null
-                  ? "Public games available"
-                  : `${candidate.games.toLocaleString()} public games`}
-                {candidate.rating == null ? "" : ` · rated ${candidate.rating}`}
-              </p>
-              {candidate.closed ? (
-                <p className="tag-note">This account is closed. Its games can still be read.</p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <Form method="post" className="onboarding-actions">
-          <input type="hidden" name="intent" value="add" />
-          <input type="hidden" name="platform" value={candidate.platform} />
-          <input type="hidden" name="username" value={candidate.username} />
-          <button className="primary-button btn-lg" disabled={busy}>
-            {busy ? "Connecting…" : "Yes, that's me"}
-          </button>
-          <Link to="/welcome" className="chip-btn">
-            Not me
-          </Link>
-        </Form>
-      </OnboardingShell>
-    );
-  }
 
   const connected = accounts.filter((account) => account.status === "active");
 
@@ -307,6 +268,45 @@ export default function Welcome({ loaderData }: Route.ComponentProps) {
           {busy ? "Looking…" : "Find my account"}
         </button>
       </Form>
+
+      {/* Inline, not a screen of its own. Confirming used to replace the page
+          and send you back to an empty form, which made connecting a second
+          site feel like starting over. The check itself stays: it is what
+          stops a typo becoming a linked account and an import of a stranger. */}
+      <div ref={resultRef} tabIndex={-1} className="outline-none">
+      {result?.kind === "candidate" ? (
+        <div className="candidate-card">
+          <p className="cap">Is this you?</p>
+          <div className="candidate-head">
+            <span aria-hidden="true">
+              {result.candidate.platform === "chesscom" ? <ChessComMark size={16} /> : <LichessMark size={16} />}
+            </span>
+            <strong>{result.candidate.username}</strong>
+          </div>
+          <p className="tag-note">
+            {result.candidate.games == null
+              ? "Public games available"
+              : `${result.candidate.games.toLocaleString()} public games`}
+            {result.candidate.rating == null ? "" : ` · rated ${result.candidate.rating}`}
+          </p>
+          {result.candidate.closed ? (
+            <p className="tag-note">This account is closed. Its games can still be read.</p>
+          ) : null}
+          <Form method="post" className="candidate-actions">
+            <input type="hidden" name="intent" value="add" />
+            <input type="hidden" name="platform" value={result.candidate.platform} />
+            <input type="hidden" name="username" value={result.candidate.username} />
+            <button className="primary-button" disabled={busy}>
+              {busy ? "Connecting…" : "Yes, that's me"}
+            </button>
+            <Link to="/welcome" className="chip-btn">
+              Not me
+            </Link>
+          </Form>
+        </div>
+      ) : null}
+
+      </div>
 
       <div aria-live="assertive" id="welcome-problem">
         {result?.kind === "not-found" ? (

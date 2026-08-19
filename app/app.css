@@ -2563,3 +2563,19 @@
     font-size: 0.85rem; line-height: 1.5; color: var(--color-ink);
   }
 }
+
+/* The candidate, confirmed in place. It sits between the form that produced
+   it and the connected list it is about to join, so the sequence reads as one
+   screen rather than three. */
+@layer components {
+  .candidate-card {
+    margin-top: 0.9rem; display: grid; gap: 0.35rem;
+    border-radius: 12px; padding: 0.9rem 1rem;
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+  }
+  .candidate-head { display: flex; align-items: center; gap: 0.5rem; }
+  .candidate-head strong { font-size: 1rem; }
+  .candidate-actions {
+    margin-top: 0.6rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem;
+  }
+}
