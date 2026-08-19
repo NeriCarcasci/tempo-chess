@@ -62,10 +62,49 @@ async function ensureProfile(actorId: string, email: string | null): Promise<"fr
   return rows[0]?.plan === "pro" ? "pro" : "free";
 }
 
+/**
+ * Ensure the account has an `app`-side profile and a personal subject.
+ *
+ * E06 introduced `app.profiles` and `app.analysis_subjects`, and 0017 backfilled
+ * one of each for every legacy profile that existed at the time. Nothing was
+ * ever written to create them for an account that signed up *afterwards* --
+ * every insert in the tree outside this function is a test fixture or a gate.
+ *
+ * The effect was that a new account got its legacy `public.profiles` row from
+ * `ensureProfile` above and nothing else, so `resolveSubjects` returned no
+ * subject and every `/v1` read answered as if the account were empty. Not an
+ * error, which is what made it survive: an empty account and an account the
+ * product forgot to create look identical from the outside.
+ *
+ * It runs inside the actor context because both tables force row level security
+ * against `private.current_actor_id()`, which is null on an unbound connection
+ * -- so an insert off the pool is silently refused by the policy rather than
+ * failing loudly.
+ */
+async function ensureSubject(actorId: string): Promise<void> {
+  await withActorContext(actorId, async (tx) => {
+    await tx`
+      insert into app.profiles (user_id) values (${actorId}::uuid)
+      on conflict (user_id) do nothing`;
+    // One personal subject per owner. `where not exists` rather than an upsert:
+    // there is no unique constraint on (owner_user_id, kind), because a person
+    // may legitimately own more than one subject later, and inventing one here
+    // would be a schema decision made by an auth helper.
+    await tx`
+      insert into app.analysis_subjects (kind, owner_user_id, display_label)
+      select 'personal', ${actorId}::uuid, 'My games'
+      where not exists (
+        select 1 from app.analysis_subjects
+        where owner_user_id = ${actorId}::uuid and kind = 'personal' and status = 'active'
+      )`;
+  });
+}
+
 export async function buildAuthorizationContext(
   token: VerifiedToken,
 ): Promise<AuthorizationContext> {
   const plan = await ensureProfile(token.actorId, token.email);
+  await ensureSubject(token.actorId);
   return {
     actorId: token.actorId,
     profileId: token.actorId,
