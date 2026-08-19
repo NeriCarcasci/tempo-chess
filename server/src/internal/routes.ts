@@ -1,3 +1,5 @@
+import { planPendingWork } from "../analysis/planner.js";
+import { planStaleProgress } from "../goals/progress-worker.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { ProblemError } from "../v1/problem.js";
@@ -199,6 +201,63 @@ const recoverLeasesRoute: RouteDefinition<never, Record<string, never>, z.infer<
   },
 };
 
+const sweepSchema = z.object({
+  materializations: z.number().int(),
+  analyses: z.number().int(),
+  alreadyPlanned: z.number().int(),
+  progressReadings: z.number().int(),
+});
+
+/**
+ * The sweep that moves the pipeline forward.
+ *
+ * Everything before this endpoint existed and nothing connected it: a synced
+ * game was never materialized, a materialized game was never analysed, and a
+ * goal was never re-measured when new evidence landed. The reason it is a sweep
+ * on the ops deployment rather than a step inside each worker is E04's grant:
+ * only `forma_api` and `forma_ops` may create work, because a worker that can
+ * create work can create unbounded work.
+ *
+ * Bounded, idempotent and safe to run every few minutes. A sweep that finds
+ * nothing to do is the normal case.
+ */
+const sweepRoute: RouteDefinition<never, Record<string, never>, z.infer<typeof sweepSchema>> = {
+  method: "POST",
+  path: "/internal/v1/work/sweep",
+  operationId: "sweepPendingWork",
+  summary: "Plan materialization, analysis and progress that nothing has planned yet",
+  kind: "command",
+  auth: "internal",
+  surface: "internal",
+  serviceRole: "ops",
+  idempotency: "ledger",
+  envelope: "resource",
+  successStatus: 200,
+  bodySchema: z.object({}).strict(),
+  dataSchema: sweepSchema,
+  async handler({ traceId }) {
+    const startedAt = performance.now();
+    const work = await planPendingWork(client, {});
+    const progress = await planStaleProgress(client, {});
+    recordOpsEvent({
+      event: "work_sweep",
+      traceId,
+      materializations: work.materializations,
+      analyses: work.analyses,
+      progressReadings: progress.queued,
+      durationMs: Math.round(performance.now() - startedAt),
+    });
+    return {
+      data: {
+        materializations: work.materializations,
+        analyses: work.analyses,
+        alreadyPlanned: work.skipped,
+        progressReadings: progress.queued,
+      },
+    };
+  },
+};
+
 const readySchema = z.object({
   ready: z.boolean(),
   database: z.enum(["ok", "unavailable"]),
@@ -246,4 +305,5 @@ export const INTERNAL_ROUTES: readonly RouteDefinition<never, never, never>[] = 
   dispatchRoute,
   recoverLeasesRoute,
   readyRoute,
+  sweepRoute,
 ] as unknown as readonly RouteDefinition<never, never, never>[];

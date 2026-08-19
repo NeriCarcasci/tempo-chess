@@ -91,6 +91,7 @@
     "practice:migration": "tsx src/practice/gates/migration.ts",
     "entitlements:unit": "tsx src/entitlements/entitlements.test.ts",
     "entitlements:migration": "tsx src/entitlements/gates/migration.ts",
+    "journey:gate": "tsx src/onboarding/gates/journey.ts",
     "public:unit": "tsx src/public/public.test.ts",
     "public:migration": "tsx src/public/gates/migration.ts",
     "public:security": "tsx src/public/gates/security.ts",

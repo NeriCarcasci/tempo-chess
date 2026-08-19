@@ -65,6 +65,16 @@ export interface RecoveryEvent {
   durationMs: number;
 }
 
+/** What one sweep planned. Counts only: no subject, game or user identifier. */
+export interface SweepEvent {
+  event: "work_sweep";
+  traceId: string | null;
+  materializations: number;
+  analyses: number;
+  progressReadings: number;
+  durationMs: number;
+}
+
 export interface WorkDepthEvent {
   event: "work_depth";
   traceId: string | null;
@@ -78,6 +88,7 @@ export type OpsEvent =
   | WorkflowEvent
   | DispatchEvent
   | RecoveryEvent
+  | SweepEvent
   | WorkDepthEvent;
 
 /** Every key an ops event may emit. The security gate asserts against this. */
@@ -94,6 +105,9 @@ export const OPS_EVENT_FIELDS = {
   ],
   lease_recovery: [
     "event", "traceId", "examined", "reconciledSucceeded", "requeued", "deadLettered", "durationMs",
+  ],
+  work_sweep: [
+    "event", "traceId", "materializations", "analyses", "progressReadings", "durationMs",
   ],
   work_depth: ["event", "traceId", "resourceClass", "ready", "oldestReadyAgeSeconds"],
 } as const satisfies Record<OpsEvent["event"], readonly string[]>;

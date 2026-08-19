@@ -13,6 +13,8 @@
  * different situations is the failure mode the spec is written against.
  */
 
+import { beginOnboarding } from "../../onboarding/planner.js";
+import { requiredIso } from "../../db/timestamps.js";
 import { z } from "zod";
 
 import { client } from "../../db/client.js";
@@ -154,6 +156,17 @@ const startRoute: RouteDefinition<never, z.infer<typeof startBody>, OnboardingSt
       subjectId: body.subjectId,
       diagnosticChoice: body.diagnostic,
     });
+    // Starting is planning the work, not writing a row and hoping. A resumed
+    // run does not plan again: the ledger's idempotency keys are derived from
+    // the run, so a second call would be refused anyway, and not asking is
+    // cheaper than being refused.
+    if (started.created) {
+      await beginOnboarding(client, {
+        runId: started.runId,
+        userId: auth.profileId,
+        subjectId: body.subjectId,
+      });
+    }
     const run = await withActorContext(auth.profileId, (sql) =>
       loadRun(sql, { runId: started.runId, ownerProfileId: auth.profileId }),
     );
@@ -592,7 +605,7 @@ const reportRoute: RouteDefinition<never, never, z.infer<typeof reportSchema>> =
       return {
         data: {
           reportId: report.id,
-          publishedAt: report.published_at.toISOString(),
+          publishedAt: requiredIso(report.published_at, "baseline_reports.published_at"),
           manifestSha256: report.manifest_sha256,
           plan: auth.plan as string,
           items: redacted.items.map((item) => ({

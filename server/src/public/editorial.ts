@@ -13,6 +13,7 @@
  */
 
 import { client } from "../db/client.js";
+import { toDate, type RawTimestamp } from "../db/timestamps.js";
 import {
   DIRECTORY_MAX_LIMIT,
   REDACTION_POLICY_VERSION,
@@ -373,26 +374,6 @@ export async function withdrawCaseStudy(
  * feature will be tempted to loosen. Consent is joined rather than trusted:
  * withdrawal takes a study down on the next read.
  */
-/**
- * A timestamp as it actually arrives.
- *
- * `drizzle(client)` mutates the shared postgres.js connection on construction,
- * replacing the parsers for every date and timestamp OID with a transparent one
- * so that drizzle can map them itself. Every raw query in this process
- * therefore gets a *string* back from a `timestamptz` column, and code that
- * assumed a Date fails with a TypeError three layers up, as a 500.
- *
- * So the row type says what is really there and `toDate` accepts either. Not a
- * workaround to remove later: whether a driver hands back a Date is a detail
- * this module should survive changing.
- */
-type Timestamp = string | Date | null;
-
-function toDate(value: Timestamp): Date | null {
-  if (value === null || value === undefined) return null;
-  return value instanceof Date ? value : new Date(value);
-}
-
 interface CaseStudyRow {
   id: string;
   slug: string;
@@ -401,28 +382,28 @@ interface CaseStudyRow {
   summary: string;
   caveats: string[];
   content_sha256: string;
-  published_at: Timestamp;
-  withdrawn_at: Timestamp;
+  published_at: RawTimestamp;
+  withdrawn_at: RawTimestamp;
   redaction_policy_version: string;
   subject_label: string;
   subject_kind: "editorial" | "case_study";
   run_id: string;
   publication_id: string;
-  publication_at: Timestamp;
+  publication_at: RawTimestamp;
   recipe_version_id: string | null;
   source_kind: SourceKind;
   source_title: string;
   source_publisher: string | null;
   source_url: string | null;
-  source_retrieved_at: Timestamp;
+  source_retrieved_at: RawTimestamp;
   permission_basis: PermissionBasis;
   licence_key: string | null;
   licence_url: string | null;
   attribution_text: string | null;
-  reviewed_at: Timestamp;
+  reviewed_at: RawTimestamp;
   consent_recorded: boolean;
-  consent_withdrawn_at: Timestamp;
-  consent_expires_at: Timestamp;
+  consent_withdrawn_at: RawTimestamp;
+  consent_expires_at: RawTimestamp;
 }
 
 function toRecord(row: CaseStudyRow): CaseStudyRecord {

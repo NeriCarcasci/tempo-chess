@@ -3,10 +3,21 @@ import { createHash } from "node:crypto";
 import type { Sql } from "postgres";
 
 import { registerComponent, registerComponentVersion } from "../analysis/versions.js";
+import { buildSubjectReport } from "../estimates/worker.js";
+import { currentRecipeFor } from "../analysis/validation.js";
+import { planRun } from "../analysis/runs.js";
+import { freezeSubjectSnapshot, registerCohortVersion } from "../analysis/snapshots.js";
+import { pendingAnalysisCount } from "../analysis/planner.js";
 import { registerHandler, type WorkContext, type WorkResult } from "../ops/handlers.js";
 import { WorkFailure } from "../ops/retry.js";
 import { withActor } from "../db/actor.js";
-import { COVERAGE_POLICY, DIAGNOSTIC_POLICY } from "./contract.js";
+import { COVERAGE_POLICY, DIAGNOSTIC_POLICY, STAGES } from "./contract.js";
+import {
+  ADVANCE_TASK,
+  EXAMINATION_REPORT_TASK,
+  ONBOARDING_COHORT,
+  PREPARE_TASK,
+} from "./planner.js";
 import { decideCoverage, type DimensionFacts, type GameFacts } from "./coverage.js";
 import { buildReport, manifestHash } from "./baseline.js";
 import { writeBaseline, writeCoverage } from "./store.js";
@@ -122,6 +133,8 @@ export async function registerOnboardingComponents(
 
 interface Payload {
   onboardingRunId?: unknown;
+  /** The stage an advance item is moving the run to. */
+  stage?: unknown;
 }
 
 export async function buildExamination(
@@ -341,9 +354,244 @@ export function registerOnboardingHandlers(): void {
   registerHandler(EXAMINATION_TASK, async (context) =>
     buildExamination(context, await runtimeSql()),
   );
+  registerHandler(PREPARE_TASK, async (context) =>
+    prepareExamination(context, await runtimeSql()),
+  );
+  registerHandler(EXAMINATION_REPORT_TASK, async (context) =>
+    buildExaminationReport(context, await runtimeSql()),
+  );
+  registerHandler(ADVANCE_TASK, async (context) => advanceStage(context, await runtimeSql()));
 }
 
 async function runtimeSql(): Promise<Sql> {
   const { client } = await import("../db/client.js");
   return client as unknown as Sql;
+}
+
+// ---------------------------------------------------------------------------
+// Prepare: freeze what the examination will read, and plan the work that reads it
+// ---------------------------------------------------------------------------
+
+/**
+ * The step between "the games have arrived" and "the report can be built".
+ *
+ * It freezes the snapshot, plans the analysis run against the promoted recipe,
+ * records both on the onboarding run, and — in the same transaction — queues the
+ * report, the examination and the stage advance that follow. Doing the recording
+ * and the queueing together is the point: a crash between them would leave a run
+ * that had a snapshot and no work to consume it, which is indistinguishable from
+ * a stuck user.
+ *
+ * Idempotent. A retry that finds the run already carrying a snapshot and an
+ * analysis run returns them rather than freezing a second one — and because
+ * `freezeSubjectSnapshot` and `planRun` are both idempotent by content, even a
+ * retry that gets past that check converges on the same ids.
+ */
+export async function prepareExamination(context: WorkContext, sql: Sql): Promise<WorkResult> {
+  const payload = context.item.payload as Payload;
+  const runId = typeof payload.onboardingRunId === "string" ? payload.onboardingRunId : null;
+  if (runId === null) {
+    throw new WorkFailure("invalid_input", "invalid_payload", "the payload names no run");
+  }
+
+  const [workflow] = await sql<{ owner_profile_id: string | null }[]>`
+    select owner_profile_id from ops.workflows where id = ${context.item.workflowId}
+  `;
+  if (!workflow?.owner_profile_id) {
+    throw new WorkFailure("invalid_input", "unowned_workflow", "the workflow names no owner");
+  }
+  const ownerProfileId = workflow.owner_profile_id;
+
+  const [run] = await sql<
+    {
+      subject_id: string;
+      user_id: string;
+      subject_data_snapshot_id: string | null;
+      examination_run_id: string | null;
+      status: string;
+    }[]
+  >`
+    select subject_id, user_id, subject_data_snapshot_id, examination_run_id, status
+    from coaching.onboarding_runs where id = ${runId}
+  `;
+  if (!run) throw new WorkFailure("invalid_input", "unknown_run", "no such onboarding run");
+  if (run.status !== "active") {
+    // Abandoned or already activated: not a failure, and not work to do again.
+    return { outputRef: `onboarding-run:${runId}`, outputSummary: { skipped: run.status } };
+  }
+  if (run.subject_data_snapshot_id && run.examination_run_id) {
+    return {
+      outputRef: `analysis-run:${run.examination_run_id}`,
+      outputSummary: { snapshotId: run.subject_data_snapshot_id, alreadyPrepared: true },
+    };
+  }
+
+  // Wait for the games to be looked at. Freezing a snapshot over games nothing
+  // has analysed produces a report saying the person is a beginner at
+  // everything, which is not a truthful "we do not know yet" — it is a wrong
+  // answer with a confident face. A transient failure is how an item waits:
+  // the ledger backs it off and the ops sweep does the work in between.
+  const pending = await pendingAnalysisCount(sql, run.subject_id);
+  if (pending > 0) {
+    throw new WorkFailure(
+      "transient",
+      "analysis_pending",
+      `${pending} of this subject's games have not been analysed yet`,
+    );
+  }
+
+  const cohort = await registerCohortVersion(sql, {
+    cohortKey: ONBOARDING_COHORT.key,
+    version: ONBOARDING_COHORT.version,
+    definition: ONBOARDING_COHORT.definition,
+  });
+  const snapshot = await freezeSubjectSnapshot(sql, {
+    subjectId: run.subject_id,
+    cohortVersionId: cohort.id,
+    // Now, and stated: a snapshot never includes a game played after its
+    // cutoff, so the report is about a period rather than about "whenever the
+    // query happened to run".
+    cutoff: new Date().toISOString(),
+  });
+
+  // The promotion surface, not the run type: `onboarding_examination` is the
+  // surface a baseline is served from, and promoting a new method for it must
+  // not silently change what a live profile reads.
+  const recipe = await currentRecipeFor(sql, "onboarding_examination");
+  if (!recipe) {
+    // Truthful rather than a placeholder report: with no promoted recipe there
+    // is no method to run, and saying so is better than inventing one.
+    throw new WorkFailure(
+      "unsupported",
+      "no_promoted_recipe",
+      "no subject_live recipe has been promoted",
+    );
+  }
+
+  const planned = await planRun(sql, {
+    recipeVersionId: recipe.recipeVersionId,
+    scope: { subjectId: run.subject_id, subjectDataSnapshotId: snapshot.id },
+    trigger: "user_request",
+    actor: { kind: "user", id: ownerProfileId },
+    workItemId: context.item.id,
+  });
+
+  // Recording only. The report, the examination and the advance were planned
+  // with this item, and they resolve the run id from this row when they get
+  // there — a worker role cannot create work, and should not be able to.
+  await sql`
+    update coaching.onboarding_runs
+    set subject_data_snapshot_id = ${snapshot.id},
+        examination_run_id = ${planned.id},
+        stage = case when stage in ('linking', 'syncing') then 'analysing' else stage end,
+        updated_at = now()
+    where id = ${runId}
+  `;
+
+  return {
+    outputRef: `analysis-run:${planned.id}`,
+    outputSummary: {
+      snapshotId: snapshot.id,
+      games: snapshot.gameCount,
+      underCovered: snapshot.underCovered,
+      alreadyPlanned: planned.alreadyPlanned,
+    },
+    metrics: { inputCount: snapshot.gameCount, outputCount: 1 },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Advance: move the stage when the work behind it finished
+// ---------------------------------------------------------------------------
+
+/**
+ * Move the run to the stage its work has reached.
+ *
+ * A separate item rather than a side effect of the examination, because the
+ * stage is what the person sees and the examination is what produced it: an
+ * epic that couples them ends up with a report that exists and a screen that
+ * still says "analysing". Setting a stage the run has already passed is a
+ * no-op rather than an error — a redelivered message must not walk a journey
+ * backwards.
+ */
+export async function advanceStage(context: WorkContext, sql: Sql): Promise<WorkResult> {
+  const payload = context.item.payload as Payload;
+  const runId = typeof payload.onboardingRunId === "string" ? payload.onboardingRunId : null;
+  const target = typeof payload.stage === "string" ? payload.stage : null;
+  if (runId === null || target === null) {
+    throw new WorkFailure("invalid_input", "invalid_payload", "the payload names no run or stage");
+  }
+  if (!(STAGES as readonly string[]).includes(target)) {
+    throw new WorkFailure("invalid_input", "unknown_stage", "that is not a stage");
+  }
+
+  const [run] = await sql<{ stage: string; status: string }[]>`
+    select stage, status from coaching.onboarding_runs where id = ${runId}
+  `;
+  if (!run) throw new WorkFailure("invalid_input", "unknown_run", "no such onboarding run");
+  if (run.status !== "active") {
+    return { outputRef: `onboarding-run:${runId}`, outputSummary: { skipped: run.status } };
+  }
+
+  const from = STAGES.indexOf(run.stage as (typeof STAGES)[number]);
+  const to = STAGES.indexOf(target as (typeof STAGES)[number]);
+  if (to <= from) {
+    return {
+      outputRef: `onboarding-run:${runId}`,
+      outputSummary: { stage: run.stage, moved: false },
+    };
+  }
+
+  await sql`
+    update coaching.onboarding_runs
+    set stage = ${target}, updated_at = now()
+    where id = ${runId} and status = 'active'
+  `;
+  return { outputRef: `onboarding-run:${runId}`, outputSummary: { stage: target, moved: true } };
+}
+
+// ---------------------------------------------------------------------------
+// The report step, in onboarding's own words
+// ---------------------------------------------------------------------------
+
+/**
+ * Run E15's subject report for the run `prepare` planned.
+ *
+ * A thin wrapper, and the reason it exists is a permission boundary rather than
+ * a behaviour: the ledger lets only the API and the ops deployment create work,
+ * so the whole examination is planned before any of it runs, and this item's
+ * payload cannot name an analysis run that did not exist yet. Resolving it here
+ * keeps E15 generic — it still takes a run id and knows nothing about
+ * onboarding — and keeps the coupling to a coaching table inside the coaching
+ * module.
+ */
+export async function buildExaminationReport(
+  context: WorkContext,
+  sql: Sql,
+): Promise<WorkResult> {
+  const payload = context.item.payload as Payload;
+  const runId = typeof payload.onboardingRunId === "string" ? payload.onboardingRunId : null;
+  if (runId === null) {
+    throw new WorkFailure("invalid_input", "invalid_payload", "the payload names no run");
+  }
+
+  const [run] = await sql<{ examination_run_id: string | null; status: string }[]>`
+    select examination_run_id, status from coaching.onboarding_runs where id = ${runId}
+  `;
+  if (!run) throw new WorkFailure("invalid_input", "unknown_run", "no such onboarding run");
+  if (run.status !== "active") {
+    return { outputRef: `onboarding-run:${runId}`, outputSummary: { skipped: run.status } };
+  }
+  if (!run.examination_run_id) {
+    throw new WorkFailure(
+      "invalid_input",
+      "run_not_prepared",
+      "the onboarding run has no analysis run to report on",
+    );
+  }
+
+  return buildSubjectReport(
+    { ...context, item: { ...context.item, payload: { runId: run.examination_run_id } } },
+    sql,
+  );
 }

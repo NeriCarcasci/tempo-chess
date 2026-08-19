@@ -58,6 +58,7 @@ import { mountInternal, mountV1 } from "./v1/kernel.js";
 import { legacyCompatibility } from "./v1/legacy.js";
 import { V1_ROUTES } from "./v1/routes/index.js";
 import { INTERNAL_ROUTES } from "./internal/routes.js";
+import { registerAllHandlers, registerDeploymentHandlers } from "./ops/bootstrap.js";
 import { assertKernelConfig } from "./v1/signing.js";
 
 const app = new Hono<{ Variables: { user: AuthUser } }>();
@@ -655,8 +656,21 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       logSafeError("startup gate failed; refusing to serve", error);
       process.exit(1);
     }
+    // Register the work this deployment executes, before it starts serving.
+    // Until this call existed the registry was empty everywhere and every
+    // dispatched task was dead-lettered as `unsupported`: the ledger had no
+    // workers at all. A local process registers everything, which is a
+    // deployment shape rather than a permission — the database role still
+    // decides what each connection may write.
+    const tasks = deployment
+      ? registerDeploymentHandlers(deployment.name)
+      : registerAllHandlers();
+
     serve({ fetch: app.fetch, port }, (info) => {
-      console.log(`forma-chess api listening on :${info.port}`);
+      console.log(
+        `forma-chess api listening on :${info.port}`
+        + (tasks.length > 0 ? ` executing ${tasks.join(", ")}` : ""),
+      );
     });
     // The prototype in-process pipeline is not a deployed capability (E05
     // decision D3): no deployment holds `prototype_pipeline`, so recovering it

@@ -8,6 +8,7 @@ import { GAME_ROUTES } from "./games.js";
 import { IDENTITY_ROUTES } from "./identity.js";
 import { GOAL_ROUTES } from "./goals.js";
 import { ONBOARDING_ROUTES } from "./onboarding.js";
+import { PRACTICE_ROUTES } from "./practice.js";
 import { PUBLIC_ROUTES } from "./public.js";
 import { REVIEW_ROUTES } from "./review.js";
 import { WORKFLOW_ROUTES } from "./workflows.js";
@@ -30,6 +31,7 @@ const PRODUCT_ROUTES = [
   ...REVIEW_ROUTES,
   ...ONBOARDING_ROUTES,
   ...GOAL_ROUTES,
+  ...PRACTICE_ROUTES,
 ] as unknown as RouteDefinition<never, never, never>[];
 
 /**

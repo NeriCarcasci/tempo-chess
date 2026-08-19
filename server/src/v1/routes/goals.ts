@@ -19,6 +19,10 @@
  * happen.
  */
 
+import { activateGoal } from "../../goals/activate.js";
+import { planProgressForSubject } from "../../goals/progress-worker.js";
+import type { ResolvedTarget } from "../../goals/resolve.js";
+import { isoOf, requiredIso } from "../../db/timestamps.js";
 import { z } from "zod";
 
 import { client } from "../../db/client.js";
@@ -78,9 +82,9 @@ function viewOf(row: GoalRow): GoalView {
     targetSpeed: row.target_speed,
     horizonDays: row.horizon_days,
     uncalibratedCaveat: row.uncalibrated_caveat,
-    createdAt: row.created_at.toISOString(),
-    activatedAt: row.activated_at?.toISOString() ?? null,
-    closedAt: row.closed_at?.toISOString() ?? null,
+    createdAt: requiredIso(row.created_at, "goals.created_at"),
+    activatedAt: isoOf(row.activated_at),
+    closedAt: isoOf(row.closed_at),
     closeOutcome: row.close_outcome,
     closeNote: row.close_note,
   };
@@ -210,6 +214,14 @@ const createdSchema = z.object({
     }),
   ),
   rejected: z.array(z.object({ metricKey: z.string(), code: z.string(), detail: z.string() })),
+  /** The cycle this goal opened, or null when it could not open one yet. */
+  cycleId: z.string().nullable(),
+  /**
+   * `unavailable` when there is no published analysis to anchor a cycle to.
+   * Saying so is the honest answer: a cycle with a baseline of zero would
+   * measure improvement against a number nobody produced.
+   */
+  planState: z.enum(["published", "unavailable"]),
 });
 
 const createRoute: RouteDefinition<never, z.infer<typeof createBody>, z.infer<typeof createdSchema>> = {
@@ -258,6 +270,10 @@ const createRoute: RouteDefinition<never, z.infer<typeof createBody>, z.infer<ty
       const byMetric = new Map(baselines.map((row) => [row.dimension_key, row]));
 
       const resolved: z.infer<typeof createdSchema>["targets"] = [];
+      // The full resolved target, kept beside the display shape: the cycle
+      // pins `meaningfulChange` and `requiredEvidenceCount`, which are what
+      // make "reached the target" a decidable question rather than a feeling.
+      const resolvedTargets: ResolvedTarget[] = [];
       const rejected: z.infer<typeof createdSchema>["rejected"] = [];
       for (const target of body.targets) {
         const baseline = byMetric.get(target.metricKey);
@@ -278,6 +294,7 @@ const createRoute: RouteDefinition<never, z.infer<typeof createBody>, z.infer<ty
           baselineSampleSize: baseline?.raw_sample_size ?? 0,
         });
         if (result.resolved) {
+          resolvedTargets.push(result);
           resolved.push({
             metricKey: result.metricKey,
             baselineValue: result.baselineValue,
@@ -301,9 +318,39 @@ const createRoute: RouteDefinition<never, z.infer<typeof createBody>, z.infer<ty
         horizonDays: body.horizonDays,
         uncalibratedCaveat: null,
       });
+      // Creating a goal opens its cycle and writes its plan. Leaving it a draft
+      // was E17's gap: the plan endpoint answered `unavailable` forever because
+      // nothing ever created the cycle it reads.
+      const activation = await activateGoal(sql, {
+        goalId,
+        subjectId: body.subjectId,
+        targets: resolvedTargets,
+        horizonDays: body.horizonDays,
+      });
+
+      // One reading straight away, so the progress screen has something true to
+      // show rather than "nothing has been measured yet" on the day somebody
+      // set the goal. Planned here because only the API may create work.
+      if (activation.activated) {
+        await planProgressForSubject(client, {
+          subjectId: body.subjectId,
+          ownerProfileId: auth.profileId,
+          reason: `cycle-opened:${activation.cycleId}`,
+        });
+      }
+
       const row = await loadGoal(sql, { goalId, ownerProfileId: auth.profileId });
       if (!row) throw new ProblemError("NOT_FOUND", { detail: "No such goal." });
-      return { status: 201, data: { goal: viewOf(row), targets: resolved, rejected } };
+      return {
+        status: 201,
+        data: {
+          goal: viewOf(row),
+          targets: resolved,
+          rejected,
+          cycleId: activation.activated ? activation.cycleId : null,
+          planState: activation.activated ? ("published" as const) : ("unavailable" as const),
+        },
+      };
     });
   },
 };
@@ -440,7 +487,7 @@ const planRoute: RouteDefinition<never, never, z.infer<typeof planSchema>> = {
             cadence: row.cadence,
             unit: row.unit,
             enabled: row.enabled,
-            confirmedAt: row.confirmed_at.toISOString(),
+            confirmedAt: requiredIso(row.confirmed_at, "goal_commitments.confirmed_at"),
           })),
         },
       };
