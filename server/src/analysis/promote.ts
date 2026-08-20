@@ -55,6 +55,7 @@ import { analyzeFens, probeEngineIdentity } from "../engine/stockfish.js";
 import { ENGINE_COMPONENT_KEYS, TRANSITION_ASSESSMENT_FAMILY } from "../engine/contract.js";
 import { registerEngineVersions } from "../engine/profiles.js";
 import { registerRecipeVersion } from "./versions.js";
+import { SUBJECT_REPORT_FAMILIES } from "../estimates/worker.js";
 import { promoteRecipe, recordValidationRun, registerValidationDataset } from "./validation.js";
 import { createHash } from "node:crypto";
 
@@ -73,7 +74,7 @@ if (!url) {
 }
 const client = postgres(url, { max: 1, prepare: false });
 
-const RECIPE_VERSION = "1";
+const RECIPE_VERSION = "2";
 const DATASET_VERSION = "1";
 
 function sha256(value: string): string {
@@ -127,7 +128,13 @@ async function main(): Promise<void> {
     runType: "subject_live",
     inputSchemaVersion: "subject_snapshot.v1",
     outputSchemaVersion: "baseline_report.v1",
-    requiredArtifacts: [TRANSITION_ASSESSMENT_FAMILY],
+    // What the examination actually writes. Version 1 of this recipe declared
+    // the game recipe's family, `transition_assessments`, which the examination
+    // never produces -- it aggregates them into estimates. So its manifest
+    // could never be complete, the run could never succeed, and the publication
+    // was refused `RUN_NOT_SUCCEEDED` for every subject. The declaration has to
+    // name the families the step records, which is `SUBJECT_REPORT_FAMILIES`.
+    requiredArtifacts: [...SUBJECT_REPORT_FAMILIES],
     roles,
   });
   say("recipes", `game_analysis and onboarding_examination @${RECIPE_VERSION}`);
