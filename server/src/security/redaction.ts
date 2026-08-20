@@ -188,15 +188,26 @@ export function redact(value: unknown): string {
 /**
  * The log line for a failure.
  *
- * Structure only: a closed-set error type, its classification, and the chain of
- * causes' classifications. No exception message reaches this string — curated
- * messages are safe for their intended client only, not for shared logs.
+ * Structure only: a closed-set error type, its classification, the chain of
+ * causes' classifications, and where in this program it was thrown. No
+ * exception message reaches this string — curated messages are safe for their
+ * intended client only, not for shared logs.
+ *
+ * The call site is part of the structure, and leaving it out cost real time:
+ * `RangeError/validation_failed`, repeated sixty-one times, says a thing went
+ * wrong and refuses to say where, so the only way to find it was to reason
+ * about which line in the program could raise that name. A file and a line
+ * number are facts about this repository — they are in the stack trace of any
+ * crash, in the source map, and in the git history. They are not facts about
+ * the person whose game was being analysed, which is what redaction is for.
  */
 export function redactError(error: unknown, depth = 0): string {
   if (depth > 8) return "[redacted:depth-limit]";
   const parts: string[] = [];
   if (error instanceof Error) {
     parts.push(`${sanitiseName(error.name)}/${classifyError(error)}`);
+    const site = throwSite(error);
+    if (site) parts.push(`at ${site}`);
     if (error instanceof AggregateError) {
       for (const inner of error.errors) parts.push(redactError(inner, depth + 1));
     }
@@ -205,6 +216,38 @@ export function redactError(error: unknown, depth = 0): string {
     parts.push(`${typeof error}/${classifyError(error)}`);
   }
   return parts.join(" | ");
+}
+
+/**
+ * Where it was thrown, as this program's own frames.
+ *
+ * The stack's first line is `Name: message`, which is exactly what must not be
+ * logged, so it is never read. Only frames pointing inside the application are
+ * kept -- a `node_modules` or `node:internal` frame names somebody else's line
+ * number and is noise here -- and only the first three, because the fourth
+ * rarely changes the answer.
+ */
+function throwSite(error: Error): string | null {
+  const stack = typeof error.stack === "string" ? error.stack : "";
+  const frames: string[] = [];
+  for (const line of stack.split("\n").slice(1)) {
+    // Two shapes, because V8 omits the parentheses when the frame has no
+    // function name: `at name (file:line:col)` and `at file:line:col`.
+    const trimmed = line.trim();
+    const match =
+      /\((?:file:\/\/)?([^()]*?):(\d+):\d+\)$/.exec(trimmed)
+      ?? /^at (?:file:\/\/)?([^()\s]*?):(\d+):\d+$/.exec(trimmed);
+    if (!match) continue;
+    const [, file, lineNumber] = match;
+    if (file === undefined || lineNumber === undefined) continue;
+    if (file.includes("node_modules") || file.startsWith("node:")) continue;
+    // Relative to the source root, and either separator: the container builds
+    // to `/app/dist/...` and a developer's machine may hand back a Windows path.
+    const relative = file.replace(/^.*[/\\](?:dist|src)[/\\]/, "").replace(/\\/g, "/");
+    frames.push(`${relative}:${lineNumber}`);
+    if (frames.length === 3) break;
+  }
+  return frames.length > 0 ? frames.join(" <- ") : null;
 }
 
 /** Error names are caller-mutable, so logs admit only this closed vocabulary. */
