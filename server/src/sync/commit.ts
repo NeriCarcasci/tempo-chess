@@ -14,6 +14,7 @@
 
 import type { Sql } from "postgres";
 import { NORMALIZER_VERSION, type NormalizedGame, type RejectionReason, type SyncMode } from "./contract.js";
+import { isoOf } from "../db/timestamps.js";
 
 // ---------------------------------------------------------------------------
 // Locks
@@ -147,6 +148,13 @@ export async function commitBatch(
         // A first revision is first_seen; a later one for the same game is the
         // provider telling us something changed.
         const reason = had_prior ? "provider_correction" : "first_seen";
+        // The timestamps go over as ISO strings, not Date objects.
+        // `drizzle(client, { schema })` replaces postgres.js's handlers for
+        // every date and timestamp OID when it is constructed, and it replaces
+        // the *serialiser* along with the parser -- so a Date bound as a
+        // parameter reaches `Buffer.byteLength` and throws
+        // "Received an instance of Date" before the statement is ever sent.
+        // Every game the provider returned was normalized and then lost here.
         const [inserted] = await tx<{ id: string }[]>`
           insert into chess.game_replay_revisions (
             provider_game_id, revision_no, normalizer_component_version_id, normalized_replay,
@@ -155,7 +163,7 @@ export async function commitBatch(
           ) values (
             ${providerGame.id}, ${next_no}, ${NORMALIZER_VERSION},
             ${JSON.stringify(game.normalizedReplay)}::jsonb, ${game.normalizedSha256},
-            ${game.initialFen}, ${game.playedAt}, ${game.completedAt}, ${game.rated},
+            ${game.initialFen}, ${isoOf(game.playedAt)}, ${isoOf(game.completedAt)}, ${game.rated},
             ${game.speed}, ${game.timeControl}, ${game.result}, ${game.termination},
             ${game.plyCount}, ${game.providerUrl}, ${reason}
           ) returning id
