@@ -56,7 +56,7 @@
     "backfill:games": "tsx src/backfill/cli.ts games",
     "backfill:reconcile": "tsx src/backfill/cli.ts reconcile",
     "backfill:cutover": "tsx src/backfill/cli.ts cutover",
-    "analysis:unit": "tsx src/analysis/observations.test.ts",
+    "analysis:unit": "tsx src/analysis/observations.test.ts && node --test --import tsx src/analysis/recent-games.test.ts",
     "analysis:integration": "tsx src/analysis/gates/integration.ts",
     "analysis:security": "tsx src/analysis/gates/security.ts",
     "analysis:migration": "tsx src/analysis/gates/migration.ts",

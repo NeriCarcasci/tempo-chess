@@ -164,6 +164,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/games/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Your newest synced games, with the moves in them
+         * @description Newest first by when the game was played. Each game carries its full move list, so a client can replay the board without a second request. `initialFen` is null for the standard starting position. `asOf` is when the newest of these games was last written by a sync, so the ETag matches until something actually changes. Nothing here depends on analysis having run.
+         */
+        get: operations["listRecentGames"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/games/{gameId}": {
         parameters: {
             query?: never;
@@ -1471,6 +1491,119 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listRecentGames: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Your newest synced games, with the moves in them */
+            200: {
+                headers: {
+                    /** @description Strong validator for If-None-Match. */
+                    ETag?: string;
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            asOf: string | null;
+                            games: {
+                                color: ("white" | "black") | null;
+                                id: string;
+                                initialFen: string | null;
+                                moves: {
+                                    clockMs: number | null;
+                                    san: string | null;
+                                    uci: string;
+                                }[];
+                                opponent: {
+                                    rating: number | null;
+                                    title: string | null;
+                                    username: string | null;
+                                };
+                                outcome: ("win" | "loss" | "draw") | null;
+                                playedAt: string;
+                                providerUrl: string | null;
+                                /** @enum {string} */
+                                result: "white" | "black" | "draw";
+                                speed: string | null;
+                            }[];
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description The caller's copy is current. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request could not be accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
             };
             /** @description Too many requests */
             429: {

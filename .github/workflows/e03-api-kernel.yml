@@ -49,6 +49,13 @@ jobs:
         working-directory: server
         run: npm run v1:unit
 
+      # The read models behind the /v1 game routes. Pure shaping and freshness
+      # derivation, so they belong beside the kernel gate rather than in a
+      # workflow that needs a database.
+      - name: Analysis read-model unit gate
+        working-directory: server
+        run: npm run analysis:unit
+
       - name: OpenAPI is generated, not hand-maintained
         working-directory: server
         run: npm run v1:openapi:check

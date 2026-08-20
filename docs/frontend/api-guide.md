@@ -290,11 +290,20 @@ a feature: a queue that only grows is a source of guilt.
 ### Games and review
 
 ```
+GET  /v1/games/recent?limit=                 → newest games with their move lists
 GET  /v1/games/{gameId}                      → metadata, perspective, publication state
 POST /v1/games/{gameId}/analysis             → request analysis (202, or the existing one)
 GET  /v1/games/{gameId}/review               → the published objective review
 POST /v1/positions/evaluations               → one bounded evaluation of a position
 ```
+
+`recent` is the one read here that does not wait for analysis. It returns up to
+12 games (6 by default), each with `moves` in UCI and SAN and an `initialFen`
+that is null for the standard start, so a screen can animate real boards while
+a sync or an analysis is still running. It carries no publication state on
+purpose — there is nothing to claim yet, and a field saying so would invite the
+page to render the absence of a verdict as one. `asOf` is the newest sync behind
+the answer, so `If-None-Match` keeps polling cheap.
 
 Every claim-bearing read carries a **version block**: `publicationId`,
 `generatedAt`, `recipeVersionId`, `policyVersions`. Show the date at least. When
