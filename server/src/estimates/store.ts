@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isoOf } from "../db/timestamps.js";
 
 import type { Sql } from "postgres";
 
@@ -250,7 +251,7 @@ export async function writeEstimate(
       ${result.status === "available" ? result.intervalLow : null},
       ${result.status === "available" ? result.intervalHigh : null},
       ${coverage.raw}, ${coverage.effective}, ${coverage.success}, ${coverage.failure},
-      ${coverage.graded}, ${coverage.censored}, ${coverage.from}, ${coverage.to},
+      ${coverage.graded}, ${coverage.censored}, ${isoOf(coverage.from)}, ${isoOf(coverage.to)},
       ${write.comparisonEstimateId}, ${write.delta}, ${write.improvementProbability},
       ${result.coverageStatus},
       ${result.status === "unavailable" ? result.reason : null}
