@@ -111,19 +111,32 @@ export async function planPendingGameAnalyses(
 }
 
 /**
- * How many of a subject's materialized games have not been analysed.
+ * How many of a subject's games have not been analysed.
  *
  * Used by onboarding to decide whether to wait: freezing a snapshot over games
  * nothing has looked at produces a report that says the person is a beginner at
  * everything, which is not a truthful "we do not know yet" — it is a wrong
  * answer with a confident face.
+ *
+ * It used to inner-join a *published* materialization run, which quietly
+ * excluded the one case the wait exists for. A game that has just been synced
+ * has no materialization run at all, so it was not counted, so the count read
+ * zero the instant a sync finished and the snapshot froze before the
+ * materializer had touched a single new game. A hundred and thirty-seven games
+ * arrived and the baseline was built from the ninety-eight that happened to be
+ * ready — silently, because a report over a third of an archive looks exactly
+ * like a report over all of it.
+ *
+ * A game with no materialization run is the clearest possible case of one
+ * nothing has looked at, so it counts. What does not count is a game whose
+ * materialization has permanently failed: that will never produce an analysis,
+ * and blocking on it would trade a partial report for no report at all. Those
+ * are excluded by name rather than by omission, so the reason is visible.
  */
 export async function pendingAnalysisCount(sql: Sql, subjectId: string): Promise<number> {
   const [row] = await sql<{ count: string }[]>`
     select count(*)::text as count
     from chess.subject_games sg
-    join chess.materialization_runs m
-      on m.replay_revision_id = sg.latest_replay_revision_id and m.state = 'published'
     where sg.subject_id = ${subjectId}
       and sg.status = 'included'
       and not exists (
@@ -131,6 +144,11 @@ export async function pendingAnalysisCount(sql: Sql, subjectId: string): Promise
         where r.subject_game_id = sg.id
           and r.run_type = 'game_analysis'
           and r.status = 'succeeded'
+      )
+      and not exists (
+        select 1 from chess.materialization_runs m
+        where m.replay_revision_id = sg.latest_replay_revision_id
+          and m.state = 'failed'
       )
   `;
   return Number(row?.count ?? 0);
