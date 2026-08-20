@@ -98,7 +98,8 @@
     "public:migration": "tsx src/public/gates/migration.ts",
     "public:security": "tsx src/public/gates/security.ts",
     "public:integration": "tsx src/public/gates/integration.ts",
-    "editorial": "node --env-file=.env --import tsx src/public/cli.ts"
+    "editorial": "node --env-file=.env --import tsx src/public/cli.ts",
+    "onboarding:reexamine": "tsx src/onboarding/reexamine.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",
