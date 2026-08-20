@@ -48,6 +48,22 @@ const LIVE_WORKFLOW_STATES = new Set(["queued", "running", "cancelling"]);
  */
 const REPORT_WRITTEN = "report_ready";
 
+/**
+ * The stages that can only have been reached by opening the report.
+ *
+ * Fetching a baseline report is a **write**: it is what records
+ * `report_viewed_at` and moves the run out of `report_ready`, and there is no
+ * separate "mark as viewed" call. So a screen that is not the report itself may
+ * only read one once the run has already left that stage, which is exactly what
+ * this predicate is for. Anything else would let a hub press the button on
+ * somebody's behalf, which is the one thing `getReport`'s contract forbids.
+ */
+const OPENED_STAGES = new Set(["goal_setting", "activated"]);
+
+export function reportAlreadyOpened(state: Pick<OnboardingState, "stage" | "status">): boolean {
+  return state.status === "activated" || OPENED_STAGES.has(state.stage);
+}
+
 /** A workflow that has stopped for a bad reason. */
 export function workflowFailed(workflow: JourneyInput["workflow"]): boolean {
   if (!workflow) return false;

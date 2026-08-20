@@ -247,6 +247,13 @@ function AccountMenu() {
           </Link>
 
           <div className="nav-menu-label">Account</div>
+          {/* The profile is where the examination's own numbers live, and
+              `/account` is the repertoire, the drills and the bill. Two
+              entries because they answer different questions; the profile goes
+              first because it is the one nothing else on the product links to. */}
+          <Link to="/profile" className="nav-menu-item">
+            Everything Forma has measured
+          </Link>
           <Link to="/account" className="nav-menu-item">
             Your account &amp; progress
           </Link>

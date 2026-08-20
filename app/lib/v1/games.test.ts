@@ -97,6 +97,39 @@ describe("fetchRecentGames", () => {
     expect(games.map((game) => game.id)).toEqual(["kept"]);
   });
 
+  test("the opponent block the shipped route sends reads through", async () => {
+    // The route ships `{ username, title, rating }`. Reading only the bare
+    // string is what made the sync screen caption every board "From your
+    // archive" while the handle was sitting right there in the payload.
+    answering([wire({ opponent: { username: "kasparov", title: "GM", rating: 2812 } })]);
+    const games = await fetchRecentGames(4);
+    expect(games[0]!.opponent).toBe("kasparov");
+    expect(games[0]!.opponentRating).toBe(2812);
+  });
+
+  test("an opponent block with no handle is null, not an empty name", async () => {
+    answering([wire({ opponent: { username: null, title: null, rating: null } })]);
+    const games = await fetchRecentGames(4);
+    expect(games[0]!.opponent).toBeNull();
+    expect(games[0]!.opponentRating).toBeNull();
+  });
+
+  test("who won and how the subject did are kept apart", async () => {
+    // `result` names the winning colour and `outcome` names the subject's own
+    // result. Reading one as the other puts the wrong letter beside every game
+    // the subject played as Black.
+    answering([wire({ result: "white", outcome: "loss", colour: "black" })]);
+    const games = await fetchRecentGames(4);
+    expect(games[0]!.result).toBe("white");
+    expect(games[0]!.outcome).toBe("loss");
+  });
+
+  test("an outcome nobody agreed on is null rather than a guess", async () => {
+    answering([wire({ outcome: "resigned" })]);
+    const games = await fetchRecentGames(4);
+    expect(games[0]!.outcome).toBeNull();
+  });
+
   test("moves sent as bare strings are still moves", async () => {
     answering([wire({ moves: ["e2e4", "e7e5", "g1f3"] })]);
     const games = await fetchRecentGames(4);
