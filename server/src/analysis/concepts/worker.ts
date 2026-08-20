@@ -52,21 +52,20 @@ interface RunRow {
   subject_id: string | null;
 }
 
-export async function detectConcepts(context: WorkContext, sql: Sql): Promise<WorkResult> {
-  const payload = context.item.payload as Payload;
-  const runId = typeof payload.runId === "string" ? payload.runId : null;
-  if (runId === null) {
-    throw new WorkFailure("invalid_input", "invalid_payload", "the payload names no run");
-  }
-
-  const [workflow] = await sql<{ owner_profile_id: string | null }[]>`
-    select owner_profile_id from ops.workflows where id = ${context.item.workflowId}
-  `;
-  if (!workflow?.owner_profile_id) {
-    throw new WorkFailure("invalid_input", "unowned_workflow", "the workflow names no owner");
-  }
-  const ownerProfileId = workflow.owner_profile_id;
-
+/**
+ * Detect and record, for one run whose owner is already known.
+ *
+ * Separated from the handler so that an operator can run the detector over
+ * games that were analysed before it existed, without redoing the engine work
+ * those runs already paid for. The handler resolves the owner from the workflow
+ * and calls this; a backfill resolves it from the subject and calls the same
+ * thing. There is deliberately no second implementation.
+ */
+export async function detectForRun(
+  sql: Sql,
+  runId: string,
+  ownerProfileId: string,
+): Promise<WorkResult> {
   return withActor(sql, ownerProfileId, async (tx) => {
     const [run] = await tx<RunRow[]>`
       select r.subject_game_id, r.materialization_run_id, g.subject_id
@@ -259,6 +258,24 @@ export async function detectConcepts(context: WorkContext, sql: Sql): Promise<Wo
 async function runtimeSql(): Promise<Sql> {
   const { client } = await import("../../db/client.js");
   return client as unknown as Sql;
+}
+
+export async function detectConcepts(context: WorkContext, sql: Sql): Promise<WorkResult> {
+  const payload = context.item.payload as Payload;
+  const runId = typeof payload.runId === "string" ? payload.runId : null;
+  if (runId === null) {
+    throw new WorkFailure("invalid_input", "invalid_payload", "the payload names no run");
+  }
+
+  // The owner comes from the workflow the API created, never from the payload,
+  // and it is resolved before anything reads a tenant table.
+  const [workflow] = await sql<{ owner_profile_id: string | null }[]>`
+    select owner_profile_id from ops.workflows where id = ${context.item.workflowId}
+  `;
+  if (!workflow?.owner_profile_id) {
+    throw new WorkFailure("invalid_input", "unowned_workflow", "the workflow names no owner");
+  }
+  return detectForRun(sql, runId, workflow.owner_profile_id);
 }
 
 let registered = false;
