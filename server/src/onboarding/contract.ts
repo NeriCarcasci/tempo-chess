@@ -104,6 +104,7 @@ export const LIMITATIONS = [
   "few_middlegames",
   "outside_calibrated_rating",
   "thin_dimensions",
+  "no_measured_dimensions",
 ] as const;
 export type Limitation = (typeof LIMITATIONS)[number];
 

@@ -107,7 +107,16 @@ export function decideCoverage(
   }
 
   const measured = dimensions.map((dimension) => judgeDimension(dimension, policy));
-  if (measured.some((dimension) => dimension.state !== "sufficient")) {
+  // Nothing measured at all is a different fact from "measured, and thin", and
+  // it has to be said out loud. `decideOverall` asks whether *any* dimension is
+  // sufficient, and on an empty list that is vacuously false -- so the state
+  // came out `limited` with an empty limitation list, which the schema refuses
+  // outright: a report that is not sufficient must name what is missing. The
+  // insert failed on that constraint, which was the right outcome and an
+  // unhelpful way to find out.
+  if (measured.length === 0) {
+    limitations.push("no_measured_dimensions");
+  } else if (measured.some((dimension) => dimension.state !== "sufficient")) {
     limitations.push("thin_dimensions");
   }
 
@@ -193,4 +202,6 @@ export const LIMITATION_TEXT: Readonly<Record<Limitation, string>> = Object.free
     "Your rating is outside the range Forma has calibrated, so comparisons to players at your level are not shown. Everything about your own games still applies.",
   thin_dimensions:
     "Some areas have too few chances to measure yet. They are listed with what is missing.",
+  no_measured_dimensions:
+    "We have your games, but nothing in them has been measured into a skill yet, so this report describes your play rather than rating it.",
 });
