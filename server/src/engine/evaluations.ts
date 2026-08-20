@@ -31,9 +31,11 @@ import {
   historySignature,
   roundScore,
   scopeViolations,
+  terminalExpectedScore,
   type EvaluationInputRole,
   type EvaluationScope,
   type ExactHistory,
+  type TerminalOutcome,
 } from "./contract.js";
 import type { ResolvedProfile } from "./profiles.js";
 import type { CandidateLine, PositionEval } from "./stockfish.js";
@@ -227,6 +229,68 @@ export async function storeEvaluation(
   `;
   if (!row) throw new Error("the evaluation vanished between insert and read");
   return { evaluation: await hydrate(sql, row), created: inserted !== null };
+}
+
+/**
+ * Store the value of a position the game has already ended in.
+ *
+ * No search, because there is nothing to search: a checkmated position has no
+ * legal move, and asking Stockfish about one gets `bestmove (none)` and no
+ * score at all. `expectedScore` then refuses -- correctly, it is not the
+ * calibration's job to invent a number for a position the engine declined to
+ * value -- and the whole game's analysis died on its last position.
+ *
+ * Every game that ended in checkmate or stalemate failed this way, which for a
+ * normal archive is about a third of them. It presented as an empty profile
+ * rather than as an error, because a game whose analysis never completed simply
+ * does not appear.
+ *
+ * The row still carries the profile, the limit and the cache key, so a terminal
+ * position looks up exactly like any other and the caller needs no special
+ * case. What it does not carry is engine provenance: no depth, no nodes, no
+ * time, no best move, and no candidate lines. There was no search, and the row
+ * should not imply there was one.
+ */
+export async function storeTerminalEvaluation(
+  sql: Sql,
+  request: EvaluationRequest,
+  outcome: TerminalOutcome,
+  sideToMove: "white" | "black",
+  workerRevision: string,
+): Promise<StoreResult> {
+  const cacheKey = cacheKeyFor(request);
+  const decided = terminalExpectedScore(outcome, sideToMove);
+
+  await sql`
+    insert into analysis.position_evaluations (
+      core_position_id, scope, halfmove_clock, history_signature, occurrence_run_id,
+      occurrence_ply, model_profile_id, calibration_component_version_id, limit_type,
+      limit_value, multipv, threads, hash_mb, tablebase, perspective, score_cp, mate_in,
+      wdl_win, wdl_draw, wdl_loss, expected_score, expected_score_method, best_move_uci,
+      depth, seldepth, nodes, nps, engine_time_ms, wall_time_ms, worker_revision, cache_key
+    ) values (
+      ${request.corePositionId}, ${request.scope}, ${request.halfmoveClock},
+      ${request.history ? historySignature(request.history) : null},
+      ${request.occurrence?.materializationRunId ?? null}, ${request.occurrence?.ply ?? null},
+      ${request.profile.modelProfileId}, ${request.profile.calibrationVersionId},
+      ${request.profile.spec.limitType}, ${request.profile.spec.limitValue},
+      ${request.profile.spec.multipv}, ${request.profile.spec.threads},
+      ${request.profile.spec.hashMb}, ${request.profile.spec.tablebase}, 'white',
+      ${decided.scoreCp}, ${decided.mateIn},
+      null, null, null,
+      ${roundScore(decided.value)}, ${decided.method}, null,
+      null, null, null, null, null, null,
+      ${workerRevision}, ${cacheKey}
+    )
+    on conflict (cache_key) do nothing
+  `;
+
+  const [row] = await sql<EvaluationRow[]>`
+    select ${sql.unsafe(SELECT_EVALUATION)} from analysis.position_evaluations
+    where cache_key = ${cacheKey}
+  `;
+  if (!row) throw new Error("the terminal evaluation vanished between insert and read");
+  return { evaluation: await hydrate(sql, row), created: true };
 }
 
 /** The engine reports seldepth per line; the row records the primary line's. */

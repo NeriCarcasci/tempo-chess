@@ -3,7 +3,9 @@
 -- Let `forma_ops` read the tenant tables it has to survey in order to plan.
 --
 -- Hand-written and reviewed. Four SELECT policies, no schema change, no row
--- touched, nothing dropped. Re-running it is a no-op.
+-- touched. Each policy is dropped if present before it is created, so
+-- re-running it really is a no-op -- `create policy` is not idempotent on its
+-- own, and this file claimed to be before it was.
 --
 -- ## Why a policy and not a grant
 --
@@ -49,18 +51,26 @@
 set local role forma_migrator
 --> statement-breakpoint
 -- Which subjects exist, and which of their games have arrived.
+drop policy if exists subject_games_ops_survey on chess.subject_games
+--> statement-breakpoint
 create policy subject_games_ops_survey on chess.subject_games
   for select to forma_ops using (true)
+--> statement-breakpoint
+drop policy if exists analysis_subjects_ops_survey on app.analysis_subjects
 --> statement-breakpoint
 create policy analysis_subjects_ops_survey on app.analysis_subjects
   for select to forma_ops using (true)
 --> statement-breakpoint
 -- What has already been planned, so a sweep does not plan it twice.
+drop policy if exists runs_ops_survey on analysis.runs
+--> statement-breakpoint
 create policy runs_ops_survey on analysis.runs
   for select to forma_ops using (true)
 --> statement-breakpoint
 -- Which subjects have a live publication, so a stale progress reading can be
 -- told apart from one that was never taken.
+drop policy if exists subject_live_publications_ops_survey on analysis.subject_live_publications
+--> statement-breakpoint
 create policy subject_live_publications_ops_survey on analysis.subject_live_publications
   for select to forma_ops using (true)
 --> statement-breakpoint

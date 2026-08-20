@@ -38,12 +38,14 @@ import {
   estimatedCostMicroUsd,
   type EngineProfileKey,
   type EvaluationScope,
+  type TerminalOutcome,
 } from "./contract.js";
 import {
   cacheKeyFor,
   findCachedEvaluation,
   linkRunUse,
   storeEvaluation,
+  storeTerminalEvaluation,
   type EvaluationRequest,
   type StoredEvaluation,
 } from "./evaluations.js";
@@ -60,6 +62,8 @@ import { recordEngineEvent } from "./telemetry.js";
 import { selectCriticalPositions, type CriticalPositionCandidate, type CriticalReasonDetail } from "./critical-position.js";
 import { buildAssessment, writeAssessments, type AssessmentRow, type TransitionEvidence } from "./assessments.js";
 import { Engine, type PositionEval, type SearchHistory } from "./stockfish.js";
+import { Chess } from "chessops/chess";
+import { parseFen } from "chessops/fen";
 
 export const SCREEN_TASK = "stockfish_screen_game";
 export const DEEP_TASK = "stockfish_deep_game";
@@ -221,6 +225,20 @@ async function evaluateOne(
     return cached;
   }
 
+  // A position the game already ended in is decided by the rules, not by a
+  // search, and Stockfish says so by returning `bestmove (none)` with no score
+  // at all. Asking anyway is what killed every game that finished in checkmate
+  // or stalemate: the calibration is handed nothing to convert and refuses.
+  const terminal = terminalOutcomeOf(request.fen);
+  if (terminal) {
+    const stored = await storeTerminalEvaluation(
+      sql, request, terminal.outcome, terminal.sideToMove, WORKER_REVISION,
+    );
+    tally.misses += 1;
+    tallyScope(tally, request.scope, false);
+    return stored.evaluation;
+  }
+
   // Outside every transaction, deliberately: a 500,000-node search inside one
   // would hold a connection for its whole duration.
   const result = await session.search({
@@ -236,6 +254,36 @@ async function evaluateOne(
   tally.nodes += result.nodes ?? 0;
   tally.engineMs += result.engineTimeMs ?? 0;
   return stored.evaluation;
+}
+
+/**
+ * Is the game over in this position, and how?
+ *
+ * Read from the position itself rather than from the game's recorded
+ * termination: a game can be *resigned* in a position that is not terminal, and
+ * a game can reach checkmate at a ply that is not the last one recorded. The
+ * only thing that decides whether a position has a legal move is the position.
+ *
+ * Draws by agreement, resignation and flag-fall are deliberately absent -- they
+ * end a *game*, not a position, and the position they end in is still one a
+ * search has an opinion about. Only the outcomes the rules impose on the board
+ * are here.
+ *
+ * An unparseable FEN returns null and the caller searches as before. This is
+ * not the place to decide that a position is malformed; the engine will refuse
+ * it and say so with its own error.
+ */
+function terminalOutcomeOf(
+  fen: string,
+): { outcome: TerminalOutcome; sideToMove: "white" | "black" } | null {
+  const setup = parseFen(fen);
+  if (setup.isErr) return null;
+  const position = Chess.fromSetup(setup.unwrap());
+  if (position.isErr) return null;
+  const board = position.unwrap();
+  if (!board.isEnd()) return null;
+  const sideToMove = board.turn === "white" ? "white" : "black";
+  return { outcome: board.isCheckmate() ? "checkmate" : "draw", sideToMove };
 }
 
 /**

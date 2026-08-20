@@ -132,8 +132,43 @@ export const DEEP_STATUSES = ["not_selected", "selected", "completed", "unavaila
 export type DeepStatus = (typeof DEEP_STATUSES)[number];
 
 /** How an expected score was produced. Named, so a number is never anonymous. */
-export const EXPECTED_SCORE_METHODS = ["wdl", "mate", "logistic"] as const;
+export const EXPECTED_SCORE_METHODS = ["wdl", "mate", "logistic", "terminal"] as const;
 export type ExpectedScoreMethod = (typeof EXPECTED_SCORE_METHODS)[number];
+
+/**
+ * A position where the game is already over.
+ *
+ * `terminal` is the one method that is not a reading of an engine's opinion. A
+ * checkmate is not estimated at 0.99 and a stalemate is not estimated at 0.5 --
+ * they are 0 and 0.5 by the rules, exactly, and no search can improve on that.
+ * Naming it separately keeps that distinction visible in the data: a row whose
+ * method is `terminal` was decided by the laws of chess, and a row whose method
+ * is `logistic` was decided by a curve with a version number.
+ */
+export const TERMINAL_OUTCOMES = ["checkmate", "draw"] as const;
+export type TerminalOutcome = (typeof TERMINAL_OUTCOMES)[number];
+
+/**
+ * The score the rules give, from White's perspective.
+ *
+ * Checkmate is stated relative to the side to move, because that is the side
+ * that has been mated -- there is no other way for a position to be checkmate.
+ * Every terminal draw is a half point regardless of how it was reached, which
+ * is why stalemate, insufficient material, the seventy-five-move rule and
+ * fivefold repetition collapse into one outcome here.
+ */
+export function terminalExpectedScore(
+  outcome: TerminalOutcome,
+  sideToMove: "white" | "black",
+): ExpectedScore & { scoreCp: number | null; mateIn: number | null } {
+  if (outcome === "checkmate") {
+    // `mate_in = 0` is how the row says "mated, here, now"; the schema requires
+    // exactly one of a centipawn score and a mate distance, and a mated
+    // position has no centipawn score that means anything.
+    return { value: sideToMove === "white" ? 0 : 1, method: "terminal", scoreCp: null, mateIn: 0 };
+  }
+  return { value: 0.5, method: "terminal", scoreCp: 0, mateIn: null };
+}
 
 // ---------------------------------------------------------------------------
 // Component keys and profiles
