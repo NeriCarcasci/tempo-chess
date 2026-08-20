@@ -1,14 +1,14 @@
-import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useMemo } from "react";
+import { Link } from "react-router";
 import type { Route } from "./+types/account";
 import { TopNav } from "../components/TopNav";
 import { requireSession, setActiveAccount, signOut, type Session } from "../lib/session";
+import { EmptyState } from "../components/v1/Honesty";
 import { LichessMark, ChessComMark } from "../components/PlatformMarks";
 import { fetchRepertoire, fetchLessonProgress, fetchMistakes, fetchActivity, type RepertoireData, type LessonProgress } from "../lib/account";
 import { getCached, setCached } from "../lib/loaderCache";
 import { LESSONS } from "../lib/lessons";
 import { RouteError } from "../components/RouteError";
-import { fetchPlans, formatPrice, openBillingPortal, startCheckout, type Plan } from "../lib/billing";
 
 interface AccountData {
   session: Session;
@@ -16,8 +16,6 @@ interface AccountData {
   lessonProgress: LessonProgress[];
   activity: Awaited<ReturnType<typeof fetchActivity>>;
   mistakes: { white: number; black: number };
-  plans: Plan[];
-  billingConfigured: boolean;
 }
 
 export function meta() {
@@ -33,13 +31,12 @@ export async function clientLoader({}: Route.ClientLoaderArgs): Promise<AccountD
   const cacheKey = `account:${session.username}`;
   const cached = getCached<AccountData>(cacheKey, 60_000);
   if (cached) return cached;
-  const [repertoire, lessonProgress, whiteMistakes, blackMistakes, activity, catalogue] = await Promise.all([
+  const [repertoire, lessonProgress, whiteMistakes, blackMistakes, activity] = await Promise.all([
     fetchRepertoire(session.username).catch(() => ({ openings: [], stats: [] }) as RepertoireData),
     fetchLessonProgress(session.username),
     fetchMistakes(session.username, "white"),
     fetchMistakes(session.username, "black"),
     fetchActivity(session.username),
-    fetchPlans().catch(() => ({ plans: [], configured: false })),
   ]);
   const data: AccountData = {
     session,
@@ -47,8 +44,6 @@ export async function clientLoader({}: Route.ClientLoaderArgs): Promise<AccountD
     lessonProgress,
     activity,
     mistakes: { white: whiteMistakes.length, black: blackMistakes.length },
-    plans: catalogue.plans,
-    billingConfigured: catalogue.configured,
   };
   setCached(cacheKey, data);
   return data;
@@ -72,110 +67,33 @@ function timeAgo(iso: string | null): string {
 }
 
 /**
- * Plan + billing. Everything here is real except the payment provider: the
- * plan comes from `profiles.plan`, and the buttons call the checkout/portal
- * endpoints that will hand off to Stripe once its keys are set.
+ * Plan + billing, and the accounts this sign-in owns.
+ *
+ * The plan block and the usage meters are gone. Both read the session's
+ * `subscription`, `limits` and `usage`, which came from the prototype `/me`
+ * and counted the prototype's tables — the ones the analysis pipeline stopped
+ * writing to. The meter that said "0 / 50 analysed games" was measuring an
+ * empty table, not a person's entitlement, and a wrong meter is worse than no
+ * meter because it invites somebody to buy their way out of a bug. `/v1`
+ * publishes no entitlement yet, so this says so and stops.
+ *
+ * The way to Pro is `/pricing`, which still runs checkout. The portal button
+ * needed to know whether there was a subscription to manage, and nothing here
+ * knows that any more.
  */
-function BillingPanel({
-  session,
-  plans,
-  configured,
-}: {
-  session: Session;
-  plans: Plan[];
-  configured: boolean;
-}) {
-  const [params] = useSearchParams();
-  const [message, setMessage] = useState<string | null>(
-    params.get("checkout") === "success"
-      ? "Payment received — your plan is active."
-      : null,
-  );
-  const [busy, setBusy] = useState(false);
-
-  const plan = session.subscription.plan;
-  const pro = plans.find((p) => p.id === "pro");
-  const isPro = plan === "pro";
-  const gameLimit = session.limits.analysedGames;
-  const drillLimit = session.limits.dailyDrills;
-  const gamePercent = gameLimit == null ? 0 : Math.min(100, (session.usage.gamesAnalyzed / gameLimit) * 100);
-  const drillPercent = drillLimit == null ? 0 : Math.min(100, (session.usage.drillsToday / drillLimit) * 100);
-
-  async function act() {
-    setBusy(true);
-    try {
-      const result = isPro ? await openBillingPortal() : await startCheckout("pro", "monthly");
-      if (!result.url) setMessage(result.message);
-    } catch (error) {
-      if (error instanceof Response) throw error;
-      setMessage(error instanceof Error ? error.message : "Something went wrong.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
+function BillingPanel({ session }: { session: Session }) {
   return (
     <section className="account-group">
       <h2 className="account-group-title">Plan &amp; billing</h2>
-      <div className="account-billing">
-        <div className="account-billing-main">
-          <p className="eyebrow">Current plan</p>
-          <strong>
-            {isPro ? "Pro" : "Free"}
-            {session.subscription.comped ? <em className="account-plan-note"> · granted, not billed</em> : null}
-          </strong>
-          <p>
-            {isPro
-              ? "Your whole history is analysed, with deep engine review and unlimited drills."
-              : pro
-                ? `Free covers your last 50 games. Pro is ${formatPrice(pro.priceMonthly)}/month for your full history, deep engine review, and unlimited drills.`
-                : "Free covers your last 50 games."}
-          </p>
-          {message ? <p className="account-billing-msg">{message}</p> : null}
-          {!configured && !message ? (
-            <p className="account-billing-msg">
-              Billing isn't switched on yet, so nothing is charged. Usage is
-              still recorded against the free plan.
-            </p>
-          ) : null}
-        </div>
-        <div className="account-billing-actions">
-          <button type="button" className={isPro ? "secondary-button" : "primary-button"} onClick={act} disabled={busy}>
-            {busy ? "Opening…" : isPro ? "Manage subscription" : "Upgrade to Pro"}
-          </button>
-          <Link to="/pricing" className="text-link">Compare plans</Link>
-        </div>
-      </div>
-
-      <div className="account-usage" aria-label="Account usage">
-        <div className="account-usage-head">
-          <div>
-            <p className="eyebrow">Usage attached to this account</p>
-            <strong>{session.usage.positionsAnalyzed.toLocaleString()} positions analysed</strong>
-          </div>
-          <span>{session.usage.gamesStored.toLocaleString()} games stored</span>
-        </div>
-        <div className="account-usage-grid">
-          <div className="account-meter">
-            <div><span>Analysed games</span><b>{session.usage.gamesAnalyzed} / {gameLimit ?? "∞"}</b></div>
-            <span className="account-meter-track"><i style={{ width: gameLimit == null ? "100%" : `${gamePercent}%` }} /></span>
-          </div>
-          <div className="account-meter">
-            <div><span>Drills today</span><b>{session.usage.drillsToday} / {drillLimit ?? "∞"}</b></div>
-            <span className="account-meter-track"><i style={{ width: drillLimit == null ? "100%" : `${drillPercent}%` }} /></span>
-          </div>
-        </div>
-        {session.usage.byAccount.length ? (
-          <ul className="account-usage-accounts">
-            {session.usage.byAccount.map((account) => (
-              <li key={account.accountId}>
-                <span><b>{account.username}</b><small>{account.platform === "chesscom" ? "Chess.com" : "Lichess"}</small></span>
-                <span>{account.gamesAnalyzed} analysed · {account.gamesStored} stored</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
+      <EmptyState
+        title="Your plan is not shown here yet"
+        detail="Forma cannot yet tell you which plan you are on, what it includes, or how much of it you have used. The figures that used to stand here were counted from a part of the database the analysis no longer writes to, so they are not shown at all rather than shown wrong."
+        action={
+          <Link to="/pricing" className="secondary-button">
+            Compare plans
+          </Link>
+        }
+      />
 
       <div className="account-identity">
         <div>
@@ -238,7 +156,7 @@ function BillingPanel({
 }
 
 export default function Account({ loaderData }: Route.ComponentProps) {
-  const { session, repertoire, lessonProgress, mistakes, activity, plans, billingConfigured } = loaderData;
+  const { session, repertoire, lessonProgress, mistakes, activity } = loaderData;
 
   const statByKey = useMemo(() => {
     const m = new Map<string, RepertoireData["stats"][number]>();
@@ -371,7 +289,7 @@ export default function Account({ loaderData }: Route.ComponentProps) {
           </section>
         ) : null}
 
-        <BillingPanel session={session} plans={plans} configured={billingConfigured} />
+        <BillingPanel session={session} />
       </main>
     </div>
   );

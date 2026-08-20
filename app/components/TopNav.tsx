@@ -187,6 +187,8 @@ function AccountMenu() {
   const { open, setOpen, ref } = useDropdown();
   const navigate = useNavigate();
   const session = peekSession();
+  // Not `subject.displayLabel` in the middle: it is the constant "My games",
+  // which is a name for the analysis and not for the person signed in.
   const name = session?.username || session?.email || "Guest";
   const initial = name.charAt(0).toUpperCase();
   return (

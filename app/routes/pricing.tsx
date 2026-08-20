@@ -26,16 +26,24 @@ interface PricingData {
   plans: Plan[];
   configured: boolean;
   signedIn: boolean;
-  currentPlan: "free" | "pro" | null;
 }
 
+/**
+ * No `currentPlan`.
+ *
+ * It came off the session's `subscription` block, which came off the prototype
+ * `/me`. `/v1` publishes no per-user entitlement, so nothing here can tell a
+ * subscriber from anyone else, and the "Your current plan" marker is not drawn
+ * rather than drawn on a guess. The card offers Pro to a subscriber as a
+ * result; the checkout endpoint is the one that knows, and it is where that
+ * has to be caught until an entitlement read exists.
+ */
 export async function clientLoader(): Promise<PricingData> {
   const [catalogue, session] = await Promise.all([fetchPlans(), getSession()]);
   return {
     plans: catalogue.plans,
     configured: catalogue.configured,
     signedIn: Boolean(session),
-    currentPlan: session?.subscription.plan ?? null,
   };
 }
 
@@ -63,13 +71,14 @@ function PlanCard({
   interval,
   signedIn,
   configured,
-  current,
+  current = false,
 }: {
   plan: Plan;
   interval: Interval;
   signedIn: boolean;
   configured: boolean;
-  current: boolean;
+  /** Nothing sets this while `/v1` publishes no entitlement. See the loader. */
+  current?: boolean;
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -154,7 +163,7 @@ function PlanCard({
 }
 
 export default function Pricing() {
-  const { plans, configured, signedIn, currentPlan } = useLoaderData() as PricingData;
+  const { plans, configured, signedIn } = useLoaderData() as PricingData;
   const [interval, setInterval] = useState<Interval>("monthly");
   const [params] = useSearchParams();
   const cancelled = params.get("checkout") === "cancelled";
@@ -201,7 +210,6 @@ export default function Pricing() {
             interval={interval}
             signedIn={signedIn}
             configured={configured}
-            current={currentPlan === plan.id}
           />
         ))}
       </section>
