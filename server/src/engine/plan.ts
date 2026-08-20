@@ -21,6 +21,7 @@ import { currentRecipeFor } from "../analysis/validation.js";
 import { planRun } from "../analysis/runs.js";
 import { readEngineRoles, publishedMaterializationRun } from "./recipe.js";
 import { ASSESS_TASK, DEEP_TASK, SCREEN_TASK } from "./worker.js";
+import { DETECT_TASK } from "../analysis/concepts/worker.js";
 import { PRACTICAL_TASK } from "../models/worker.js";
 
 export interface PlanGameAnalysisInput {
@@ -160,6 +161,23 @@ export async function planGameAnalysis(
             resourceClass: "cpu_model",
             queue: "analysis",
             idempotencyKey: `e14:${PRACTICAL_TASK}:${run.id}`,
+            inputRef: `run:${run.id}`,
+            payload: { runId: run.id },
+            weight: 4,
+            dependsOn: [2],
+          },
+          {
+            // E13's detector, and the step that turns an analysed game into
+            // something a report can say. It depends on the assessment rather
+            // than on the practical context: the concepts it detects are read
+            // from the objective transitions and the board, and E14's human
+            // layer is unavailable in environments without a policy model.
+            // Chaining it behind that would mean no player ever gets measured
+            // because a model nobody deployed did not annotate their game.
+            taskType: DETECT_TASK,
+            resourceClass: "aggregation",
+            queue: "analysis",
+            idempotencyKey: `e13:${DETECT_TASK}:${run.id}`,
             inputRef: `run:${run.id}`,
             payload: { runId: run.id },
             weight: 4,

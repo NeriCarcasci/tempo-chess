@@ -168,9 +168,13 @@ try {
         [SCREEN_TASK, "stockfish-screen", "cpu_engine"],
         [DEEP_TASK, "stockfish-deep", "cpu_engine"],
         [ASSESS_TASK, "analysis", "aggregation"],
-        // E14's human layer, last and on cpu_model: it annotates assessments,
-        // so it cannot run before there are any.
+        // E14's human layer, on cpu_model: it annotates assessments, so it
+        // cannot run before there are any.
         ["analysis_practical_context", "analysis", "cpu_model"],
+        // E13's detector, alongside it rather than behind it: the concepts it
+        // reads come from the objective transitions and the board, so a
+        // deployment with no human policy model still measures its players.
+        ["analysis_detect_concepts", "analysis", "aggregation"],
       ],
     );
   });

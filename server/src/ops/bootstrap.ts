@@ -23,6 +23,7 @@ import { registerEngineHandlers } from "../engine/worker.js";
 import { registerEstimateHandlers } from "../estimates/worker.js";
 import { registerGoalHandlers } from "../goals/progress-worker.js";
 import { registerModelHandlers } from "../models/worker.js";
+import { registerConceptHandlers } from "../analysis/concepts/worker.js";
 import { registerOnboardingHandlers } from "../onboarding/worker.js";
 import { registerPositionHandlers } from "../positions/worker.js";
 import { registerSyncHandlers } from "../sync/worker.js";
@@ -55,6 +56,7 @@ export function registerDeploymentHandlers(deployment: string): string[] {
       // because it writes analysis rows, and the engine role cannot.
       registerEngineHandlers("analysis");
       registerModelHandlers();
+      registerConceptHandlers();
       registerPositionHandlers();
       registerEstimateHandlers();
       registerOnboardingHandlers();
@@ -90,6 +92,7 @@ export function registerDeploymentHandlers(deployment: string): string[] {
 export function registerAllHandlers(): string[] {
   registerEngineHandlers("both");
   registerModelHandlers();
+  registerConceptHandlers();
   registerPositionHandlers();
   registerEstimateHandlers();
   registerOnboardingHandlers();
