@@ -73,4 +73,14 @@ grant update on chess.core_positions to forma_analysis
 --> statement-breakpoint
 grant update on chess.core_positions to forma_ingestion
 --> statement-breakpoint
+-- Planning a game analysis writes an `analysis.runs` row, and E04 reserves work
+-- creation to `forma_api` and `forma_ops` precisely so a worker cannot create
+-- unbounded work -- but `forma_ops` was never granted the insert, so the one
+-- role allowed to plan could not. The row itself stays actor-scoped: the
+-- planner binds the owner of each game before writing, so the grant says "may
+-- plan" while the policy still says "for this subject".
+grant insert on analysis.runs to forma_ops
+--> statement-breakpoint
+grant insert on analysis.run_dependencies to forma_ops
+--> statement-breakpoint
 reset role
