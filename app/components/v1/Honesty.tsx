@@ -322,7 +322,7 @@ export function WorkingStrip({
   return (
     <div className="working">
       <div className="working-head">
-        <p />
+        <p>{label}</p>
         {percent === null ? null : <span>{Math.round(percent)}%</span>}
       </div>
       <div
@@ -333,12 +333,18 @@ export function WorkingStrip({
         aria-valuemax={100}
         aria-label={label}
       >
+        {/* The width is the percentage. It was hardcoded to `0%`, which is how
+            this strip spent every run of the examination sitting at zero while
+            the figure beside it climbed — the one failure a progress bar cannot
+            survive, because a bar that never moves reads as a bar that is
+            broken. An indeterminate bar sets no width at all: the sweep
+            animation owns the fill, and a width would pin it. */}
         <div
           className={`working-fill${percent === null ? " working-indeterminate" : ""}`}
-          style={{ width: "0%" }}
+          style={percent === null ? undefined : { width: `${Math.round(percent)}%` }}
         />
       </div>
-      {null}
+      {detail ? <p className="working-detail">{detail}</p> : null}
     </div>
   );
 }

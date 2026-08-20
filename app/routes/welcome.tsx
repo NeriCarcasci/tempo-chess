@@ -71,7 +71,10 @@ export async function clientLoader() {
   const destination = nextScreen({ state });
   const live = state.status === "active" || state.status === "activated";
   if (state.stage !== "not_started" && live && destination.kind !== "welcome") {
-    throw redirect("/onboarding");
+    // Straight to the report when there is one. Sending everybody through
+    // /onboarding meant a person whose report was written days ago got a
+    // progress screen for the length of one redirect.
+    throw redirect(destination.kind === "report" ? "/report" : "/onboarding");
   }
   return null;
 }

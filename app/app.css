@@ -181,6 +181,164 @@
   .onboarding-body { display: grid; gap: 1.4rem; margin-top: 1.6rem; }
   .onboarding-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.4rem; }
 
+  /* -- the examination, at full size ----------------------------------- */
+  /* The one onboarding screen that is deliberately not a card. `.auth-shell`
+     centres a 26rem panel, which is the right shape for a form and the wrong
+     shape for a system reading a year of somebody's chess. Its own layer, like
+     every other shell, because the warm backdrop sits behind everything. */
+  .sync-stage {
+    position: relative; z-index: 1;
+    display: grid; align-content: start; justify-items: center;
+    min-height: 100dvh;
+    /* Top-aligned rather than centred, and that is the whole point: the heading
+       and the bar sit where they will still be sitting once the boards arrive
+       under them, so nothing shifts at the moment the games appear. */
+    padding: clamp(2.5rem, 10vh, 6rem) 1.25rem 4rem;
+  }
+  .sync-inner { display: grid; gap: clamp(1.5rem, 4vh, 2.4rem); width: min(64rem, 100%); }
+  .sync-head { display: grid; gap: 0.55rem; justify-items: start; }
+  .sync-head h1 { font-size: 2rem; font-weight: 650; letter-spacing: -0.03em; }
+  .sync-sub {
+    max-width: 52ch; font-size: 0.95rem; line-height: 1.6; color: var(--color-ink-muted);
+  }
+
+  /* The bar. Three named sections, each filling from its own completed weight
+     over its own total weight, so all three are readable at once: importing
+     full, analysing part way, writing not started. Splitting the work up is
+     also what keeps the figures honest — the examination fans out into a
+     workflow per game, and one continuous percentage over the lot of them
+     walks backwards every time a batch is planned. */
+  .sync-bar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0.75rem; }
+  .sync-seg { display: grid; gap: 0.45rem; }
+  /* Never wraps. Each segment is its own little grid, so a label that took two
+     lines in one of them would drop that segment's track below its
+     neighbours', and a bar whose three pieces sit at different heights reads
+     as a rendering fault rather than as a bar. */
+  .sync-seg-label {
+    white-space: nowrap; overflow: hidden;
+    transition: color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .sync-seg.is-done .sync-seg-label { color: var(--color-ink-muted); }
+  .sync-seg.is-active .sync-seg-label { color: var(--color-accent); }
+  .sync-seg-track {
+    position: relative; height: 0.6rem; overflow: hidden;
+    border-radius: var(--radius-pill); background: var(--color-surface-3);
+  }
+  .sync-seg-fill {
+    display: block; height: 100%; width: 0;
+    border-radius: var(--radius-pill);
+    /* A section that is not the live one is the same hue at a lower value,
+       never a second colour: the bar means one thing, and the accent is what
+       it means. */
+    background: color-mix(in srgb, var(--color-accent) 44%, var(--color-surface-3));
+    transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .sync-seg.is-active .sync-seg-fill { background: var(--color-accent); }
+  .sync-seg-figure {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.7rem; letter-spacing: 0.02em; color: var(--color-ink-faint);
+  }
+  .sync-seg.is-active .sync-seg-figure { color: var(--color-ink); }
+  /* Job: the section that is running says so between readings, which arrive
+     every six seconds and move in units of a whole game. It is on the live,
+     unfinished section only, so nothing loops once the work is elsewhere. */
+  .sync-seg.is-active:not(.is-done) .sync-seg-track::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--color-accent) 22%, transparent),
+      transparent
+    );
+    animation: sync-sweep 2.4s ease-in-out infinite;
+  }
+  /* The live section in the short window before it has a denominator at all.
+     Same argument as `.working-indeterminate`: a 0% fill that never moves
+     reads as broken. It becomes a real width the moment one exists. */
+  .sync-seg-fill.is-unknown { width: 34%; animation: sync-travel 1.9s ease-in-out infinite; }
+  @keyframes sync-sweep {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  @keyframes sync-travel {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(320%); }
+  }
+
+  .sync-status {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 0.4rem 1.5rem;
+  }
+  .sync-detail { font-size: 1rem; color: var(--color-ink); }
+  .sync-eta {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  /* The games, replaying while they are read. Auto-fill rather than a fixed
+     four, so the boards keep their size from a phone to a wide monitor and no
+     breakpoint has to decide how many fit. */
+  .sync-games { display: grid; gap: 0.85rem; }
+  .sync-row { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
+  .sync-seat { display: grid; gap: 0.5rem; }
+  .sync-seat figcaption {
+    font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.04em;
+    color: var(--color-ink-faint);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sync-board {
+    position: relative; width: 100%; aspect-ratio: 1;
+    overflow: hidden; border-radius: var(--radius-control);
+    box-shadow: var(--shadow-soft);
+  }
+  /* Both tracks named, as on the hero board: the cells are empty spans, so
+     implicit auto rows would size to their content and collapse the board. */
+  .sync-board-grid {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
+  }
+  .sync-sq {
+    background: var(--color-board-light);
+    transition: background 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .sync-sq.is-dark { background: var(--color-board-dark); }
+  .sync-sq.is-moved { background: color-mix(in srgb, var(--color-accent) 32%, var(--color-board-light)); }
+  .sync-sq.is-dark.is-moved { background: color-mix(in srgb, var(--color-accent) 32%, var(--color-board-dark)); }
+  /* Keyed by piece identity, so a knight that moves is the same node in a new
+     place and the browser slides it there. Transform only: eight boards
+     animating `left` would be eight boards laying out every frame. */
+  .sync-board-slot {
+    position: absolute; left: 0; top: 0; width: 12.5%; height: 12.5%;
+    transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+    animation: sync-piece-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .sync-board-slot svg { display: block; width: 100%; height: 100%; }
+  @keyframes sync-piece-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Three labels across a phone are the tightest thing on this screen:
+     "Importing" at the shared cap size fills its column exactly at 375px and
+     runs out of room below it. Type and tracking come down rather than the
+     bar losing a section. */
+  @media (max-width: 520px) {
+    .sync-bar { gap: 0.5rem; }
+    .sync-seg-label { font-size: 0.58rem; letter-spacing: 0.05em; }
+    .sync-seg-figure { font-size: 0.64rem; letter-spacing: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sync-seg-label, .sync-seg-fill, .sync-sq, .sync-board-slot { transition: none; }
+    .sync-seg.is-active .sync-seg-track::after { display: none; }
+    .sync-seg-fill.is-unknown { animation: none; width: 100%; opacity: 0.45; }
+    /* The boards hold one position and never step; the component stops
+       advancing them as well, so the still frame is the whole picture. */
+    .sync-board-slot { animation: none; }
+  }
+
   .coverage-panel { display: grid; gap: 0.9rem; }
   .coverage-lead { display: grid; gap: 0.5rem; justify-items: start; }
   .coverage-count { font-size: 0.9rem; color: var(--color-ink-muted); }
@@ -326,8 +484,11 @@
   .working-detail { font-size: 0.8rem; color: var(--color-ink-muted); }
 
   /* An indeterminate bar, for work whose total is not known yet. A 0% bar that
-     never moves reads as broken; this reads as busy, which is the truth. */
+     never moves reads as broken; this reads as busy, which is the truth.
+     The width is set here rather than inline, because the fill's inline width
+     is the *determinate* value and an indeterminate bar has none to give. */
   .working-indeterminate {
+    width: 34%;
     animation: working-sweep 1.6s ease-in-out infinite;
   }
   @keyframes working-sweep {

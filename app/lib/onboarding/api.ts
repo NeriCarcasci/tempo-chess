@@ -7,7 +7,7 @@
  * 2xx from `startRun` does not mean the journey started.
  */
 
-import { v1, v1Data, newIdempotencyKey } from "../v1/client";
+import { v1, v1Collect, v1Data, newIdempotencyKey } from "../v1/client";
 import type { V1Result } from "../v1/client";
 import type {
   BaselineReport,
@@ -28,6 +28,24 @@ export function getOnboarding(): Promise<OnboardingState> {
 
 export function getWorkflow(workflowId: string): Promise<Workflow> {
   return v1Data<Workflow>(`/v1/workflows/${workflowId}`);
+}
+
+/**
+ * Every workflow the caller owns.
+ *
+ * Walked to the end rather than read one page at a time, because the caller
+ * wants the *sums*: an examination fans out into one `game_analysis` workflow
+ * per game, and a page of twenty-five of two hundred is not a percentage of
+ * anything. There is no endpoint that aggregates them and no endpoint that
+ * exposes work items — `server/src/v1/routes/workflows.ts` refuses both on
+ * purpose — so this is the finest honest picture the API offers.
+ *
+ * Six pages of a hundred covers a two-hundred-game baseline several times over.
+ * The bound is what stops a runaway account turning a progress bar into a
+ * hundred requests.
+ */
+export function listWorkflows(): Promise<Workflow[]> {
+  return v1Collect<Workflow>("/v1/workflows", { query: { limit: 100 }, pages: 6 });
 }
 
 export function getCoverage(runId: string): Promise<OnboardingCoverage> {
