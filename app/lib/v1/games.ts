@@ -1,9 +1,11 @@
 /**
- * Recent games with their moves, for the screens that replay them.
+ * Recent games with their moves, for the screens that replay them and the one
+ * that names the last of them.
  *
- * `GET /v1/games/recent` is being written on the server as this ships, so this
- * module is the seam: it is the only place that knows the wire shape, and the
- * only file that has to change when the real route lands.
+ * `GET /v1/games/recent` has landed. It answers `{ asOf, games }`, wraps the
+ * opponent in an object and carries `outcome` — the subject's own result —
+ * beside `result`, which names the winning colour. This module is still the
+ * only place that knows the wire shape.
  *
  * Two rules follow from that, and both are deliberate:
  *
@@ -33,8 +35,20 @@ export interface RecentGame {
   /** The subject's colour, which decides which way up the board is drawn. */
   colour: "white" | "black" | null;
   speed: string | null;
+  /** Which colour won, or a draw. Not the subject's result — see `outcome`. */
   result: string | null;
+  /**
+   * How it went *for the subject*.
+   *
+   * Separate from `result` on purpose: "black won" and "you lost" are the same
+   * game only once you know which side the person was, and a screen that reads
+   * one as the other congratulates people on their defeats.
+   */
+  outcome: "win" | "loss" | "draw" | null;
+  /** ISO 8601, as the API sends it. */
   playedAt: string | null;
+  /** The game on the site it was played on, when the provider exposes one. */
+  providerUrl: string | null;
   /** Only set when the game did not start from the standard position. */
   initialFen: string | null;
   moves: GameMove[];
@@ -62,6 +76,24 @@ function readMove(entry: unknown): GameMove | null {
   return san === null ? { uci } : { uci, san };
 }
 
+/**
+ * The handle across the board.
+ *
+ * The route sends `{ username, title, rating }`; a bare string is still read
+ * because the sync screen shipped against that shape and a row reading "From
+ * your archive" where a name belongs is a silent loss, not a visible one.
+ */
+function readOpponent(entry: unknown): string | null {
+  if (typeof entry === "string") return text(entry);
+  if (typeof entry !== "object" || entry === null) return null;
+  return text((entry as Record<string, unknown>).username);
+}
+
+function readOutcome(entry: unknown): RecentGame["outcome"] {
+  const value = text(entry)?.toLowerCase() ?? null;
+  return value === "win" || value === "loss" || value === "draw" ? value : null;
+}
+
 function readGame(entry: unknown): RecentGame | null {
   if (typeof entry !== "object" || entry === null) return null;
   const record = entry as Record<string, unknown>;
@@ -85,11 +117,13 @@ function readGame(entry: unknown): RecentGame | null {
 
   return {
     id,
-    opponent: text(record.opponent),
+    opponent: readOpponent(record.opponent),
     colour,
     speed: text(record.speed),
     result: text(record.result),
+    outcome: readOutcome(record.outcome),
     playedAt: text(record.playedAt),
+    providerUrl: text(record.providerUrl),
     initialFen: text(record.initialFen),
     moves,
   };

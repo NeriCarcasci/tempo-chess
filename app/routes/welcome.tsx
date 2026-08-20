@@ -10,8 +10,7 @@ import { ProblemError } from "../lib/v1/problem";
 import { newIdempotencyKey } from "../lib/v1/client";
 import type { LinkedAccount } from "../lib/v1/types";
 import { apiFetch } from "../lib/api";
-import { invalidateSession, requireUser, setActiveAccount } from "../lib/session";
-import { invalidateCache } from "../lib/loaderCache";
+import { requireUser, setActiveAccount } from "../lib/session";
 import { LichessMark, ChessComMark } from "../components/PlatformMarks";
 
 /**
@@ -29,14 +28,14 @@ import { LichessMark, ChessComMark } from "../components/PlatformMarks";
  * ## The double write, and when it goes
  *
  * Confirming links the account **twice**, on purpose and temporarily. `/v1`
- * writes `app.linked_accounts` and the canonical chess tables; the session and
- * every product screen that has not been ported yet read the legacy
- * `public.linked_accounts` and `public.games`. Linking on one surface only
- * would leave the person bounced out of every product route by
- * `requireSession()` with nothing on screen to explain it.
+ * writes `app.linked_accounts` and the canonical chess tables; the product
+ * screens that have not been ported yet read `public.games`, which only the
+ * legacy importer fills. The session is no longer one of those readers — it
+ * resolves from `/v1/me` — so the legacy call is now about the *games* those
+ * screens draw, not about being allowed through `requireSession()`.
  *
- * Delete the legacy half — steps 1 to 3 below — when the last legacy consumer
- * is ported. Nothing else here changes when that happens.
+ * Delete the legacy half when the last legacy consumer is ported: /openings,
+ * /train, /mistakes, /lessons, /play, /game and /account still read it.
  */
 
 export function meta() {
@@ -132,29 +131,33 @@ export async function clientAction({ request }: Route.ClientActionArgs): Promise
   // starting after the first would freeze a snapshot over half an archive.
   if (intent === "add") {
     try {
-      // The legacy surface too, so the session and the unported screens see the
-      // account. Goes first: `requireSession()` reads the legacy list, and an
-      // account that exists only on /v1 leaves the person bounced out of every
-      // product route with nothing on screen explaining why.
+      const session = await requireUser();
+      // `/v1` goes first, and it decides which account the product points at.
+      // The order used to be the other way round because `requireSession()`
+      // read the legacy account list; it reads `/v1/me` now, so an account that
+      // landed only on the legacy surface is one every product route bounces
+      // straight back to this screen. Failing here also leaves nothing behind.
+      const account = await linkAccount({
+        provider: platform,
+        handle: username,
+        idempotencyKey: newIdempotencyKey(),
+      });
+
+      // The legacy surface too, for the screens that have not been ported:
+      // they read `public.games`, and only the legacy importer writes it.
       const legacy = await apiFetch("/me/accounts", { json: { username, platform } });
       if (legacy.ok || legacy.status === 409) {
-        const body = (await legacy.json().catch(() => null)) as
-          | { id?: string; userId?: string }
-          | null;
-        if (body?.id && body.userId) setActiveAccount(body.userId, body.id);
-        invalidateSession();
-        invalidateCache();
         await apiFetch("/imports/lichess", {
           // `platform` is not optional: without it the importer assumed Lichess
           // for everybody, which imported nothing for a Chess.com player.
           json: { username, platform, games: "all" },
         }).catch(() => null);
       }
-      await linkAccount({
-        provider: platform,
-        handle: username,
-        idempotencyKey: newIdempotencyKey(),
-      });
+
+      // The id has to be the `/v1` one now — it is the only list the session
+      // validates the stored choice against. This also drops the session and
+      // loader caches, so the next loader sees the account that was just added.
+      setActiveAccount(session.userId, account.id);
       return { kind: "added", handle: username };
     } catch (error) {
       if (error instanceof ProblemError) {

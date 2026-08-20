@@ -204,6 +204,22 @@ Product:
   decision. That is PRODUCT.md's third principle ("every number earns its
   place") applied to a whole page rather than to a tile.
 
+  **It reads `/v1` and nothing else**: the opening explorer for the shape and
+  the lead, `/v1/games/recent` for the last game, `/v1/onboarding` for where
+  the examination stands. A one-line standing figure — rating, lifetime record,
+  games read — used to sit above the heading and came from the prototype API,
+  which counts tables the pipeline stopped writing. There is no `/v1` source
+  for any of the three, so an `EmptyState` from `Honesty.tsx` says so, under
+  the heading rather than above it, and the page still opens on its conclusion.
+  Same for the import control the "Then" list used to offer: `/v1` has no
+  importer, because games arrive with an examination run.
+
+  Note the threshold drift while both surfaces are live. Today counts a mistake
+  against the canonical tolerance — 0.02 of expected score against the best
+  line the same search found — and `/openings` still reads the prototype graph
+  and still counts 90cp. Both pages state their own threshold under the figure,
+  which is the only thing that makes two numbers under one word survivable.
+
 The landing is exactly six beats: hero, statement, scale, showcase, beta note,
 closer.
 There was a sixth ("What Forma will not do", three pastel tiles) and it is gone:

@@ -1,73 +1,91 @@
 import { redirect } from "react-router";
 import { getSupabase, supabaseConfigured } from "./supabase";
 import { invalidateCache } from "./loaderCache";
+import type { Me } from "./v1/types";
 
 /**
  * The signed-in user, as the app sees them.
  *
- * Identity comes from Supabase (email + auth.uid()); the chess account and plan
- * come from our API's `/me`. Routes read this instead of trusting a username in
- * their own URL, and the API re-checks everything against the access token, so
- * a tampered client can't reach another player's data.
+ * Identity comes from Supabase (email + auth.uid()) and from `GET /v1/me`,
+ * which answers for the *canonical* system: `app.profiles`, the personal
+ * analysis subject, and `app.linked_accounts`. It used to answer from the
+ * prototype's `/me`, which reads a different set of tables in the same
+ * database — `public.games` and friends — that the analysis pipeline stopped
+ * writing to. Every page keys its data off this object, so while it pointed at
+ * the prototype the whole product reported the prototype's numbers: 168 games
+ * stored and none analysed, next to a pipeline that had analysed everything.
+ *
+ * The subject is resolved from the access token on the server. Nothing here
+ * sends a username or a subject id, and no page may: the API derives who you
+ * are and refuses a body that names somebody else.
+ *
+ * `/v1/me` carries identity and linked accounts and nothing else, so the plan,
+ * the plan limits and the usage counters that used to hang off this object are
+ * gone rather than kept on the prototype. There is no entitlement read on `/v1`
+ * yet; when there is, it belongs here.
  */
+
+/** The wire shape, straight from the OpenAPI document. */
+type V1Account = Me["accounts"][number];
 
 export interface LinkedAccount {
   id: string;
   platform: "lichess" | "chesscom";
-  username: string;
-  normalizedUsername: string;
+  /**
+   * The name they play under, or null.
+   *
+   * Null is a real state, not a bug: the handle is the provider identity's
+   * current display username, and it is unset until a provider tells us one.
+   * A linked account with no name is still a linked account.
+   */
+  username: string | null;
+  normalizedUsername: string | null;
+  connectionKind: V1Account["connectionKind"];
+  verificationStatus: V1Account["verificationStatus"];
+  /** `disconnected` rows never reach here — see `connected`. */
+  status: V1Account["status"];
+  /** ISO 8601, as the API sends it. */
+  createdAt: string;
 }
 
-export interface Subscription {
-  plan: "free" | "pro";
-  status: "active" | "none";
-  currentPeriodEnd: string | null;
-  comped: boolean;
-}
-
-export interface PlanLimits {
-  analysedGames: number | null;
-  dailyDrills: number | null;
-  explorerDepth: number;
-  deepEngineAnalysis: boolean;
-  fullRepertoireMap: boolean;
-}
-
-export interface UsageSummary {
-  gamesStored: number;
-  gamesAnalyzed: number;
-  positionsAnalyzed: number;
-  drillsToday: number;
-  drillsAllTime: number;
-  lessonsCompleted: number;
-  enginePositionsToday: number;
-  byAccount: Array<{
-    accountId: string;
-    platform: "lichess" | "chesscom";
-    username: string;
-    gamesStored: number;
-    gamesAnalyzed: number;
-  }>;
+/**
+ * What `/v1` analyses for this person.
+ *
+ * The id is what every canonical read is scoped to server-side, so a screen
+ * that needs to name the thing it is showing has it without a second call.
+ * `displayLabel` is the constant "My games" today: a label for the analysis,
+ * never a name for the player.
+ */
+export interface PersonalSubject {
+  id: string;
+  displayLabel: string;
+  status: string;
 }
 
 export interface Session {
+  /** `app.profiles.user_id`. The server's answer, not the client's claim. */
   userId: string;
   email: string | null;
-  /** The chess account whose games back the study surfaces. */
+  /** What Forma analyses for this person, or null before the first link. */
+  subject: PersonalSubject | null;
+  /** The active account's handle, or "" when the provider has not named it. */
   username: string;
   /** The site that account plays on. Study surfaces read live data from it. */
   platform: "lichess" | "chesscom";
   /** The full row for `username`, or null before anything is linked. */
   activeAccount: LinkedAccount | null;
+  /** Connected accounts. A disconnected link is history, not a choice. */
   accounts: LinkedAccount[];
-  subscription: Subscription;
-  limits: PlanLimits;
-  usage: UsageSummary;
+  locale: string | null;
+  timezone: string | null;
 }
 
+// Same order of preference as `lib/v1/client.ts`, because this now calls the
+// same surface and a session resolved against a different host than every
+// subsequent read would be a very confusing way to fail.
 const API = import.meta.env.DEV
   ? "/api"
-  : (import.meta.env.VITE_ENGINE_URL ?? import.meta.env.VITE_API_URL ?? "/api");
+  : (import.meta.env.VITE_API_URL ?? import.meta.env.VITE_ENGINE_URL ?? "/api");
 
 /**
  * Which linked account the product is currently looking at.
@@ -109,7 +127,11 @@ function resolveActive(userId: string, accounts: LinkedAccount[]): LinkedAccount
   const stored = readStoredAccountId(userId);
   const match = stored ? accounts.find((a) => a.id === stored) : undefined;
   if (stored && !match) writeStoredAccountId(userId, null); // unlinked since
-  return match ?? accounts[0] ?? null;
+  // An active account before a paused one. Both are connected and both are
+  // legitimate choices, but only an active one has games still arriving, and
+  // landing a returning player on the paused one shows them a history that has
+  // stopped moving with nothing on screen saying why.
+  return match ?? accounts.find((a) => a.status === "active") ?? accounts[0] ?? null;
 }
 
 /**
@@ -173,6 +195,49 @@ async function devAutoSignIn(): Promise<boolean> {
   return true;
 }
 
+/**
+ * The wire row as the app names it.
+ *
+ * `provider`/`handle` on the wire, `platform`/`username` here — the two words
+ * for the same thing predate `/v1`, and renaming them across every product
+ * screen is a bigger change than this one. The mapping is the whole adapter.
+ */
+function toAccount(row: V1Account): LinkedAccount {
+  return {
+    id: row.id,
+    platform: row.provider,
+    username: row.handle,
+    normalizedUsername: row.handle === null ? null : row.handle.toLowerCase(),
+    connectionKind: row.connectionKind,
+    verificationStatus: row.verificationStatus,
+    status: row.status,
+    createdAt: row.createdAt,
+  };
+}
+
+/**
+ * Accounts the person still has.
+ *
+ * A disconnect closes the link and its subject membership rather than deleting
+ * anything, so `/v1/me` keeps answering with the row. Offering it in the
+ * account switcher would point the product at a subject that no longer
+ * receives games.
+ */
+function connected(accounts: V1Account[]): LinkedAccount[] {
+  return accounts.filter((row) => row.status !== "disconnected").map(toAccount);
+}
+
+/**
+ * Read `/v1/me` directly rather than through `lib/v1/client`.
+ *
+ * Two reasons, and both are about who may throw. The client turns a 401 into a
+ * thrown `redirect("/login")`, which is right inside a loader and wrong here:
+ * `getSession()` is also called from components (`PublicShell`) where a thrown
+ * `Response` becomes an unhandled rejection, and it would skip the sign-out
+ * below, leaving a dead Supabase session that 401s on every subsequent page.
+ * The client also imports `getAccessToken` from this module, so calling it from
+ * here would close an import cycle for no gain over one `fetch`.
+ */
 async function loadSession(): Promise<Session | null> {
   if (!supabaseConfigured) return null;
   let { data } = await getSupabase().auth.getSession();
@@ -185,7 +250,7 @@ async function loadSession(): Promise<Session | null> {
     return null;
   }
 
-  const response = await fetch(`${API}/me`, {
+  const response = await fetch(`${API}/v1/me`, {
     headers: { Authorization: `Bearer ${data.session!.access_token}` },
   });
   if (!response.ok) {
@@ -195,26 +260,29 @@ async function loadSession(): Promise<Session | null> {
     current = null;
     return null;
   }
-  const body = await response.json() as {
-    user: { id: string; email: string | null };
-    accounts: LinkedAccount[];
-    subscription: Subscription;
-    limits: PlanLimits;
-    usage: UsageSummary;
-  };
+  // `/v1` answers in an envelope. `meta.redactions` is dropped on purpose:
+  // nothing on this payload is withholdable, and a session that carried a
+  // redaction list would invite screens to read entitlements off it.
+  const body = (await response.json()) as { data: Me };
+  const me = body.data;
 
-  const active = resolveActive(body.user.id, body.accounts);
+  const accounts = connected(me.accounts);
+  // `me.profileId`, not `authUser.id`. They are the same uuid today, and the
+  // one the server resolved is the one every other `/v1` read is scoped to.
+  const active = resolveActive(me.profileId, accounts);
 
   current = {
-    userId: body.user.id,
-    email: body.user.email,
+    userId: me.profileId,
+    // The only field Supabase still owns. `/v1/me` does not publish an email,
+    // and it should not: the address is authentication, not chess identity.
+    email: authUser.email ?? null,
+    subject: me.personalSubject,
     username: active?.username ?? "",
     platform: active?.platform ?? "lichess",
     activeAccount: active,
-    accounts: body.accounts,
-    subscription: body.subscription,
-    limits: body.limits,
-    usage: body.usage,
+    accounts,
+    locale: me.locale,
+    timezone: me.timezone,
   };
   return current;
 }
@@ -236,6 +304,16 @@ export function getSession(): Promise<Session | null> {
  * For protected loaders: return the session or redirect to sign-in. A signed-in
  * user with no linked chess account is sent to `/welcome` instead, since every
  * study surface needs games to work from.
+ *
+ * The gate is **whether an account is connected**, not whether we have a name
+ * to print. It used to be `if (!session.username)`, which conflated the two:
+ * `handle` is the provider identity's display username and can be null on a
+ * perfectly good link, so a connected player with no recorded name was read as
+ * a player who had linked nothing. That redirect is one leg of a loop —
+ * `/welcome` sends a live run to `/onboarding`, `/onboarding` sends a written
+ * report to `/report`, and `/report` calls this function — and it has shipped
+ * to a real person once already. Nothing below may reintroduce a test on the
+ * *contents* of `username`.
  */
 export async function requireSession(): Promise<Session> {
   const session = await getSession();
@@ -243,7 +321,7 @@ export async function requireSession(): Promise<Session> {
   // `/welcome` is where a new person connects an account and the examination
   // starts. `/account/connect` is still mounted for "link another account",
   // which is a different errand.
-  if (!session.username) throw redirect("/welcome");
+  if (!session.activeAccount) throw redirect("/welcome");
   return session;
 }
 
@@ -297,7 +375,7 @@ export async function signOut(): Promise<void> {
   if (supabaseConfigured) await getSupabase().auth.signOut();
 }
 
-/** Forget the cached session so the next loader refetches `/me`. */
+/** Forget the cached session so the next loader refetches `/v1/me`. */
 export function invalidateSession(): void {
   current = null;
 }

@@ -1,11 +1,14 @@
-import { Link, useFetcher } from "react-router";
+import { Link } from "react-router";
 import { Board } from "./Board";
 import { TopNav } from "./TopNav";
-import { relTime } from "../lib/format";
-import type { GameLite, Summary } from "../lib/lichess";
-import type { PlayerCoverage } from "../lib/openings";
+import { EmptyState } from "./v1/Honesty";
+import { relTimeIso } from "../lib/format";
 import type { OpeningShape } from "../lib/todayShape";
 import type { SheetCell, SheetRow, TearSheet } from "../lib/tearSheet";
+import type { RecentGame } from "../lib/v1/games";
+import type { ExplorerEmptyReason } from "../lib/v1/openings";
+import { explorerEmptyCopy } from "../lib/v1/openings";
+import type { Destination } from "../lib/onboarding/nextScreen";
 
 /**
  * Today: how your chess is going, then the one thing to do about it.
@@ -21,6 +24,14 @@ import type { SheetCell, SheetRow, TearSheet } from "../lib/tearSheet";
  * shape of the player's mistakes, which is the product's own idea drawn as a
  * picture and the only thing here that rewards a glance, and narrows from
  * there into a single square and a single action.
+ *
+ * ## What the standing line used to say
+ *
+ * It carried a rating, a lifetime game count and a W/L/D record, all from the
+ * prototype API, all counted over tables the analysis pipeline no longer
+ * writes. `/v1` publishes none of the three. The line is now a stated absence
+ * rather than a figure nobody can vouch for, and it sits under the heading so
+ * the page still opens on its conclusion rather than on an apology.
  */
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -67,87 +78,52 @@ export function leadTask(sheet: TearSheet): LeadTask | null {
   return null;
 }
 
-export function Today({
-  summary,
-  coverage,
-  shape,
-  lead,
-}: {
-  summary: Summary;
-  coverage: PlayerCoverage | null;
+export interface TodayProps {
   shape: OpeningShape;
   lead: LeadTask | null;
-}) {
-  const missing =
-    coverage && !coverage.historyComplete
-      ? Math.max(0, coverage.availableGames - coverage.importedGames)
-      : 0;
+  /** Why there is no opening graph at all, when there is none. */
+  empty: ExplorerEmptyReason | null;
+  /** Games behind the opening graph, both colours. */
+  games: number;
+  /** Of those, the ones no analysis has reached yet. */
+  unanalysed: number;
+  /** The newest game `/v1/games/recent` knows about, or null. */
+  lastGame: RecentGame | null;
+  /** Where the examination stands, or null when the run could not be read. */
+  run: Destination | null;
+}
 
+export function Today({ shape, lead, empty, games, unanalysed, lastGame, run }: TodayProps) {
   return (
     <div className="relative z-10 min-h-dvh">
       <a className="skip-link" href="#today-main">Skip to content</a>
       <TopNav current="home" />
       <main id="today-main" className="today">
-        <Standing summary={summary} />
-        <Shape shape={shape} games={summary.record.all} />
-        {lead ? (
-          <Lead task={lead} />
-        ) : (
-          <NoLead games={summary.record.all} missing={missing} username={summary.username} />
-        )}
-        <Next
-          lead={lead}
-          blunders={summary.analyzed.blunders}
-          analysed={summary.analyzed.count}
-          lastGame={summary.recent[0] ?? null}
-          missing={missing}
-          username={summary.username}
-        />
+        <Shape shape={shape} empty={empty} games={games} />
+        <Standing />
+        {lead ? <Lead task={lead} /> : <NoLead games={games} unanalysed={unanalysed} />}
+        <Next lastGame={lastGame} run={run} />
       </main>
     </div>
   );
 }
 
 /**
- * Orientation, in one line: who this is and how it is going.
+ * Orientation: how am I doing. Forma cannot answer it yet, and says so.
  *
- * Not a row of stat tiles. Three facts a player checks in a second, set in the
- * numeral face, with the rating carrying its own direction so it says whether
- * things are improving rather than only where they stand.
+ * The three facts that stood here — a rating with its direction, a lifetime
+ * game count and a W/L/D record — all came from one prototype endpoint reading
+ * tables that stopped being written. There is no rating anywhere on `/v1`, no
+ * lifetime record, and no analysed-game or blunder count. Filling the line
+ * from the old source would be the most-read lie on the site, and leaving the
+ * line out entirely would make the absence look like a design choice.
  */
-function Standing({ summary }: { summary: Summary }) {
-  const best = summary.bestFormat;
-  /**
-   * The format's own progression, not a subtraction over `summary.trend`.
-   *
-   * `bestFormat` is the highest-rated *established* format and `trend` is the
-   * most-*played* speed, so differencing that series and printing it beside
-   * this rating labelled the swing of one format with the name of another. It
-   * read "1587 classical, down 894", which is not a thing that happened.
-   */
-  const delta = best?.prog ?? 0;
-  const record = summary.record;
-
+function Standing() {
   return (
-    <p className="today-standing">
-      {best ? (
-        <span>
-          <b>{best.rating}</b> {best.label.toLowerCase()}
-          {delta !== 0 ? (
-            <i data-dir={delta > 0 ? "up" : "down"}>
-              {delta > 0 ? "▲" : "▼"}
-              {Math.abs(delta)}
-            </i>
-          ) : null}
-        </span>
-      ) : null}
-      <span>
-        <b>{record.all}</b> {plural(record.all, "game", "games")} read
-      </span>
-      <span>
-        <b>{record.win}</b>W <b>{record.loss}</b>L <b>{record.draw}</b>D
-      </span>
-    </p>
+    <EmptyState
+      title="No rating or record here yet"
+      detail="Forma does not publish your rating, your lifetime win, loss and draw record, or how many of your games it has analysed. The figures that used to stand here were counted somewhere nothing can vouch for, so the line is empty until there is something true to put in it."
+    />
   );
 }
 
@@ -159,15 +135,43 @@ function Standing({ summary }: { summary: Summary }) {
  * these encode *how many* across every line, and drawing two different
  * measures with the same mark would be the real inconsistency.
  */
-function Shape({ shape, games }: { shape: OpeningShape; games: number }) {
+function Shape({
+  shape,
+  empty,
+  games,
+}: {
+  shape: OpeningShape;
+  empty: ExplorerEmptyReason | null;
+  games: number;
+}) {
+  /**
+   * No graph and no mistakes are different pages.
+   *
+   * "No opening mistakes found in your games yet" was printed for both, and
+   * for a third case underneath them: games synced whose positions have not
+   * been built yet. That last one resolves on its own, and telling somebody
+   * their play is clean while the work is still running is the exact failure
+   * this product exists not to commit. `explorerEmptyCopy` already separates
+   * the three, so this asks it rather than writing a fourth sentence.
+   */
+  if (empty) {
+    const copy = explorerEmptyCopy(empty, games);
+    return (
+      <section className="today-shape is-empty" aria-labelledby="today-shape-head">
+        <h1 id="today-shape-head">{copy.title}</h1>
+        <p>{copy.detail}</p>
+      </section>
+    );
+  }
+
   if (shape.total === 0) {
     return (
       <section className="today-shape is-empty" aria-labelledby="today-shape-head">
-        <h1 id="today-shape-head">
-          {games === 0
-            ? "No games read yet."
-            : "No opening mistakes found in your games yet."}
-        </h1>
+        <h1 id="today-shape-head">No opening mistakes found in your games yet.</h1>
+        <p>
+          Forma read the openings of {games} {plural(games, "game", "games")} and every
+          move it could grade held. Play more and the picture will fill in.
+        </p>
       </section>
     );
   }
@@ -208,9 +212,17 @@ function Shape({ shape, games }: { shape: OpeningShape; games: number }) {
             );
           })}
         </div>
+        {/* The threshold is stated because it changed with the source. The
+            prototype graph counted a mistake at 90 centipawns; the canonical
+            one counts a move outside the engine's stated tolerance, which is
+            0.02 of expected score against the best line the same search found.
+            Two different rules wearing the same word is exactly the kind of
+            quiet reclassification the tolerance is versioned to prevent, and
+            /openings still reads the old graph and still says 90cp. */}
         <figcaption>
-          Your own move number. {shape.total} mistakes in total, counted where a
-          move outside your book lost 90 centipawns or more.
+          Your own move number. {shape.total} mistakes in total, counted where the
+          move played cost more than 0.02 of expected score against the engine's
+          best line in the same search.
         </figcaption>
       </figure>
     </section>
@@ -260,18 +272,14 @@ function Lead({ task }: { task: LeadTask }) {
  * No marker: either there are not enough games to name a worst line, or the
  * repertoire genuinely has no square bad enough to qualify. Those are different
  * facts and the page says which.
+ *
+ * The "import N more games" button that used to live here is gone. It posted
+ * to the prototype importer, and `/v1` has no import: games arrive with an
+ * examination run, which /welcome and /onboarding start. Offering the button
+ * would be offering a control that writes to the half of the database this
+ * page has stopped reading.
  */
-function NoLead({
-  games,
-  missing,
-  username,
-}: {
-  games: number;
-  missing: number;
-  username: string;
-}) {
-  const sync = useFetcher<{ ok: boolean; message: string }>();
-  const busy = sync.state !== "idle";
+function NoLead({ games, unanalysed }: { games: number; unanalysed: number }) {
   const thin = games < 20;
 
   return (
@@ -285,24 +293,15 @@ function NoLead({
         </h2>
         <p>
           {thin
-            ? `Forma has read ${games} ${plural(games, "game", "games")}. Opening patterns need about twenty before a worst line means anything.`
-            : "Every line you play holds within tolerance. Practise the repertoire you have, or import more history to widen the sample."}
+            ? `Forma has read the openings of ${games} ${plural(games, "game", "games")}. Opening patterns need about twenty before a worst line means anything.`
+            : "Every line you play holds within tolerance. Practise the repertoire you have."}
+          {unanalysed > 0
+            ? ` ${unanalysed} of them ${plural(unanalysed, "has", "have")} not been analysed yet, so the sample will widen on its own.`
+            : ""}
         </p>
-        {missing > 0 ? (
-          <sync.Form method="post">
-            <input type="hidden" name="username" value={username} />
-            <button className="primary-button btn-lg today-go" disabled={busy}>
-              {busy ? "Importing…" : `Import ${missing} more ${plural(missing, "game", "games")}`}
-            </button>
-            {sync.data ? (
-              <span className="sr-only" aria-live="polite">{sync.data.message}</span>
-            ) : null}
-          </sync.Form>
-        ) : (
-          <Link to="/openings" className="primary-button btn-lg today-go">
-            Open your lines
-          </Link>
-        )}
+        <Link to="/openings" className="primary-button btn-lg today-go">
+          Open your lines
+        </Link>
       </div>
     </section>
   );
@@ -313,9 +312,55 @@ interface NextItem {
   title: string;
   fact: string;
   cta: string;
-  /** A destination, or an import that runs here. Never both. */
+  /** A route in this app. */
   to?: string;
-  action?: "import";
+  /** Somewhere off Forma. Never both. */
+  href?: string;
+}
+
+/** The examination, as a row. `done` and `welcome` produce nothing. */
+function runItem(run: Destination): NextItem | null {
+  switch (run.kind) {
+    case "report":
+      return {
+        key: "report",
+        title: "Your baseline report is ready",
+        fact: "Forma has finished reading your games and written up what it found",
+        to: "/report",
+        cta: "Read it",
+      };
+    case "wait":
+      return {
+        key: "run",
+        title: "Forma is reading your games",
+        fact: run.reason,
+        to: "/onboarding",
+        cta: "Watch",
+      };
+    case "stuck":
+      return {
+        key: "run",
+        title: "The examination stopped",
+        fact: run.workflowFailed
+          ? "The sync failed partway through"
+          : "It cannot go any further on its own",
+        to: "/onboarding",
+        cta: "See why",
+      };
+    case "diagnostic":
+      return {
+        key: "run",
+        title: "The examination is waiting on a diagnostic",
+        fact: "Nothing runs until this is settled",
+        to: "/onboarding",
+        cta: "Open",
+      };
+    // `welcome` cannot happen behind `requireSession`, and `done` is the
+    // ordinary state of anybody who finished. Neither is worth a row.
+    case "welcome":
+    case "done":
+      return null;
+  }
 }
 
 /**
@@ -323,55 +368,44 @@ interface NextItem {
  *
  * Every row is a real destination with a measured reason to go there. A row
  * that cannot state its reason does not render, which is why this list is
- * short and why its length changes between players.
+ * short and why its length changes between players. It is also why a failed
+ * `/v1/onboarding` read produces no row rather than a placeholder: "we could
+ * not check" is not a reason to go anywhere.
+ *
+ * The blunder-drilling row is gone with the counts it stated. It needed the
+ * analysed-game and blunder totals from the prototype `/me`, and `/v1` has
+ * neither; /mistakes is still reachable from the nav, and a row claiming a
+ * number it cannot count would be worse than no row.
  */
-function Next({
-  lead,
-  blunders,
-  analysed,
-  lastGame,
-  missing,
-  username,
-}: {
-  lead: LeadTask | null;
-  blunders: number;
-  analysed: number;
-  lastGame: GameLite | null;
-  missing: number;
-  username: string;
-}) {
+function Next({ lastGame, run }: { lastGame: RecentGame | null; run: Destination | null }) {
   const items: NextItem[] = [];
 
-  if (blunders > 0 && analysed > 0) {
-    items.push({
-      key: "mistakes",
-      title: "Drill your blunders",
-      fact: `${blunders} found across ${analysed} analysed ${plural(analysed, "game", "games")}`,
-      to: "/mistakes?color=white",
-      cta: "Drill",
-    });
-  }
+  const fromRun = run ? runItem(run) : null;
+  if (fromRun) items.push(fromRun);
 
   if (lastGame) {
+    // `outcome` is the subject's own result. `result` names the winning colour,
+    // and reading that one here would tell half the readers they had won a game
+    // they lost.
     const outcome =
-      lastGame.result === "win" ? "Won" : lastGame.result === "loss" ? "Lost" : "Drew";
+      lastGame.outcome === "win"
+        ? "Won"
+        : lastGame.outcome === "loss"
+          ? "Lost"
+          : lastGame.outcome === "draw"
+            ? "Drew"
+            : "Played";
+    const when = relTimeIso(lastGame.playedAt);
+    const against = lastGame.opponent ? ` against ${lastGame.opponent}` : "";
     items.push({
       key: "last-game",
-      title: "Review your last game",
-      fact: `${outcome} against ${lastGame.opponent}, ${relTime(lastGame.createdAt)}`,
-      to: `/game/${lastGame.id}`,
-      cta: "Review",
-    });
-  }
-
-  // Only when a lead already took the primary slot; otherwise NoLead offers it.
-  if (missing > 0 && lead) {
-    items.push({
-      key: "import",
-      title: "Import the rest of your history",
-      fact: `${missing} ${plural(missing, "game", "games")} still missing`,
-      action: "import",
-      cta: "Import",
+      title: "Your last game",
+      fact: `${outcome}${against}${when ? `, ${when}` : ""}`,
+      // The board review this used to link to reads the prototype's game ids,
+      // and these are the canonical ones. Until a `/v1` review screen exists
+      // the honest destination is the game where it was played.
+      href: lastGame.providerUrl ?? undefined,
+      cta: "Open",
     });
   }
 
@@ -387,37 +421,23 @@ function Next({
               <strong>{item.title}</strong>
               <small>{item.fact}</small>
             </span>
-            {item.action === "import" ? (
-              <ImportButton label={item.cta} username={username} />
-            ) : (
-              <Link to={item.to!} className="today-row-go">
+            {item.to ? (
+              <Link to={item.to} className="today-row-go">
                 {item.cta}
               </Link>
-            )}
+            ) : item.href ? (
+              <a
+                href={item.href}
+                className="today-row-go"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {item.cta}
+              </a>
+            ) : null}
           </li>
         ))}
       </ul>
     </section>
-  );
-}
-
-/**
- * The import runs from the row that names it. It was a link to the openings
- * page for one revision, which meant a row titled "Import" handed you a button
- * reading "Open" and then a different page to find the real control on.
- */
-function ImportButton({ label, username }: { label: string; username: string }) {
-  const sync = useFetcher<{ ok: boolean; message: string }>();
-  const busy = sync.state !== "idle";
-  return (
-    <sync.Form method="post">
-      <input type="hidden" name="username" value={username} />
-      <button className="today-row-go" disabled={busy}>
-        {busy ? "Importing…" : label}
-      </button>
-      {sync.data ? (
-        <span className="sr-only" aria-live="polite">{sync.data.message}</span>
-      ) : null}
-    </sync.Form>
   );
 }
