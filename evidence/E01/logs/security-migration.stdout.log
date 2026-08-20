@@ -1,0 +1,110 @@
+
+> security:migration
+> tsx src/security/gates/migration.ts
+
+PASS MIG-ART-001 server/drizzle/0011_e01_containment.sql 27497 bytes sha256=212a833c84f204460c95f6b1a1eba1ff6d0d22088085a2fdd13a867ac5d9dcb7
+PASS MIG-ART-002 server/drizzle/meta/0011_snapshot.json 94395 bytes sha256=3ae5f06bff21114923984933206ec850d3f82097eccd200c3ba793a4dce7ccc1
+PASS MIG-JRN-001 only addition is idx=11 version=7 when=1786840279694 tag=0011_e01_containment breakpoints=true
+PASS MIG-TBL-001 public.analysis_imports exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-002 public.analysis_tasks exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-003 public.beta_signups exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-004 public.canonical_moves exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-005 public.game_sources exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-006 public.games exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-007 public.lesson_progress exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-008 public.linked_accounts exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-009 public.mistakes exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-010 public.opening_drills exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-011 public.opening_edges exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-012 public.opening_positions exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-013 public.opening_repertoire_moves exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-014 public.opening_training_results exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-015 public.player_opening_observations exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-016 public.player_opening_stats exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-017 public.player_style exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-018 public.position_eval exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-019 public.profiles exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-020 public.puzzles exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-021 public.repertoire_openings exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-TBL-022 public.usage_events exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS MIG-POL-001 analysis_imports_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-002 analysis_tasks_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-003 beta_signups_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-004 canonical_moves_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-005 game_sources_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-006 games_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-007 lesson_progress_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-008 linked_accounts_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-009 mistakes_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-010 opening_drills_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-011 opening_edges_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-012 opening_positions_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-013 opening_repertoire_moves_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-014 opening_training_results_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-015 player_opening_observations_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-016 position_eval_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-017 profiles_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-018 repertoire_openings_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-POL-019 usage_events_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS MIG-GRT-001 forma_api has INSERT on public.analysis_imports; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-002 forma_api has SELECT on public.analysis_imports; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-003 forma_api has UPDATE on public.analysis_imports; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-004 forma_api has INSERT on public.analysis_tasks; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-005 forma_api has SELECT on public.analysis_tasks; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-006 forma_api has UPDATE on public.analysis_tasks; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-007 forma_api has INSERT on public.beta_signups; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-008 forma_api has SELECT on public.beta_signups; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-009 forma_api has UPDATE on public.beta_signups; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-010 forma_api has INSERT on public.game_sources; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-011 forma_api has SELECT on public.game_sources; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-012 forma_api has UPDATE on public.game_sources; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-013 forma_api has INSERT on public.games; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-014 forma_api has SELECT on public.games; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-015 forma_api has UPDATE on public.games; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-016 forma_api has INSERT on public.lesson_progress; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-017 forma_api has SELECT on public.lesson_progress; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-018 forma_api has UPDATE on public.lesson_progress; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-019 forma_api has INSERT on public.linked_accounts; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-020 forma_api has SELECT on public.linked_accounts; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-021 forma_api has UPDATE on public.linked_accounts; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-022 forma_api has INSERT on public.opening_drills; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-023 forma_api has SELECT on public.opening_drills; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-024 forma_api has UPDATE on public.opening_drills; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-025 forma_api has INSERT on public.opening_edges; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-026 forma_api has SELECT on public.opening_edges; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-027 forma_api has UPDATE on public.opening_edges; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-028 forma_api has INSERT on public.opening_positions; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-029 forma_api has SELECT on public.opening_positions; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-030 forma_api has UPDATE on public.opening_positions; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-031 forma_api has INSERT on public.player_opening_observations; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-032 forma_api has SELECT on public.player_opening_observations; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-033 forma_api has UPDATE on public.player_opening_observations; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-034 forma_api has DELETE on public.canonical_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-035 forma_api has INSERT on public.canonical_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-036 forma_api has SELECT on public.canonical_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-037 forma_api has DELETE on public.repertoire_openings; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-038 forma_api has INSERT on public.repertoire_openings; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-039 forma_api has SELECT on public.repertoire_openings; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-040 forma_api has DELETE on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-041 forma_api has INSERT on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-042 forma_api has SELECT on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-043 forma_api has UPDATE on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-044 forma_api has DELETE on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-045 forma_api has INSERT on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-046 forma_api has SELECT on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-047 forma_api has UPDATE on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-048 forma_api has SELECT on public.mistakes; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-049 forma_api has INSERT on public.opening_training_results; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-050 forma_api has SELECT on public.opening_training_results; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-051 forma_api has INSERT on public.position_eval; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-052 forma_api has SELECT on public.position_eval; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-053 forma_api has INSERT on public.usage_events; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-GRT-054 forma_api has SELECT on public.usage_events; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS MIG-DEN-001 no role holds any privilege and no policy of any kind exists on public.player_opening_stats; adversarial replay containing an unlisted table in public is rejected
+PASS MIG-DEN-002 no role holds any privilege and no policy of any kind exists on public.player_style; adversarial replay containing a forbidden forma_api SELECT grant on public.puzzles is rejected
+PASS MIG-DEN-003 no role holds any privilege and no policy of any kind exists on public.puzzles; adversarial replay containing a forbidden extra policy on public.puzzles is rejected
+PASS MIG-ROLE-001 forma_api rolcanlogin=true rolinherit=false rolsuper=false rolcreatedb=false rolcreaterole=false rolbypassrls=false
+PASS MIG-ROLE-002 forma_api owns no table, sequence, routine, or schema in public
+PASS MIG-ROLE-003 forma_migrator rolcanlogin=true rolinherit=false rolsuper=false rolcreatedb=false rolcreaterole=false rolbypassrls=false
+PASS MIG-ROLE-004 forma_migrator has no committed credential, runtime client, job, or executable operational path
+RESULT cd server && npm run security:migration 105/105 pass=105 fail=0 skip=0 todo=0 problems=0

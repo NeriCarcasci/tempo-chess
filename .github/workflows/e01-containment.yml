@@ -1,0 +1,70 @@
+# E01 containment gates.
+#
+# Deterministic, no-secret gates only. This workflow authenticates to nothing:
+# no Cloud Run, no Secret Manager, no Supabase management API, no provider
+# control plane, and no production project. The production-readonly gate is a
+# Fedora final-evidence gate and is categorically excluded from CI, because it
+# reads live production and cannot be run without credentials.
+#
+# The rehearsal builds and destroys its own disposable containers; it is run
+# locally as part of the evidence lifecycle rather than here, so CI needs no
+# container runtime and no fixtures beyond the repository.
+
+name: E01 containment
+
+on:
+  pull_request:
+  push:
+    branches: [epic/e01-containment]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Root install, build, typecheck
+        run: |
+          npm ci
+          npm run build
+          npm run typecheck
+
+      - name: Server install, build, typecheck
+        working-directory: server
+        run: |
+          npm ci
+          npm run build
+          npm run typecheck
+
+      - name: Pipeline and CORS contract
+        working-directory: server
+        run: npm run pipeline:test
+
+      - name: Security unit gate
+        working-directory: server
+        run: npm run security:unit
+
+      - name: Migration gate
+        working-directory: server
+        run: npm run security:migration
+
+      - name: Forbidden-scope gate
+        working-directory: server
+        run: npm run security:forbidden-scope
+
+      - name: Production dependency audits
+        run: |
+          npm audit --omit=dev
+          cd server && npm audit --omit=dev

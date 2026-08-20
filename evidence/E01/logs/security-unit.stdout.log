@@ -1,0 +1,37 @@
+
+> security:unit
+> tsx src/security/gates/unit.ts
+
+PASS UNIT-CFG-001 forma_api.<ref> resolves to base role forma_api
+PASS UNIT-CFG-002 forma_api resolves to base role forma_api with no tenant
+PASS UNIT-CFG-003 pooled forma_api on 6543 with the role marker: zero blocking findings
+PASS UNIT-CFG-004 blocking rejection: DATABASE_ROLE_IS_OWNER
+PASS UNIT-CFG-005 blocking rejection: DATABASE_ROLE_IS_MIGRATOR
+PASS UNIT-CFG-006 blocking rejection: DATABASE_ROLE_UNKNOWN
+PASS UNIT-CFG-007 port 5432 rejected with a message naming 6543
+PASS UNIT-CFG-008 blocking rejection: DATABASE_ROLE_MARKER_MISSING
+PASS UNIT-CFG-009 blocking rejection: DATABASE_ROLE_MARKER_MISMATCH
+PASS UNIT-CFG-010 blocking rejection (DATABASE_URL_NOT_POSTGRES) without echoing the input
+PASS UNIT-CFG-011 parsed connection carries host, port, database, and base role only
+PASS UNIT-CFG-012 current_user=postgres fails closed and no public diagnostic route exposes it
+PASS UNIT-RED-001 database URL and password removed from log output and client body
+PASS UNIT-RED-002 bearer token and header removed from log output and client body
+PASS UNIT-RED-003 JWT removed from log output and client body
+PASS UNIT-RED-004 API key removed from log output and client body
+PASS UNIT-RED-005 SQL text and driver detail removed from log output and client body
+PASS UNIT-RED-006 row values removed from log output and client body
+PASS UNIT-RED-007 provider body removed from log output and client body
+PASS UNIT-RED-008 PGN and FEN payloads removed from log output and client body
+PASS UNIT-RED-009 raw exception replaced by the legacy safe body {"error":"..."}
+PASS UNIT-RED-010 caller text, spoofed names, AggregateError descendants, and nested causes removed from log output and client body
+PASS UNIT-HLT-001 HTTP 200 {status,service,ts}; no DB role, revision, or secret fields
+PASS UNIT-HLT-002 11 likely readiness/identity paths all return 404
+PASS UNIT-HLT-003 identity check failed closed with no secret or SQL; liveness claims no identity readiness
+PASS UNIT-HLT-004 deployed invalid configuration rejected before serving, with no credential in the output
+PASS UNIT-EVD-001 validator rejects a duplicate assertion ID (duplicate)
+PASS UNIT-EVD-002 validator rejects a missing assertion (missing)
+PASS UNIT-EVD-003 validator rejects an unexpected assertion ID (unexpected)
+PASS UNIT-EVD-004 validator rejects a skipped assertion (skipped); validator rejects an unfinished assertion (todo)
+PASS UNIT-EVD-005 timeout and network errors classify as failure, never denial
+PASS UNIT-EVD-006 404 and 200 classify as failure after existence is proven; 401/403/42501 remain denials
+RESULT cd server && npm run security:unit 32/32 pass=32 fail=0 skip=0 todo=0 problems=0

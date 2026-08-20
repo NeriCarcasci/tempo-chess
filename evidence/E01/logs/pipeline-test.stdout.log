@@ -1,0 +1,14 @@
+
+> pipeline:test
+> tsx src/security/gates/pipeline.ts
+
+PASS PIPE-001 src/pipeline/state.test.ts and src/pipeline/fire-and-forget.test.ts exited 0 with no skipped or unfinished case
+PASS PIPE-002 https://forma-chess.pages.dev echoed exactly; no wildcard
+PASS PIPE-003 https://formachess.com echoed exactly; no wildcard
+PASS PIPE-004 https://www.formachess.com echoed exactly; no wildcard
+PASS PIPE-005 Vary contains Origin exactly once
+PASS PIPE-006 disallowed preflight rejected with 403 and no ACAO
+PASS PIPE-007 disallowed origin got HTTP 200 and no ACAO
+PASS PIPE-008 request without Origin remains usable and receives no ACAO
+PASS PIPE-009 deployed wildcard, empty, arbitrary-only, partial, and approved-plus-extra allowlists rejected: 7 cases
+RESULT cd server && npm run pipeline:test 9/9 pass=9 fail=0 skip=0 todo=0 problems=0

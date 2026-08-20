@@ -8,8 +8,10 @@ import { fetchChesscomGames } from "../ingest/chesscom.js";
 import { normalizeProviderUsername } from "../ingest/canonical.js";
 import type { NormalizedGame, NormalizedMove } from "../ingest/types.js";
 import { classifyTaskFailure } from "./state.js";
+import { logSafeError, persistableError } from "../security/redaction.js";
 import { DEFAULT_ANALYSIS_BUDGET, type AnalysisTaskRecord, type ImportProgress } from "./types.js";
 import { buildPlayerOpeningGraph } from "../openings/service.js";
+import { createImportShadow, mirrorImportStatus } from "../ops/legacy-shadow.js";
 
 const DEMO_EMAIL = "local@tempo.chess";
 const workerId = `local-${process.pid}-${randomUUID().slice(0, 8)}`;
@@ -215,14 +217,24 @@ export async function createImport(
     50_000,
     Math.max(DEFAULT_ANALYSIS_BUDGET.maxPositions, requestedGames * 100),
   );
-  const rows = await client`
-    insert into analysis_imports (user_id, account_id, requested_games, max_positions, estimated_cost_usd)
-    values (${userId}, ${accountId}, ${requestedGames}, ${maxPositions},
-      ${requestedGames * 70 * DEFAULT_ANALYSIS_BUDGET.estimatedScreeningCostPerPositionUsd})
-    returning id`;
-  const id = String(rows[0]!.id);
+  // The import row and its durable ledger record commit together. E04's whole
+  // claim is that a committed command cannot be lost, and a shadow written
+  // after the fact would have a window where it was.
+  const id = (await client.begin(async (tx) => {
+    const rows = await tx`
+      insert into analysis_imports (user_id, account_id, requested_games, max_positions, estimated_cost_usd)
+      values (${userId}, ${accountId}, ${requestedGames}, ${maxPositions},
+        ${requestedGames * 70 * DEFAULT_ANALYSIS_BUDGET.estimatedScreeningCostPerPositionUsd})
+      returning id`;
+    const importId = String(rows[0]!.id);
+    await createImportShadow(tx as unknown as typeof client, {
+      importId,
+      ownerProfileId: userId,
+    });
+    return importId;
+  })) as string;
   void ingestImport(id, userId, accountId, username, requestedGames, platform)
-    .catch((error) => failImport(id, error));
+    .catch((error) => settleImportFailure(id, error));
   return (await getImport(id))!;
 }
 
@@ -247,14 +259,46 @@ export async function cancelImport(id: string, userId?: string): Promise<ImportP
       and exists (select 1 from analysis_imports i where i.id = ${id}
         and (${userId ?? null}::uuid is null or i.user_id = ${userId ?? null}))`;
   await refreshImport(id);
+  await mirrorImportStatus(id, "cancelled");
   return getImport(id, userId);
 }
 
-async function failImport(id: string, error: unknown): Promise<void> {
-  console.error("analysis import failed", error);
-  const message = error instanceof Error ? error.message : String(error);
-  await client`update analysis_imports set status = 'failed', error = ${message.slice(0, 1000)}, completed_at = now(), updated_at = now()
+export async function persistImportFailure(id: string, error: unknown): Promise<void> {
+  // The row is read back by the owning user through the API, so it carries a
+  // classification from a closed set rather than the driver's or the provider's
+  // own words. The raw failure never reaches the column or the log.
+  logSafeError("analysis import failed", error);
+  await client`update analysis_imports set status = 'failed', error = ${persistableError(error)}, completed_at = now(), updated_at = now()
     where id = ${id} and status not in ('completed', 'cancelled')`;
+  await mirrorImportStatus(id, "failed");
+}
+
+/**
+ * Settle a detached ingest failure even when recording its failed status cannot
+ * reach Postgres. Both failures are reduced to closed classifications and this
+ * helper always resolves, so callers may safely discard the returned promise.
+ */
+export async function settleImportFailure(id: string, error: unknown): Promise<void> {
+  try {
+    await persistImportFailure(id, error);
+  } catch (persistenceError) {
+    logSafeError("analysis import failure persistence failed", persistenceError);
+  }
+}
+
+/** Persist the worker's closed-set failure classification, never its message. */
+export async function persistTaskFailure(
+  id: string,
+  attempts: number,
+  maxAttempts: number,
+  error: unknown,
+): Promise<"queued" | "failed"> {
+  const next = classifyTaskFailure(attempts, maxAttempts);
+  logSafeError("analysis task failed", error);
+  await client`update analysis_tasks set status = ${next}, error = ${persistableError(error)},
+    worker_id = null, locked_at = null, completed_at = ${next === "failed" ? new Date().toISOString() : null}, updated_at = now()
+    where id = ${id}`;
+  return next;
 }
 
 async function upsertGame(userId: string, accountId: string, game: NormalizedGame): Promise<string> {
@@ -302,6 +346,7 @@ async function ingestImport(
   platform: Platform = "lichess",
 ): Promise<void> {
   await client`update analysis_imports set status = 'ingesting', started_at = now(), updated_at = now() where id = ${id}`;
+  await mirrorImportStatus(id, "ingesting");
   // Both fetchers are AsyncGenerator<NormalizedGame> over (username, { max }),
   // so the only thing that varies between platforms is this line.
   const games = platform === "chesscom"
@@ -330,6 +375,7 @@ async function ingestImport(
   const row = await client`select cancel_requested from analysis_imports where id = ${id}`;
   if (row[0]?.cancel_requested) {
     await client`update analysis_imports set status = 'cancelled', completed_at = now(), updated_at = now() where id = ${id}`;
+    await mirrorImportStatus(id, "cancelled");
     return;
   }
   await client`update analysis_imports set status = 'analyzing', updated_at = now() where id = ${id}`;
@@ -344,7 +390,9 @@ const cacheKeys = new Map<string, string>();
 export function kickWorker(): void {
   if (workerRunning) return;
   workerRunning = true;
-  void workerLoop().finally(() => { workerRunning = false; });
+  void workerLoop()
+    .finally(() => { workerRunning = false; })
+    .catch((error) => logSafeError("analysis worker failed", error));
 }
 
 async function claimTask(): Promise<AnalysisTaskRecord | null> {
@@ -378,11 +426,7 @@ async function workerLoop(): Promise<void> {
         completed_at = now(), updated_at = now() where id = ${task.id} and status = 'running'`;
     } catch (error) {
       engine?.quit(); engine = null;
-      const next = classifyTaskFailure(task.attempts, task.maxAttempts);
-      const message = error instanceof Error ? error.message : String(error);
-      await client`update analysis_tasks set status = ${next}, error = ${message.slice(0, 1000)},
-        worker_id = null, locked_at = null, completed_at = ${next === "failed" ? new Date().toISOString() : null}, updated_at = now()
-        where id = ${task.id}`;
+      await persistTaskFailure(task.id, task.attempts, task.maxAttempts, error);
     }
     const status = await refreshImport(task.importId);
     if (status === "completed") {
@@ -531,7 +575,11 @@ async function refreshImport(importId: string): Promise<ImportProgress["status"]
       count(*) filter (where status = 'failed')::int failed
       from analysis_tasks where import_id = $1) s where i.id = $1
       returning i.status`, [importId]);
-  return rows[0]?.status as ImportProgress["status"] | undefined ?? null;
+  const status = (rows[0]?.status as ImportProgress["status"] | undefined) ?? null;
+  // Observation only: the legacy pipeline still executes the work, so a shadow
+  // that cannot keep up must not take a user's analysis down with it.
+  if (status) await mirrorImportStatus(importId, status);
+  return status;
 }
 
 export async function recoverPipeline(): Promise<void> {
@@ -543,7 +591,7 @@ export async function recoverPipeline(): Promise<void> {
     where i.status in ('queued', 'ingesting') and i.cancel_requested = false`;
   for (const row of interrupted) {
     void ingestImport(String(row.id), String(row.user_id), String(row.account_id), String(row.username), number(row.requested_games))
-      .catch((error) => failImport(String(row.id), error));
+      .catch((error) => settleImportFailure(String(row.id), error));
   }
   const imports = await client`select id from analysis_imports where status = 'analyzing'`;
   for (const row of imports) await refreshImport(String(row.id));

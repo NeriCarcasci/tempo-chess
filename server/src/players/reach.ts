@@ -39,6 +39,16 @@ export interface PublicReach {
    * component whose entire job is being checkable.
    */
   players_list: Array<{ username: string; platform: "lichess" | "chesscom" }>;
+  /**
+   * The same counted figures split by platform, for the `/v1` public statistic.
+   *
+   * A segmented count is where a public figure stops being about a population
+   * and starts being about people, so the `/v1` projection runs it through
+   * E20's small-cell suppression before publishing it. The split is computed
+   * here rather than there because it is the same screening join, and running
+   * it twice would let the two answers disagree.
+   */
+  by_platform: Array<{ platform: "lichess" | "chesscom"; players: number; games: number }>;
   updatedAt: string;
 }
 
@@ -126,6 +136,15 @@ export async function readReachNow(): Promise<PublicReach> {
       group by a.username, a.platform
       order by games desc, a.username asc
       limit ${NAME_LIMIT}`;
+    const platformRows = await client`
+      select a.platform::text as platform,
+             count(distinct a.platform::text || ':' || a.normalized_username)::int as players,
+             count(distinct t.game_id)::int as games
+      from analysis_tasks t
+      join games g on g.id = t.game_id
+      join linked_accounts a on a.id = g.account_id
+      where t.pass = 'screening' and t.status = 'completed'
+      group by a.platform`;
     const reach: PublicReach = {
       players: counted.players + BASELINE.players,
       games: counted.games + BASELINE.games,
@@ -134,6 +153,11 @@ export async function readReachNow(): Promise<PublicReach> {
       players_list: nameRows.map((row) => ({
         username: String(row.username),
         platform: row.platform === "chesscom" ? ("chesscom" as const) : ("lichess" as const),
+      })),
+      by_platform: platformRows.map((row) => ({
+        platform: row.platform === "chesscom" ? ("chesscom" as const) : ("lichess" as const),
+        players: Number(row.players ?? 0),
+        games: Number(row.games ?? 0),
       })),
       updatedAt: new Date().toISOString(),
     };

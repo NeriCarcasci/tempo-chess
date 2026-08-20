@@ -1,0 +1,17 @@
+
+> security:forbidden-scope
+> tsx src/security/gates/forbidden-scope.ts
+
+PASS FORBID-001 no 0012 migration file, tag, or reference across 54 changed files, excluding 8 named documentation/fixture paths and plans/
+PASS FORBID-002 no 0013 migration file, tag, or reference across 54 changed files, excluding 8 named documentation/fixture paths and plans/
+PASS FORBID-003 no actor propagation helper across 54 changed files, excluding 8 named documentation/fixture paths and plans/
+PASS FORBID-004 no worker identity, client, or service addition across 54 changed files, excluding 8 named documentation/fixture paths and plans/
+PASS FORBID-005 no standby identity, client, or rotation addition across 54 changed files, excluding 8 named documentation/fixture paths and plans/
+PASS FORBID-006 no Cloud Tasks dependency, configuration, or code across 54 changed files, excluding 8 named documentation/fixture paths and plans/
+PASS FORBID-007 no persistent staging project, service, or IaC across 54 changed files, excluding 8 named documentation/fixture paths and plans/
+PASS FORBID-008 no role or password mutation across 54 changed files, excluding 8 named documentation/fixture paths and plans/
+PASS FORBID-009 no Secret Manager mutation across 54 changed files, excluding 8 named documentation/fixture paths and plans/
+PASS FORBID-010 no deployment, traffic, or provider mutation across 54 changed files, excluding 8 named documentation/fixture paths and plans/
+PASS FORBID-011 no general-purpose credential or deployment CLI across 54 changed files, excluding 8 named documentation/fixture paths and plans/
+PASS FORBID-012 no live secret, token, placeholder, or empty suite across 255 tracked files, excluding 8 named documentation/fixture paths and plans/; adversarial secret-shaped value in evidence/E01 is rejected
+RESULT cd server && npm run security:forbidden-scope 12/12 pass=12 fail=0 skip=0 todo=0 problems=0

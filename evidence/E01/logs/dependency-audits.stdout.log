@@ -1,0 +1,5 @@
+found 0 vulnerabilities
+PASS AUDIT-001 stage completed: npm audit --omit=dev
+found 0 vulnerabilities
+PASS AUDIT-002 stage completed: npm audit --omit=dev
+RESULT npm audit --omit=dev && cd server && npm audit --omit=dev 2/2 pass=2 fail=0 skip=0 todo=0 problems=0

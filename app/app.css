@@ -169,6 +169,178 @@
   .status-completed { color: var(--color-win); }
   .status-failed, .status-cancelled { color: var(--color-loss); }
 
+  /* -- onboarding ------------------------------------------------------ */
+  /* Layout only. Every colour, surface and elevation below comes from the
+     ladder above; nothing here introduces a hue or an outline. */
+  .stage-trail {
+    display: flex; flex-wrap: wrap; gap: 0.35rem 0.85rem;
+    margin-top: 1.4rem;
+  }
+  .stage-trail li { display: inline-flex; }
+
+  .onboarding-body { display: grid; gap: 1.4rem; margin-top: 1.6rem; }
+  .onboarding-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.4rem; }
+
+  .coverage-panel { display: grid; gap: 0.9rem; }
+  .coverage-lead { display: grid; gap: 0.5rem; justify-items: start; }
+  .coverage-count { font-size: 0.9rem; color: var(--color-ink-muted); }
+  .coverage-limits { display: grid; gap: 0.45rem; }
+  .coverage-limits li { font-size: 0.85rem; line-height: 1.6; color: var(--color-ink-muted); }
+  .coverage-dimensions { margin-top: 0.2rem; }
+  .coverage-dimension {
+    display: grid; gap: 0.3rem; justify-items: start;
+    padding: 0.75rem 0.9rem;
+  }
+  /* These rows sit inside the auth card, which is already pure white, so the
+     usual white-on-warm-ground trick has nothing to work against. They take
+     the sunk surface instead — a surface change, as the sheet requires, rather
+     than the rule it forbids. */
+  .coverage-dimensions .line-row {
+    background: var(--color-surface-2);
+    box-shadow: none;
+  }
+  .coverage-dimensions .line-row:hover { box-shadow: none; }
+  .coverage-dimension strong {
+    font-size: 0.9rem; font-weight: 620; letter-spacing: -0.012em; color: var(--color-ink);
+  }
+
+  .report-section { display: grid; gap: 0.7rem; }
+  .report-section h2 {
+    font-size: 1rem; font-weight: 650; letter-spacing: -0.02em; color: var(--color-ink);
+  }
+  .report-count { font-size: 0.88rem; line-height: 1.6; color: var(--color-ink-muted); }
+  .report-meta { display: grid; gap: 0.3rem; margin-top: 1.6rem; }
+
+  /* ------------------------------------------------------------------ */
+  /* The honesty set.                                                     */
+  /*                                                                      */
+  /* The API separates "we do not know", "there is nothing", "you may not  */
+  /* see this" and "here is the number". These render that separation, and */
+  /* they follow the sheet's own rule: nothing is fenced off with a 1px    */
+  /* border. A claim sits on the page; a card sits on a surface; a tag is  */
+  /* small type in a colour. If two of these ever start looking the same,  */
+  /* the product has quietly stopped telling the truth.                    */
+  /* ------------------------------------------------------------------ */
+
+  /* A tag: micro-type in a colour, like the "in use" mark on an account.
+     The result hues are tuned for a board and a bar chart, where they sit in
+     blocks; at 10.5px of uppercase text on white, three of them land between
+     2.4:1 and 3.7:1, which is unreadable for the people most likely to need
+     the badge. So each is mixed toward ink until it clears 4.5:1, which keeps
+     the hue doing its work and makes the word legible. The label always names
+     the state as well, so colour is never the only carrier. */
+  .tag {
+    display: inline-block;
+    font-size: 0.7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--color-ink-muted);
+  }
+  .tag-sub { color: var(--color-ink-muted); font-weight: 600; }
+  .tag-win { color: color-mix(in srgb, var(--color-win) 78%, var(--color-ink)); }
+  .tag-signal { color: color-mix(in srgb, var(--color-signal) 78%, var(--color-ink)); }
+  .tag-warn { color: color-mix(in srgb, var(--color-inaccuracy) 46%, var(--color-ink)); }
+  .tag-mistake { color: color-mix(in srgb, var(--color-mistake) 62%, var(--color-ink)); }
+  .tag-loss { color: color-mix(in srgb, var(--color-loss) 74%, var(--color-ink)); }
+  .tag-accent { color: color-mix(in srgb, var(--color-accent) 82%, var(--color-ink)); }
+
+  .tag-note {
+    margin-top: 0.15rem;
+    font-size: 0.8rem; line-height: 1.5; color: var(--color-ink-muted);
+  }
+
+  /* An estimate and the interval it came with. The interval is set in the
+     mono face and a size down, so the pair reads as one figure rather than
+     as a number with a footnote. */
+  .estimate { display: inline-flex; align-items: baseline; gap: 0.4rem; }
+  .estimate b {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 1.3rem; font-weight: 500; letter-spacing: -0.02em;
+    color: var(--color-ink);
+  }
+  .estimate span {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.72rem; color: var(--color-ink-faint);
+  }
+  .estimate-none { font-size: 0.85rem; color: var(--color-ink-faint); }
+
+  .figure { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  /* Provenance. Quiet by design: it belongs under a claim, not beside it. */
+  .provenance {
+    font-family: var(--font-mono); font-size: 0.68rem;
+    letter-spacing: 0.04em; color: var(--color-ink-faint);
+  }
+
+  /* Something the response withheld, said out loud. */
+  .redaction { font-size: 0.82rem; line-height: 1.6; color: var(--color-ink-muted); }
+  .redaction b { font-weight: 650; color: var(--color-ink); }
+  .redaction a { color: var(--color-accent); }
+
+  /* A card with nothing in it yet. Sits on the sunk surface rather than the
+     white one: it is a state, not a thing. */
+  .empty-card {
+    border-radius: var(--radius-panel);
+    background: var(--color-surface-2);
+    padding: 1.35rem 1.5rem;
+    display: grid; gap: 0.6rem; justify-items: start;
+  }
+  .empty-card strong {
+    font-size: 1rem; font-weight: 620; letter-spacing: -0.015em; color: var(--color-ink);
+  }
+  .empty-card p {
+    max-width: 46ch; font-size: 0.9rem; line-height: 1.6; color: var(--color-ink-muted);
+  }
+
+  /* A failure. White card, lifted, and the only colour is the label — a
+     red-walled box would make every transient hiccup look like a disaster. */
+  .problem-card {
+    border-radius: var(--radius-panel);
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+    padding: 1.25rem 1.4rem;
+    display: grid; gap: 0.45rem; justify-items: start;
+  }
+  .problem-card strong {
+    font-size: 0.95rem; font-weight: 650; letter-spacing: -0.012em; color: var(--color-loss);
+  }
+  .problem-card p {
+    max-width: 48ch; font-size: 0.9rem; line-height: 1.6; color: var(--color-ink-muted);
+  }
+  .problem-ref {
+    font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-ink-faint);
+    user-select: all;
+  }
+
+  /* Work in progress. */
+  .working { display: grid; gap: 0.5rem; }
+  .working-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .working-head p { font-size: 0.92rem; color: var(--color-ink); }
+  .working-head span {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.78rem; color: var(--color-ink-faint);
+  }
+  .working-track {
+    height: 3px; width: 100%; overflow: hidden;
+    border-radius: 999px; background: var(--color-surface-3);
+  }
+  .working-fill { height: 100%; background: var(--color-accent); transition: width 400ms ease; }
+  .working-detail { font-size: 0.8rem; color: var(--color-ink-muted); }
+
+  /* An indeterminate bar, for work whose total is not known yet. A 0% bar that
+     never moves reads as broken; this reads as busy, which is the truth. */
+  .working-indeterminate {
+    animation: working-sweep 1.6s ease-in-out infinite;
+  }
+  @keyframes working-sweep {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(320%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .working-indeterminate { animation: none; width: 100% !important; opacity: 0.45; }
+    /* The determinate bar slides a new width every poll; with reduce set it
+       should step rather than travel. */
+    .working-fill { transition: none; }
+  }
+
   .skip-link {
     position: fixed; left: 1rem; top: 1rem; z-index: 100;
     transform: translateY(-5rem);
@@ -2302,4 +2474,67 @@
   .nav-account small { display: none; }
   .product-back { padding: 0.4rem 0.55rem; }
   .product-back > span:last-child { display: none; }
+}
+
+/* ------------------------------------------------------------------ */
+/* The /v1 opening explorer.                                           */
+/*                                                                     */
+/* Reuses the branch, move-list and engine blocks above; only the       */
+/* pieces the new screen adds live here. Two of them exist because the  */
+/* new API distinguishes something the old one could not.               */
+/*                                                                     */
+/* `tag-unknown` is "nobody has looked at this yet". It must not read   */
+/* as a result, so it takes no semantic hue -- it is the muted ink of   */
+/* the honesty set, and the word "not analysed" carries the meaning.    */
+/* A grey that looked like a quiet win would be the exact lie this      */
+/* screen exists to avoid.                                              */
+/*                                                                     */
+/* The filter chips fill when selected rather than outlining, for the   */
+/* reason the opening chips above already do: their small print is set  */
+/* in accent-ink, which only reads on an accent fill.                   */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .tag-unknown { color: var(--color-ink-muted); font-weight: 600; }
+
+  .explorer-filters {
+    display: flex; flex-wrap: wrap; gap: 1.5rem 2.5rem; align-items: center;
+  }
+  .explorer-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+  .explorer-chips .cap { margin-right: 0.35rem; }
+  .explorer-chip {
+    border-radius: 999px; padding: 0.34rem 0.8rem;
+    background: var(--color-surface); box-shadow: var(--shadow-flat);
+    color: var(--color-ink-muted); font-size: 0.78rem; font-weight: 600;
+    transition: background 130ms ease, color 130ms ease, box-shadow 130ms ease;
+  }
+  .explorer-chip:hover { box-shadow: var(--shadow-soft); color: var(--color-ink); }
+  .explorer-chip.is-active {
+    background: var(--color-accent); color: var(--color-accent-ink);
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* The head of the coverage panel: a heading and the badge that qualifies
+     everything under it. They sit on one line because the badge is not an
+     aside -- it is the scope of the numbers below. */
+  .explorer-insight-head {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    justify-content: space-between; gap: 0.75rem;
+  }
+
+  /* One fact per row: the figure, then what it counts. Separated by space
+     rather than by a rule, and the sunk surface is what makes the block a
+     state rather than a card. */
+  .explorer-facts {
+    margin-top: 0.9rem; display: grid; gap: 0.55rem;
+    border-radius: 12px; padding: 0.9rem 1rem; background: var(--color-surface-2);
+  }
+  .explorer-facts li { display: flex; align-items: baseline; gap: 0.6rem; }
+  .explorer-facts .metric { min-width: 2.5ch; font-size: 1rem; }
+  .explorer-facts .cap { color: var(--color-ink-muted); text-transform: none; letter-spacing: 0; }
+
+  .movelist-wrap { display: grid; gap: 0.4rem; }
+  .movelist-no {
+    margin-right: 0.3rem; color: var(--color-ink-faint);
+    font: 600 0.7rem/1 var(--font-mono);
+  }
 }

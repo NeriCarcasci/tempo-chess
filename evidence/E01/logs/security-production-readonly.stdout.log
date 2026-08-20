@@ -1,0 +1,153 @@
+
+> security:production-readonly
+> tsx src/security/gates/production-readonly.ts
+
+OBSERVATION schema_version=1 source_commit=047ec5e91ef637452f6e9f4cd6fb0238d31ece10 control_plane=supabase-readonly+cloud-run-describe project=oqsjfmgdovvepncbphvk service=tempo-chess-api observed_at=<timestamp> redaction_version=e01-redaction-3 redaction_sha256=8b67e7ee37a7c52fcf182bd763bd70d481099337262ed1ab9b0431ec93eb47ed
+PASS PROD-TBL-001 public.analysis_imports exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-002 public.analysis_tasks exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-003 public.beta_signups exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-004 public.canonical_moves exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-005 public.game_sources exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-006 public.games exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-007 public.lesson_progress exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-008 public.linked_accounts exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-009 public.mistakes exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-010 public.opening_drills exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-011 public.opening_edges exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-012 public.opening_positions exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-013 public.opening_repertoire_moves exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-014 public.opening_training_results exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-015 public.player_opening_observations exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-016 public.player_opening_stats exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-017 public.player_style exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-018 public.position_eval exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-019 public.profiles exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-020 public.puzzles exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-021 public.repertoire_openings exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-TBL-022 public.usage_events exists, relrowsecurity=true; public holds exactly the 22 contained tables
+PASS PROD-POL-001 analysis_imports_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-002 analysis_tasks_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-003 beta_signups_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-004 canonical_moves_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-005 game_sources_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-006 games_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-007 lesson_progress_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-008 linked_accounts_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-009 mistakes_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-010 opening_drills_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-011 opening_edges_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-012 opening_positions_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-013 opening_repertoire_moves_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-014 opening_training_results_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-015 player_opening_observations_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-016 position_eval_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-017 profiles_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-018 repertoire_openings_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-POL-019 usage_events_forma_api_service_dataplane roles={forma_api} ALL permissive using(true) with check(true); public holds exactly 19 policies
+PASS PROD-GRT-001 forma_api has INSERT on public.analysis_imports; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-002 forma_api has SELECT on public.analysis_imports; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-003 forma_api has UPDATE on public.analysis_imports; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-004 forma_api has INSERT on public.analysis_tasks; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-005 forma_api has SELECT on public.analysis_tasks; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-006 forma_api has UPDATE on public.analysis_tasks; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-007 forma_api has INSERT on public.beta_signups; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-008 forma_api has SELECT on public.beta_signups; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-009 forma_api has UPDATE on public.beta_signups; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-010 forma_api has INSERT on public.game_sources; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-011 forma_api has SELECT on public.game_sources; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-012 forma_api has UPDATE on public.game_sources; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-013 forma_api has INSERT on public.games; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-014 forma_api has SELECT on public.games; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-015 forma_api has UPDATE on public.games; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-016 forma_api has INSERT on public.lesson_progress; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-017 forma_api has SELECT on public.lesson_progress; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-018 forma_api has UPDATE on public.lesson_progress; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-019 forma_api has INSERT on public.linked_accounts; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-020 forma_api has SELECT on public.linked_accounts; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-021 forma_api has UPDATE on public.linked_accounts; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-022 forma_api has INSERT on public.opening_drills; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-023 forma_api has SELECT on public.opening_drills; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-024 forma_api has UPDATE on public.opening_drills; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-025 forma_api has INSERT on public.opening_edges; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-026 forma_api has SELECT on public.opening_edges; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-027 forma_api has UPDATE on public.opening_edges; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-028 forma_api has INSERT on public.opening_positions; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-029 forma_api has SELECT on public.opening_positions; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-030 forma_api has UPDATE on public.opening_positions; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-031 forma_api has INSERT on public.player_opening_observations; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-032 forma_api has SELECT on public.player_opening_observations; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-033 forma_api has UPDATE on public.player_opening_observations; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-034 forma_api has DELETE on public.canonical_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-035 forma_api has INSERT on public.canonical_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-036 forma_api has SELECT on public.canonical_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-037 forma_api has DELETE on public.repertoire_openings; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-038 forma_api has INSERT on public.repertoire_openings; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-039 forma_api has SELECT on public.repertoire_openings; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-040 forma_api has DELETE on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-041 forma_api has INSERT on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-042 forma_api has SELECT on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-043 forma_api has UPDATE on public.opening_repertoire_moves; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-044 forma_api has DELETE on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-045 forma_api has INSERT on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-046 forma_api has SELECT on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-047 forma_api has UPDATE on public.profiles; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-048 forma_api has SELECT on public.mistakes; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-049 forma_api has INSERT on public.opening_training_results; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-050 forma_api has SELECT on public.opening_training_results; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-051 forma_api has INSERT on public.position_eval; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-052 forma_api has SELECT on public.position_eval; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-053 forma_api has INSERT on public.usage_events; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-GRT-054 forma_api has SELECT on public.usage_events; browser roles hold nothing; forma_api holds exactly the 54 frozen grants
+PASS PROD-ROLE-001 forma_api rolcanlogin=true rolinherit=false rolsuper=false rolcreatedb=false rolcreaterole=false rolbypassrls=false
+PASS PROD-ROLE-002 forma_api owns no table, sequence, routine, or schema in public
+PASS PROD-ROLE-003 forma_migrator rolcanlogin=true rolinherit=false rolsuper=false rolcreatedb=false rolcreaterole=false rolbypassrls=false
+PASS PROD-ROLE-004 forma_migrator has no committed credential, runtime client, job, or executable operational path and no active session
+PASS PROD-ACL-001 PUBLIC has zero effective schema access in public
+PASS PROD-ACL-002 PUBLIC has zero effective tables access in public
+PASS PROD-ACL-003 PUBLIC has zero effective sequences access in public
+PASS PROD-ACL-004 PUBLIC has zero effective routines access in public
+PASS PROD-ACL-005 anon has zero effective schema access in public
+PASS PROD-ACL-006 anon has zero effective tables access in public
+PASS PROD-ACL-007 anon has zero effective sequences access in public
+PASS PROD-ACL-008 anon has zero effective routines access in public
+PASS PROD-ACL-009 authenticated has zero effective schema access in public
+PASS PROD-ACL-010 authenticated has zero effective tables access in public
+PASS PROD-ACL-011 authenticated has zero effective sequences access in public
+PASS PROD-ACL-012 authenticated has zero effective routines access in public
+PASS PROD-HTTP-001 public.analysis_imports exists; anonymous select denied (http 401)
+PASS PROD-HTTP-002 public.analysis_tasks exists; anonymous select denied (http 401)
+PASS PROD-HTTP-003 public.beta_signups exists; anonymous select denied (http 401)
+PASS PROD-HTTP-004 public.canonical_moves exists; anonymous select denied (http 401)
+PASS PROD-HTTP-005 public.game_sources exists; anonymous select denied (http 401)
+PASS PROD-HTTP-006 public.games exists; anonymous select denied (http 401)
+PASS PROD-HTTP-007 public.lesson_progress exists; anonymous select denied (http 401)
+PASS PROD-HTTP-008 public.linked_accounts exists; anonymous select denied (http 401)
+PASS PROD-HTTP-009 public.mistakes exists; anonymous select denied (http 401)
+PASS PROD-HTTP-010 public.opening_drills exists; anonymous select denied (http 401)
+PASS PROD-HTTP-011 public.opening_edges exists; anonymous select denied (http 401)
+PASS PROD-HTTP-012 public.opening_positions exists; anonymous select denied (http 401)
+PASS PROD-HTTP-013 public.opening_repertoire_moves exists; anonymous select denied (http 401)
+PASS PROD-HTTP-014 public.opening_training_results exists; anonymous select denied (http 401)
+PASS PROD-HTTP-015 public.player_opening_observations exists; anonymous select denied (http 401)
+PASS PROD-HTTP-016 public.player_opening_stats exists; anonymous select denied (http 401)
+PASS PROD-HTTP-017 public.player_style exists; anonymous select denied (http 401)
+PASS PROD-HTTP-018 public.position_eval exists; anonymous select denied (http 401)
+PASS PROD-HTTP-019 public.profiles exists; anonymous select denied (http 401)
+PASS PROD-HTTP-020 public.puzzles exists; anonymous select denied (http 401)
+PASS PROD-HTTP-021 public.repertoire_openings exists; anonymous select denied (http 401)
+PASS PROD-HTTP-022 public.usage_events exists; anonymous select denied (http 401)
+PASS PROD-ART-001 applied 0011 checksum equals 212a833c84f204460c95f6b1a1eba1ff6d0d22088085a2fdd13a867ac5d9dcb7; nothing applied after it
+PASS PROD-ART-002 historical: snapshot 94395 bytes sha256=3ae5f06bff21114923984933206ec850d3f82097eccd200c3ba793a4dce7ccc1; archived artifact, not claimed deployed
+PASS PROD-ART-003 idx=11 version=7 when=1786840279694 tag=0011_e01_containment breakpoints=true reconciles with live history
+PASS PROD-META-001 latest ready and serving revision is tempo-chess-api-00004-8dk
+PASS PROD-META-002 image digest equals sha256:50e141014412d3178117daa0a7cc94497ab12cf3beb6e76b925497f9c930f929
+PASS PROD-META-003 build id equals ad7210a8-089c-4046-8a84-f7a663cd2d02
+PASS PROD-META-004 source generation equals 1786818211613533; Git source commit remains recorded unknown
+PASS PROD-META-005 exactly 100% of traffic targets tempo-chess-api-00004-8dk
+PASS PROD-META-006 service account is forma-api@tempo-chess-neri.iam.gserviceaccount.com and is not default Compute
+PASS PROD-META-007 DATABASE_URL secretKeyRef name=forma-api-db-url key=1; no literal value
+PASS PROD-META-008 DATABASE_URL_SECRET_VERSION equals the pinned version-1 marker; DATABASE_ROLE is absent from the serving revision (observed live configuration drift, owned by E05; the branch invariant is not deployed)
+PASS PROD-META-009 pinned version 1 parsed in memory: base role=forma_api, port=6543, project ref=oqsjfmgdovvepncbphvk; no payload emitted or persisted
+PASS PROD-DB-001 select current_user through pinned version 1 returned exactly forma_api
+PASS PROD-HLT-001 HTTP 200 {status,service,ts}; no database, revision, or secret disclosure
+RESULT cd server && npm run security:production-readonly 147/147 pass=147 fail=0 skip=0 todo=0 problems=0

@@ -1,6 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
 import type { Context, MiddlewareHandler, Next } from "hono";
 import { client } from "./db/client.js";
+import { CuratedError } from "./security/redaction.js";
+import { buildAuthorizationContext } from "./v1/auth/context.js";
+import { bearerToken, tokenVerifier } from "./v1/auth/verifier.js";
 
 /**
  * Identity for the API. The browser holds a Supabase session; every protected
@@ -8,21 +10,17 @@ import { client } from "./db/client.js";
  * that token to a profile id here, so no endpoint ever takes a caller's identity
  * from a query string again.
  *
- * Verification goes through Supabase's auth server rather than a local JWT
- * check: it works for both the legacy HS256 secret and the newer asymmetric
- * signing keys, and it honours revoked sessions. The round-trip is cached for a
- * few seconds so a page that fires six parallel loaders pays for it once.
+ * E03 moved verification itself into the `/v1` kernel: the token is checked
+ * locally against Supabase's published JWKS, with `getUser` as a controlled
+ * fallback for legacy symmetric tokens. The legacy routes delegate to the same
+ * verifier so there is one implementation of "who is this", not two — and so
+ * the audit's finding about a per-request Supabase round trip and a cache keyed
+ * on the raw bearer token is fixed everywhere at once, not just under `/v1`.
+ *
+ * The response contract of these routes is deliberately unchanged: the same
+ * `{ error }` body, the same statuses. Migrating a legacy endpoint to problem
+ * details is the work of the epic that owns that endpoint.
  */
-
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY are required");
-}
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
 
 export interface AuthUser {
   /** profiles.id — equal to Supabase auth.uid(). */
@@ -31,58 +29,17 @@ export interface AuthUser {
   plan: "free" | "pro";
 }
 
-interface CacheEntry {
-  user: AuthUser;
-  expiresAt: number;
-}
-
-const TOKEN_TTL_MS = 15_000;
-const tokenCache = new Map<string, CacheEntry>();
-
-/** Drop expired entries so a long-lived process doesn't accumulate dead tokens. */
-function sweep(now: number): void {
-  if (tokenCache.size < 256) return;
-  for (const [token, entry] of tokenCache) {
-    if (entry.expiresAt <= now) tokenCache.delete(token);
-  }
-}
-
-/**
- * Ensure a profiles row exists for a freshly signed-up user. Supabase owns
- * auth.users; `profiles` is our mirror, and everything else in the schema keys
- * off it, so a missing row would break every subsequent query.
- */
-async function ensureProfile(id: string, email: string | null): Promise<"free" | "pro"> {
-  const rows = await client`
-    insert into profiles (id, email)
-    values (${id}, ${email})
-    on conflict (id) do update set email = coalesce(excluded.email, profiles.email)
-    returning plan`;
-  const plan = rows[0]?.plan;
-  return plan === "pro" ? "pro" : "free";
-}
-
 function bearer(c: Context): string | null {
-  const header = c.req.header("Authorization") ?? "";
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  return match ? match[1].trim() : null;
+  return bearerToken(c.req.header("Authorization"));
 }
 
 /** Resolve a bearer token to a profile, or null if it is missing/invalid. */
 export async function userFromToken(token: string | null): Promise<AuthUser | null> {
   if (!token) return null;
-  const now = Date.now();
-  const cached = tokenCache.get(token);
-  if (cached && cached.expiresAt > now) return cached.user;
-  sweep(now);
-
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return null;
-
-  const plan = await ensureProfile(data.user.id, data.user.email ?? null);
-  const user: AuthUser = { id: data.user.id, email: data.user.email ?? null, plan };
-  tokenCache.set(token, { user, expiresAt: now + TOKEN_TTL_MS });
-  return user;
+  const verified = await tokenVerifier().verify(token);
+  if (!verified.ok) return null;
+  const context = await buildAuthorizationContext(verified.token);
+  return { id: context.profileId, email: context.email, plan: context.plan };
 }
 
 /** Rejects anonymous callers with 401; hands the profile to the handler. */
@@ -154,8 +111,14 @@ export async function requireAccountUsername(
   return match.username;
 }
 
-/** Carries the right HTTP status out of the identity helpers. */
-export class AccountError extends Error {
+/**
+ * Carries the right HTTP status out of the identity helpers.
+ *
+ * Marked as a curated message: these strings were written for the caller and
+ * contain nothing but that caller's own input, so the safe-error layer lets them
+ * through instead of collapsing them to the generic sentence.
+ */
+export class AccountError extends CuratedError {
   constructor(message: string, readonly status: 403 | 409) {
     super(message);
     this.name = "AccountError";
@@ -178,7 +141,7 @@ export async function linkAccount(
     where platform = ${platform} and normalized_username = ${normalized}
     limit 1`;
   if (taken[0] && String(taken[0].user_id) !== userId) {
-    throw new Error(`"${username}" is already linked to another Forma account`);
+    throw new AccountError(`"${username}" is already linked to another Forma account`, 409);
   }
   const rows = await client`
     insert into linked_accounts (user_id, platform, username, normalized_username)

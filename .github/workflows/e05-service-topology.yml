@@ -1,0 +1,58 @@
+# E05 — the deployed service topology.
+#
+# Everything here is offline and deterministic. E05 adds no query and no new
+# runtime boundary: it decides which service runs what, and the only thing that
+# can regress is the table and the artifacts rendered from it. There is no
+# database job because migration 0015 changes no schema and holds no row — its
+# numbers are asserted against the connection budget by the unit gate instead.
+
+name: E05 service topology
+
+on:
+  pull_request:
+  push:
+    branches: [epic/e05]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  topology:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      - name: Typecheck and build
+        working-directory: server
+        run: |
+          npm run typecheck
+          npm run build
+
+      - name: Topology unit gate
+        working-directory: server
+        run: npm run e05:unit
+
+      - name: Deployment artifacts are generated, not hand-edited
+        working-directory: server
+        run: npm run deploy:check
+
+      - name: The connection budget still holds
+        working-directory: server
+        run: npm run platform:unit
+
+      # The E01 containment and migration-safety gates are deliberately not
+      # repeated here. The `gates` workflow already runs them on every pull
+      # request, and they replay history at E01's commit, which needs the full
+      # clone this job has no other reason to fetch.

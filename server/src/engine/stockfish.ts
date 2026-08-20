@@ -21,6 +21,18 @@ export const ANALYSIS_PROFILES = {
   diagnosticDepth: { id: "diagnostic-depth", version: 1, limit: { type: "depth", value: 14 }, multiPv: 3 },
 } as const satisfies Record<string, AnalysisProfile>;
 
+/**
+ * The rule-relevant history a search replays before evaluating.
+ *
+ * `rootFen` is the position immediately after the last irreversible move and
+ * `moves` are the UCI moves from there to the position being evaluated. The two
+ * together are what makes a repetition visible to the engine.
+ */
+export interface SearchHistory {
+  rootFen: string;
+  moves: readonly string[];
+}
+
 export interface EngineScore {
   evalCp?: number;
   mate?: number;
@@ -335,8 +347,12 @@ export class Engine {
 
   /** Backwards-compatible depth overload plus the reproducible profile API. */
   analyze(fen: string, depth?: number): Promise<PositionEval>;
-  analyze(fen: string, profile: AnalysisProfile): Promise<PositionEval>;
-  analyze(fen: string, depthOrProfile: number | AnalysisProfile = 14): Promise<PositionEval> {
+  analyze(fen: string, profile: AnalysisProfile, history?: SearchHistory): Promise<PositionEval>;
+  analyze(
+    fen: string,
+    depthOrProfile: number | AnalysisProfile = 14,
+    history?: SearchHistory,
+  ): Promise<PositionEval> {
     const profile: AnalysisProfile = typeof depthOrProfile === "number"
       ? { id: "legacy-depth", version: 1, limit: { type: "depth", value: depthOrProfile }, multiPv: 1 }
       : depthOrProfile;
@@ -353,7 +369,15 @@ export class Engine {
         this.startedAt = Date.now();
         this.pending = (evaluation) => resolve({ fen, ...evaluation });
         this.pendingReject = reject;
-        this.write(`position fen ${fen}`);
+        // A history-exact search hands the engine the position at the last
+        // irreversible move plus the moves since, so repetition and the
+        // fifty-move rule are facts it can see rather than context it lost. A
+        // bare `position fen` erases both.
+        this.write(
+          history && history.moves.length > 0
+            ? `position fen ${history.rootFen} moves ${history.moves.join(" ")}`
+            : `position fen ${fen}`,
+        );
         this.write(`go ${profile.limit.type} ${profile.limit.value}`);
       });
     };

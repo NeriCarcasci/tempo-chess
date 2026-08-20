@@ -1,6 +1,6 @@
 # Forma database architecture plan
 
-Status: proposed target architecture for review
+Status: canonical v1 data architecture; physical DDL remains an implementation deliverable
 Scope: operational database, derived analysis data, coaching data, security,
 deletion, rebuilds, and the contracts required by separately deployed backend
 services
@@ -305,7 +305,7 @@ Key columns:
 - `owner_user_id`
 - `provider_identity_id`
 - `connection_kind`: public lookup, OAuth, or another future mechanism
-- `verification_status`: unverified, verified, failed, or revoked
+- `verification_status`: unverified, confirmed, verified, failed, or revoked
 - `status`: active, paused, disconnected
 - `provider_handle_discoverable boolean default false`
 - `created_at`, `disconnected_at`
@@ -356,6 +356,24 @@ private analysis, goals, and ratings are not implicitly exposed.
 
 Future social tables are specified in section 20 but are not part of the first
 database migration.
+
+### 7.9 `social.case_study_publications`
+
+One deliberately public editorial projection. It never points at a private live
+subject publication implicitly.
+
+Key columns:
+
+- `id uuid primary key`, unique `slug`;
+- editorial/case-study `subject_id`;
+- exact successful analysis run and immutable report/publication manifest;
+- title, summary, public state, published/withdrawn timestamps;
+- source, licence, consent, and editorial-review references;
+- small-cell/redaction policy component version;
+- public content checksum and optional ready artifact reference.
+
+Only reviewed public fields are returned. Withdrawing a case study removes the
+public pointer without rewriting the immutable analysis evidence.
 
 ## 8. Provider sync and source provenance
 
@@ -410,25 +428,41 @@ Key columns:
 The account cursor advances only after every canonical game operation belonging
 to the checkpoint commits.
 
-### 8.4 `ops.source_artifacts`
+### 8.4 `ops.artifacts`
 
-Metadata for raw provider responses or PGNs retained in EU object storage.
+Generic metadata for raw provider inputs, normalized PGNs, large analysis/report
+outputs, model/catalogue assets, and temporary exports retained in private
+Supabase Storage through the backend `ArtifactStore` contract.
 
 Key columns:
 
 - `id uuid primary key`
-- `provider_id`, `artifact_kind`
-- storage bucket/key and generation/version
+- nullable `provider_id`, `artifact_kind`
+- storage backend, bucket, and immutable opaque key
 - `sha256`, byte size, media type, compression
-- `retention_class`: subject_owned, editorial, temporary
-- owner/source reference
-- `created_at`, `expires_at`, `deleted_at`
+- lifecycle state: pending, ready, deleting, deleted, failed
+- `retention_class`: subject_owned, system_immutable, editorial, temporary
+- nullable owning subject plus creator workflow/run/source references
+- `created_at`, verified/ready time, `expires_at`, deletion timestamps and
+  sanitized deletion failure classification
 
-Artifact content is not duplicated in PostgreSQL. Object writes happen before
+Artifact content is not duplicated in PostgreSQL. Supabase Storage does not
+provide S3 object versioning, so version identity comes from immutable keys,
+checksums, and database manifests rather than a mutable object generation.
+Object writes happen before
 the short database transaction; unreferenced objects are removed by a janitor.
 Mixed provider archives/pages containing unsupported variants are either
 filtered before retention or not retained. The raw-artifact path must not become
 a back door that stores variant games Forma rejected canonically.
+
+Constraints:
+
+- unique `(storage_backend, bucket, object_key)`;
+- a ready artifact has byte size and checksum;
+- a deleted artifact has no usable download state;
+- subject-owned artifacts name an owning subject or an unambiguous typed owner
+  that resolves to one;
+- system artifacts use checksum-addressed immutable keys.
 
 ### 8.5 Canonical ingestion transaction
 
@@ -995,7 +1029,7 @@ Key columns:
 - typed input reference plus small payload JSONB
 - `idempotency_key unique`
 - priority and `available_at`
-- status: queued, leased, succeeded, failed, cancelled, dead_letter
+- status: blocked, ready, leased, succeeded, retry_wait, dead, cancelled
 - attempt/max-attempt counts
 - lease owner, lease expiry, heartbeat
 - timeout/deadline
@@ -1050,6 +1084,34 @@ lease and must be idempotent.
 
 The API process does not start an unbounded background engine loop. CPU and GPU
 work can run in independently scaled deployments without changing this schema.
+
+### 14.7 `ops.idempotency_records`
+
+Durable API command replay contract:
+
+- actor/profile ID, HTTP method, normalized route key, idempotency key;
+- normalized request digest;
+- response status and safe response/resource/workflow reference;
+- state: processing, completed, failed;
+- created/completed/expiry timestamps.
+
+Constraint: unique `(actor_profile_id, route_key, idempotency_key)`. Reusing the
+key with a different request digest is a conflict. Records contain no bearer
+token or raw sensitive request body.
+
+### 14.8 `ops.audit_events`
+
+Append-only content-free security/administrative audit:
+
+- actor kind and opaque actor/service reference;
+- action and typed target reference;
+- request/trace ID;
+- result, reason code, and minimal non-sensitive metadata;
+- occurred time.
+
+Audit rows never contain PGN, provider bodies, email, tokens, signed URLs, model
+prompts, or analysis payloads. They have an explicit retention policy and cannot
+be used to reconstruct deleted user content.
 
 ## 15. Engine and model outputs
 
@@ -1931,6 +1993,20 @@ Append-only metered usage:
 Counters shown in the product are projections over the ledger, not mutable
 facts with no audit trail.
 
+### 24.5 `app.billing_events`
+
+Idempotent external billing-event receipt and processing history:
+
+- billing provider and external event ID;
+- event type, created/received timestamps, payload checksum;
+- encrypted/private payload artifact reference only when retention is required;
+- processing state, attempt count, processed time, sanitized error;
+- resulting subscription/entitlement reconciliation reference.
+
+Constraint: unique `(billing_provider, external_event_id)`. Out-of-order events
+are resolved from provider object/version timestamps and reconciliation rather
+than arrival order.
+
 ## 25. Security and RLS contract
 
 ### 25.1 Database roles
@@ -2051,6 +2127,41 @@ be explicit in the unlink flow.
   separate governance.
 - Research rows are never made user-visible merely because they contain the
   same provider identity.
+
+### 26.5 `ops.data_export_requests`
+
+User-visible asynchronous export resource:
+
+- `id uuid primary key`, requesting profile/subject;
+- export contract/version and frozen cutoff/snapshot references;
+- workflow and ready export artifact references;
+- status: queued, running, ready, failed, expired, deleted;
+- manifest checksum, byte size, expiry, download count/last download time;
+- requested/ready/expired/deleted timestamps and sanitized error.
+
+The ready artifact lives in the private temporary export bucket and is returned
+only through a short-lived authorized signed URL. Expiry deletes the object and
+invalidates download state.
+
+### 26.6 `ops.deletion_requests` and `ops.deletion_items`
+
+`ops.deletion_requests` is the user-visible deletion state and content-free
+completion receipt:
+
+- profile/subject, request/workflow, status and current stage;
+- request, freeze, completion, and policy-deadline timestamps;
+- dependency-manifest version/hash;
+- non-identifying completion receipt and sanitized blocking error.
+
+`ops.deletion_items` is the durable typed manifest of database aggregate,
+artifact, Auth identity, credential, and operational cleanup work:
+
+- deletion request, item kind, opaque target reference;
+- dependency order, state, attempts, next attempt;
+- confirmation checksum/status and sanitized error.
+
+The item target is never exposed publicly and contains no artifact signed URL or
+deleted content. A request cannot complete while a required item is unconfirmed.
 
 ## 27. Read models and cache policy
 
@@ -2308,7 +2419,7 @@ flowchart LR
     Q --> HM["Human-model worker"]
     Q --> AGG["Aggregation/publisher"]
     Q -. selected work .-> GPU["Optional GPU/Lc0 worker"]
-    ING --> OBJ["EU object storage"]
+    ING --> OBJ["Supabase Storage\nEU private buckets"]
     ING --> DB
     SF --> DB
     HM --> DB
@@ -2647,8 +2758,9 @@ real engine workloads.
 - EU staging uses production-like extensions, grants, RLS, and schema settings.
 - Enable production point-in-time recovery appropriate to the subscription and
   verify restore procedures regularly.
-- Object storage uses versioning/retention only where compatible with deletion
-  obligations; deletion semantics are tested explicitly.
+- System artifacts use immutable checksum-addressed keys and a documented source
+  recovery policy. Subject artifacts use permanent deletion semantics; object
+  deletion and database-reference cleanup are tested explicitly.
 - Database migrations, component promotions, and recipe promotions are
   independently auditable and reversible by forward migration/pointer change.
 - Never test destructive migrations first against production.

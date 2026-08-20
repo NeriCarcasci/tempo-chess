@@ -1,0 +1,433 @@
+{
+  "label": "production-shaped pre-0011 (0010) catalogue",
+  "provenance": "Tables and per-table RLS state are derived mechanically from the committed migrations 0000-0010 in server/drizzle (22 tables; RLS already enabled on 10, off on 12), which matches the pre-state recorded in the header of 0011_e01_containment.sql. Browser-role table privileges, schema USAGE, and the default-ACL rows reproduce the worst-case exposure recorded in plans/v1-platform-audit.md section 4 A-01, where anon and authenticated held broad privileges on every legacy table and default privileges re-granted them on each new object. This fixture is production-SHAPED, not a capture of production rows or a production catalogue dump: it contains no data and no identifiers.",
+  "schema": "public",
+  "alterableDefaultAclGrantors": [
+    "postgres"
+  ],
+  "alterableDefaultAclNote": "supabase_admin is a Supabase-owned superuser role, so ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin raises insufficient_privilege and 0011 deliberately skips it. Those rows therefore survive the migration and are carried as recorded residual risk owned by E02; the replay models the skip rather than claiming containment it does not have.",
+  "roles": {
+    "postgres": {
+      "rolcanlogin": true,
+      "rolinherit": true,
+      "rolsuper": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolbypassrls": false
+    },
+    "supabase_admin": {
+      "rolcanlogin": true,
+      "rolinherit": true,
+      "rolsuper": true,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolbypassrls": false
+    },
+    "anon": {
+      "rolcanlogin": false,
+      "rolinherit": true,
+      "rolsuper": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolbypassrls": false
+    },
+    "authenticated": {
+      "rolcanlogin": false,
+      "rolinherit": true,
+      "rolsuper": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolbypassrls": false
+    },
+    "service_role": {
+      "rolcanlogin": false,
+      "rolinherit": true,
+      "rolsuper": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolbypassrls": false
+    },
+    "pg_database_owner": {
+      "rolcanlogin": false,
+      "rolinherit": true,
+      "rolsuper": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolbypassrls": false
+    }
+  },
+  "tables": [
+    {
+      "name": "analysis_imports",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "analysis_tasks",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "beta_signups",
+      "rls": true,
+      "owner": "postgres"
+    },
+    {
+      "name": "canonical_moves",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "game_sources",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "games",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "lesson_progress",
+      "rls": true,
+      "owner": "postgres"
+    },
+    {
+      "name": "linked_accounts",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "mistakes",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "opening_drills",
+      "rls": true,
+      "owner": "postgres"
+    },
+    {
+      "name": "opening_edges",
+      "rls": true,
+      "owner": "postgres"
+    },
+    {
+      "name": "opening_positions",
+      "rls": true,
+      "owner": "postgres"
+    },
+    {
+      "name": "opening_repertoire_moves",
+      "rls": true,
+      "owner": "postgres"
+    },
+    {
+      "name": "opening_training_results",
+      "rls": true,
+      "owner": "postgres"
+    },
+    {
+      "name": "player_opening_observations",
+      "rls": true,
+      "owner": "postgres"
+    },
+    {
+      "name": "player_opening_stats",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "player_style",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "position_eval",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "profiles",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "puzzles",
+      "rls": false,
+      "owner": "postgres"
+    },
+    {
+      "name": "repertoire_openings",
+      "rls": true,
+      "owner": "postgres"
+    },
+    {
+      "name": "usage_events",
+      "rls": true,
+      "owner": "postgres"
+    }
+  ],
+  "sequences": [],
+  "routines": [],
+  "schemaPrivileges": {
+    "PUBLIC": [
+      "USAGE"
+    ],
+    "anon": [
+      "USAGE"
+    ],
+    "authenticated": [
+      "USAGE"
+    ],
+    "postgres": [
+      "USAGE"
+    ],
+    "service_role": [
+      "USAGE"
+    ],
+    "pg_database_owner": [
+      "USAGE",
+      "CREATE"
+    ]
+  },
+  "tablePrivileges": {
+    "anon": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE",
+      "TRUNCATE",
+      "REFERENCES",
+      "TRIGGER"
+    ],
+    "authenticated": [
+      "SELECT",
+      "INSERT",
+      "UPDATE",
+      "DELETE",
+      "TRUNCATE",
+      "REFERENCES",
+      "TRIGGER"
+    ],
+    "PUBLIC": []
+  },
+  "sequencePrivileges": {
+    "anon": [
+      "USAGE",
+      "SELECT",
+      "UPDATE"
+    ],
+    "authenticated": [
+      "USAGE",
+      "SELECT",
+      "UPDATE"
+    ]
+  },
+  "routinePrivileges": {
+    "anon": [
+      "EXECUTE"
+    ],
+    "authenticated": [
+      "EXECUTE"
+    ],
+    "PUBLIC": [
+      "EXECUTE"
+    ]
+  },
+  "defaultAcls": [
+    {
+      "grantor": "postgres",
+      "objectType": "tables",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER"
+      ]
+    },
+    {
+      "grantor": "postgres",
+      "objectType": "tables",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER"
+      ]
+    },
+    {
+      "grantor": "postgres",
+      "objectType": "tables",
+      "grantee": "PUBLIC",
+      "privileges": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER"
+      ]
+    },
+    {
+      "grantor": "postgres",
+      "objectType": "sequences",
+      "grantee": "anon",
+      "privileges": [
+        "USAGE",
+        "SELECT",
+        "UPDATE"
+      ]
+    },
+    {
+      "grantor": "postgres",
+      "objectType": "sequences",
+      "grantee": "authenticated",
+      "privileges": [
+        "USAGE",
+        "SELECT",
+        "UPDATE"
+      ]
+    },
+    {
+      "grantor": "postgres",
+      "objectType": "sequences",
+      "grantee": "PUBLIC",
+      "privileges": [
+        "USAGE",
+        "SELECT",
+        "UPDATE"
+      ]
+    },
+    {
+      "grantor": "postgres",
+      "objectType": "functions",
+      "grantee": "anon",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "grantor": "postgres",
+      "objectType": "functions",
+      "grantee": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "grantor": "postgres",
+      "objectType": "functions",
+      "grantee": "PUBLIC",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "grantor": "supabase_admin",
+      "objectType": "tables",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER"
+      ]
+    },
+    {
+      "grantor": "supabase_admin",
+      "objectType": "tables",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER"
+      ]
+    },
+    {
+      "grantor": "supabase_admin",
+      "objectType": "tables",
+      "grantee": "PUBLIC",
+      "privileges": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "TRUNCATE",
+        "REFERENCES",
+        "TRIGGER"
+      ]
+    },
+    {
+      "grantor": "supabase_admin",
+      "objectType": "sequences",
+      "grantee": "anon",
+      "privileges": [
+        "USAGE",
+        "SELECT",
+        "UPDATE"
+      ]
+    },
+    {
+      "grantor": "supabase_admin",
+      "objectType": "sequences",
+      "grantee": "authenticated",
+      "privileges": [
+        "USAGE",
+        "SELECT",
+        "UPDATE"
+      ]
+    },
+    {
+      "grantor": "supabase_admin",
+      "objectType": "sequences",
+      "grantee": "PUBLIC",
+      "privileges": [
+        "USAGE",
+        "SELECT",
+        "UPDATE"
+      ]
+    },
+    {
+      "grantor": "supabase_admin",
+      "objectType": "functions",
+      "grantee": "anon",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "grantor": "supabase_admin",
+      "objectType": "functions",
+      "grantee": "authenticated",
+      "privileges": [
+        "EXECUTE"
+      ]
+    },
+    {
+      "grantor": "supabase_admin",
+      "objectType": "functions",
+      "grantee": "PUBLIC",
+      "privileges": [
+        "EXECUTE"
+      ]
+    }
+  ],
+  "policies": []
+}

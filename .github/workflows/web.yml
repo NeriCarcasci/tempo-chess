@@ -1,0 +1,50 @@
+# The web app: typecheck, tests, build, and the generated API client.
+#
+# Until now no CI job ran the frontend at all — a broken screen or a stale
+# generated client reached `main` without anything objecting. The one check that
+# is easy to miss is the last: `app/lib/v1/schema.d.ts` is generated from
+# `server/openapi/v1.json`, which is itself generated from the router, so a
+# route change that skips the regeneration leaves the client typed against an
+# API that no longer exists.
+
+name: Web
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      - name: The generated API client matches the OpenAPI document
+        run: |
+          npm run api:types
+          git diff --exit-code app/lib/v1/schema.d.ts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build

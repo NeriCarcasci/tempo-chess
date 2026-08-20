@@ -1,0 +1,105 @@
+# E03 `/v1` API kernel gates.
+#
+# Two halves. The offline half needs nothing but the repository: the unit gate
+# and the OpenAPI drift check. The database half runs against a PostgreSQL
+# service container — a disposable target by construction, which is what the
+# harness insists on. Nothing here authenticates to Supabase, Cloud Run, or any
+# production project, and no secret is read.
+#
+# The performance gate runs here too. Its budgets bound the kernel's own
+# overhead and the shape of its database work rather than production latency, so
+# a shared runner is a fair place to measure them; the numbers are printed on
+# every run so a regression shows up as a trend.
+
+name: E03 API kernel
+
+on:
+  pull_request:
+  push:
+    branches: [epic/e03]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      - name: Typecheck and build
+        working-directory: server
+        run: |
+          npm run typecheck
+          npm run build
+
+      - name: Kernel unit gate
+        working-directory: server
+        run: npm run v1:unit
+
+      - name: OpenAPI is generated, not hand-maintained
+        working-directory: server
+        run: npm run v1:openapi:check
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          # Trust auth on a throwaway service container reachable only from this
+          # job. It also keeps a credential-shaped string out of a tracked file,
+          # which the forbidden-scope gate rejects on sight.
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # Loopback and non-Supabase: the harness refuses anything else, and that
+      # guard is deliberately not overridable.
+      FORMA_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      - name: Migration gate (empty, prior state, repeat, recovery)
+        working-directory: server
+        run: npm run v1:migration
+
+      - name: Integration gate
+        working-directory: server
+        run: npm run v1:integration
+
+      - name: Security gate
+        working-directory: server
+        run: npm run v1:security
+
+      - name: Performance gate
+        working-directory: server
+        run: npm run v1:performance

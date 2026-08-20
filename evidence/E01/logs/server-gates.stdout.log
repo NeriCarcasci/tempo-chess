@@ -1,0 +1,24 @@
+
+added 123 packages, and audited 124 packages in <elapsed>s
+
+25 packages are looking for funding
+  run `npm fund` for details
+
+4 moderate severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+PASS SERVER-001 stage completed: npm ci
+
+> build
+> tsc
+
+PASS SERVER-002 stage completed: npm run build
+
+> typecheck
+> tsc --noEmit
+
+PASS SERVER-003 stage completed: npm run typecheck
+RESULT cd server && npm ci && npm run build && npm run typecheck 3/3 pass=3 fail=0 skip=0 todo=0 problems=0

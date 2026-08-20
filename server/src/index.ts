@@ -1,6 +1,7 @@
+import { pathToFileURL } from "node:url";
 import { serve } from "@hono/node-server";
 import { Hono, type Context } from "hono";
-import { cors } from "hono/cors";
+import { cors, resolveAllowedOrigins } from "./cors.js";
 import { z } from "zod";
 import { analyzeFens, botMove } from "./engine/stockfish.js";
 import {
@@ -48,29 +49,61 @@ import {
   handleWebhook,
 } from "./billing/service.js";
 import { getDailyDrillUsage, getUsageSummary, recordUsage } from "./usage.js";
+import { assertRuntimeIdentity } from "./db/client.js";
+import { assertDeploymentIdentity } from "./platform/deployment.js";
 import { betaSignupSchema, rateLimit, recordBetaSignup } from "./beta.js";
+import { logSafeError, safeClientMessage } from "./security/redaction.js";
+import { isDeployed } from "./security/config.js";
+import { mountInternal, mountV1 } from "./v1/kernel.js";
+import { legacyCompatibility } from "./v1/legacy.js";
+import { V1_ROUTES } from "./v1/routes/index.js";
+import { INTERNAL_ROUTES } from "./internal/routes.js";
+import { registerAllHandlers, registerDeploymentHandlers } from "./ops/bootstrap.js";
+import { assertKernelConfig } from "./v1/signing.js";
 
 const app = new Hono<{ Variables: { user: AuthUser } }>();
 
-// Allow the Cloudflare Pages origin (set WEB_ORIGIN in Cloud Run env).
-// Falls back to "*" in local dev so the SPA can talk to the API.
-const webOrigin = process.env.WEB_ORIGIN;
-app.use(
-  "*",
-  cors({
-    origin: webOrigin ? [webOrigin] : "*",
-    allowHeaders: ["Authorization", "Content-Type"],
-    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    // Let browsers cache the CORS preflight for a day so cross-origin GETs from the
-    // SPA don't pay an extra OPTIONS round-trip on every request.
-    maxAge: 86400,
-  }),
-);
+// The browser origins this API answers. Resolved at startup so a deployed
+// process with an empty or wildcard allowlist fails here rather than serving
+// `Access-Control-Allow-Origin: *` to everyone.
+const allowedOrigins = resolveAllowedOrigins(process.env, isDeployed(process.env));
+// `/internal/v1` gets no CORS headers at all: plans/v1-api-contract.md §15 says
+// "no browser CORS", and a preflight answered there would be an invitation.
+app.use("*", async (c, next) => {
+  if (c.req.path.startsWith("/internal/")) return next();
+  return cors(allowedOrigins)(c, next);
+});
 
-/** Turns the identity helpers' failures into their intended status codes. */
+// Deprecation headers and usage measurement for every unversioned route. It
+// runs before the routes so it wraps them, and it exempts `/v1` and `/health`.
+app.use("*", legacyCompatibility());
+
+// The `/v1` kernel, mounted beside the legacy surface rather than in front of
+// it. Registered before the legacy routes so `/v1/*` can never be shadowed by a
+// prototype path, and so its problem-details 404 owns the whole namespace.
+mountV1(app, V1_ROUTES);
+
+// The private worker/operator surface. Mounted beside `/v1`, never under it.
+mountInternal(app, INTERNAL_ROUTES);
+
+/**
+ * Anything a handler throws instead of returning. Without this, Hono's default
+ * handler renders the exception, which is precisely the raw text the safe-error
+ * contract removes everywhere else. The legacy body shape is preserved; no
+ * problem-details document and no error code appear on the wire.
+ */
+app.onError((error, c) => {
+  logSafeError("unhandled request failure", error);
+  if (error instanceof AccountError) {
+    return c.json({ error: safeClientMessage(error) }, error.status);
+  }
+  return c.json({ error: safeClientMessage(error) }, 500);
+});
+
 function fail(c: Context, error: unknown) {
-  if (error instanceof AccountError) return c.json({ error: error.message }, error.status);
-  return c.json({ error: error instanceof Error ? error.message : String(error) }, 404);
+  if (error instanceof AccountError) return c.json({ error: safeClientMessage(error) }, error.status);
+  logSafeError("request failed", error);
+  return c.json({ error: safeClientMessage(error) }, 404);
 }
 
 // --- public ---------------------------------------------------------------
@@ -78,6 +111,39 @@ function fail(c: Context, error: unknown) {
 app.get("/health", (c) =>
   c.json({ status: "ok", service: "forma-chess-api", ts: Date.now() }),
 );
+
+/**
+ * A loopback-rehearsal-only failure injector. It is not registered on Cloud Run
+ * even if its opt-in variables were accidentally present. The disposable gate
+ * uses the real server process and this route to prove that Hono's global error
+ * boundary emits no arbitrary exception payload.
+ */
+const adversarialFailurePayload = process.env.E01_ADVERSARIAL_FAILURE_PAYLOAD;
+if (
+  !process.env.K_SERVICE &&
+  process.env.E01_ADVERSARIAL_PROBES === "synthetic-only" &&
+  adversarialFailurePayload
+) {
+  app.get("/__e01/adversarial-failure", () => {
+    throw new Error(adversarialFailurePayload);
+  });
+
+  app.get("/__e01/adversarial-account-error", () => {
+    throw new AccountError(
+      process.env.E01_ADVERSARIAL_ACCOUNT_VALUE ?? adversarialFailurePayload,
+      403,
+    );
+  });
+
+  app.get("/__e01/adversarial-aggregate-error", () => {
+    const value = process.env.E01_ADVERSARIAL_ACCOUNT_VALUE ?? adversarialFailurePayload;
+    const descendant = new AccountError(value, 409);
+    descendant.name = value;
+    const cause = new Error(value);
+    cause.name = value;
+    throw new AggregateError([descendant], value, { cause });
+  });
+}
 
 /**
  * How many players' games we have analysed. The landing page quotes this, so it
@@ -115,7 +181,7 @@ app.post("/beta-signups", async (c) => {
     const result = await recordBetaSignup(parsed.data);
     return c.json(result, result.created ? 201 : 200);
   } catch (error) {
-    console.error("beta signup failed", error);
+    logSafeError("beta signup failed", error);
     return c.json({ error: "Could not save that. Try again in a moment." }, 500);
   }
 });
@@ -209,7 +275,8 @@ app.post("/me/accounts", async (c) => {
     const account = await linkAccount(currentUser(c).id, parsed.data.platform, parsed.data.username);
     return c.json({ account }, 201);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : String(error) }, 409);
+    logSafeError("account link failed", error);
+    return c.json({ error: safeClientMessage(error) }, 409);
   }
 });
 
@@ -550,7 +617,8 @@ app.post("/engine/play", async (c) => {
     await recordUsage({ userId: currentUser(c).id, kind: "engine_play", units: 1 });
     return c.json({ move: move ?? null });
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+    logSafeError("engine play failed", error);
+    return c.json({ error: safeClientMessage(error) }, 500);
   }
 });
 
@@ -558,9 +626,61 @@ app.post("/engine/play", async (c) => {
 // Prefer a dedicated API_PORT in dev so a harness/launcher that injects PORT (for the
 // web server) can't steal this one. Production (Cloud Run) still uses PORT.
 const port = Number(process.env.API_PORT ?? process.env.PORT ?? 8080);
-serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`forma-chess api listening on :${info.port}`);
-});
-void recoverPipeline().catch((error) => console.error("pipeline recovery failed", error));
 
+/**
+ * Only bind a port and start pipeline recovery when this module is the process
+ * entrypoint. The E01 gates import the app to exercise CORS, liveness, and the
+ * safe-error paths in process; importing it must not open a socket or issue a
+ * query.
+ */
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  // Identity is proven before the first bind, not after. Configuration says
+  // which role we intend to be; only `select current_user` says which role we
+  // actually are, and a pooler or tenant misroute is exactly the case where
+  // those two disagree. A process that cannot prove it is the least-privilege
+  // role exits without ever accepting a connection.
+  void (async () => {
+    let deployment: ReturnType<typeof assertDeploymentIdentity> = null;
+    try {
+      // The kernel's signing key is checked with the same fail-closed posture:
+      // a deployed process that cannot sign a cursor or an idempotency digest
+      // would silently fall back to a per-process random key, and every cursor
+      // it issued would stop verifying the moment it scaled or restarted.
+      assertKernelConfig(process.env);
+      // E05: a deployed process must say which of the five services it is, and
+      // its database role must match what the topology deploys it with. An
+      // image that could be any service is how engine work reached the API.
+      deployment = assertDeploymentIdentity(process.env);
+      await assertRuntimeIdentity();
+    } catch (error) {
+      logSafeError("startup gate failed; refusing to serve", error);
+      process.exit(1);
+    }
+    // Register the work this deployment executes, before it starts serving.
+    // Until this call existed the registry was empty everywhere and every
+    // dispatched task was dead-lettered as `unsupported`: the ledger had no
+    // workers at all. A local process registers everything, which is a
+    // deployment shape rather than a permission — the database role still
+    // decides what each connection may write.
+    const tasks = deployment
+      ? registerDeploymentHandlers(deployment.name)
+      : registerAllHandlers();
+
+    serve({ fetch: app.fetch, port }, (info) => {
+      console.log(
+        `forma-chess api listening on :${info.port}`
+        + (tasks.length > 0 ? ` executing ${tasks.join(", ")}` : ""),
+      );
+    });
+    // The prototype in-process pipeline is not a deployed capability (E05
+    // decision D3): no deployment holds `prototype_pipeline`, so recovering it
+    // inside a deployed service would be exactly the mixing this epic removes.
+    // Locally there is no deployment and the prototype still runs.
+    if (!deployment) {
+      void recoverPipeline().catch((error) => logSafeError("pipeline recovery failed", error));
+    }
+  })();
+}
+
+export { allowedOrigins };
 export default app;

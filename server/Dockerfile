@@ -17,6 +17,9 @@ ENV STOCKFISH_PATH=/usr/games/stockfish
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
+# The migration job applies these at runtime with drizzle-orm's migrator, so the
+# SQL and its journal are part of the image rather than something fetched later.
+COPY drizzle ./drizzle
 # Cloud Run sets PORT; the server reads it (default 8080).
 EXPOSE 8080
 CMD ["node", "dist/index.js"]

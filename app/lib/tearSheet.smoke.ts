@@ -3,7 +3,7 @@ import { deriveTearSheet, FLOOR_COLOR } from "./tearSheet";
 import type { OpeningGraph, OpeningGraphNode, OpeningGraphEdge } from "./openings";
 
 /**
- * Run with: npx tsx app/lib/tearSheet.test.ts
+ * Run with: npx tsx app/lib/tearSheet.smoke.ts
  *
  * The fixture is small but shaped to hit the cases that matter: a family that
  * only becomes identifiable at move 2, a variation split that dilutes, a line

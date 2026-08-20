@@ -1,0 +1,104 @@
+# E15 estimator, trajectory, finding and renderer gates.
+#
+# Two halves, in the shape E03 established. The offline half needs nothing but
+# the repository — and for this epic it carries most of the weight, because the
+# estimator, the aligner, the false-discovery control and the renderer boundary
+# are all pure functions with hand-checkable answers.
+#
+# The database half runs against a PostgreSQL service container, a disposable
+# target by construction, which is what the harness insists on. Nothing here
+# authenticates to Supabase, Cloud Run, or any production project, and no secret
+# is read.
+
+name: E15 estimates and findings
+
+on:
+  pull_request:
+  push:
+    branches: [epic/e15]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      - name: Unit gate
+        working-directory: server
+        run: npm run estimates:unit
+
+      - name: Typecheck
+        working-directory: server
+        run: npm run typecheck
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          # Trust auth on a throwaway service container reachable only from this
+          # job. It also keeps a credential-shaped string out of a tracked file,
+          # which the forbidden-scope gate rejects on sight.
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # Loopback and non-Supabase: the harness refuses anything else, and that
+      # guard is deliberately not overridable.
+      FORMA_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install
+        run: |
+          npm ci
+          cd server && npm ci
+
+      - name: Migration gate (empty, prior state, repeat)
+        working-directory: server
+        run: npm run estimates:migration
+
+      - name: Integration gate
+        working-directory: server
+        run: npm run estimates:integration
+
+      - name: Security gate
+        working-directory: server
+        run: npm run estimates:security
+
+      - name: Performance gate
+        working-directory: server
+        run: npm run estimates:performance
+
+      - name: Engine and human-context gates, to prove E15 changed neither
+        working-directory: server
+        run: |
+          npm run engine:integration
+          npm run models:integration
