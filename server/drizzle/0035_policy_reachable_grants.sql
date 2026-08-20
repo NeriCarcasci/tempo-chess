@@ -62,4 +62,22 @@ grant select on app.subject_account_memberships to forma_ingestion
 --> statement-breakpoint
 grant select on app.analysis_subjects to forma_ingestion
 --> statement-breakpoint
+-- `forma_ops` plans work and therefore has to see what needs planning. It could
+-- create work for any subject already -- that is what E04 reserves the role for
+-- -- but it could not read the tables that say which subjects have games
+-- waiting, so the sweep planned nothing and reported success.
+grant select on chess.subject_games to forma_ops
+--> statement-breakpoint
+grant select on chess.materialization_runs to forma_ops
+--> statement-breakpoint
+grant select on chess.game_replay_revisions to forma_ops
+--> statement-breakpoint
+grant select on coaching.goals to forma_ops
+--> statement-breakpoint
+grant select on coaching.coaching_cycles to forma_ops
+--> statement-breakpoint
+grant select on coaching.goal_progress_snapshots to forma_ops
+--> statement-breakpoint
+grant select on analysis.subject_live_publications to forma_ops
+--> statement-breakpoint
 reset role
