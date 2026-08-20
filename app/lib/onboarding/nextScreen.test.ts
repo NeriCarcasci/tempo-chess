@@ -86,6 +86,39 @@ describe("nextScreen", () => {
     expect(nextScreen({ state: state({ status: "activated" }) }).kind).toBe("done");
   });
 
+  test("a written report is never a wait, whatever the action says", () => {
+    // The one that reached a real person: a run at `report_ready`, with a
+    // report published days earlier, still coming back with `action: "wait"`.
+    // Trusting the action alone showed them an importing bar for work that was
+    // long over.
+    const destination = nextScreen({
+      state: state({
+        stage: "report_ready",
+        baselineReportId: "report-1",
+        nextAction: { action: "wait", reason: "importing your games" },
+      }),
+    });
+    expect(destination).toEqual({ kind: "report", reportId: "report-1" });
+  });
+
+  test("a written report also beats a dead sync", () => {
+    // The sync the report was built from can have died since. What it was for
+    // exists, so there is nothing to send anybody back to fix.
+    const input = {
+      state: state({ stage: "report_ready", baselineReportId: "report-1" }),
+      workflow: { state: "failed" as const },
+    };
+    expect(nextScreen(input).kind).toBe("report");
+    expect(shouldPoll(input)).toBe(false);
+  });
+
+  test("the stage alone is not enough: a report needs an id to send anybody to", () => {
+    const destination = nextScreen({
+      state: state({ stage: "report_ready", baselineReportId: null }),
+    });
+    expect(destination.kind).toBe("wait");
+  });
+
   test("the run's own reason beats a dead workflow", () => {
     // Both stopped, but only one of them knows why. Reporting "the sync died"
     // over "none of your games could be read" would send somebody to retry a

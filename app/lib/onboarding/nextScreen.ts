@@ -36,6 +36,18 @@ export interface JourneyInput {
 
 const LIVE_WORKFLOW_STATES = new Set(["queued", "running", "cancelling"]);
 
+/**
+ * The stage at which the examination has already produced a report.
+ *
+ * `deriveStage` reaches `report_ready` only once `baselineReportId` is set, so
+ * this is evidence rather than a guess. It has to be checked *before*
+ * `nextAction`, because the two can disagree: a run whose report was written
+ * days ago can still come back with `action: "wait"`, and trusting the action
+ * alone is how somebody with a finished report gets shown an importing bar for
+ * work that is long over.
+ */
+const REPORT_WRITTEN = "report_ready";
+
 /** A workflow that has stopped for a bad reason. */
 export function workflowFailed(workflow: JourneyInput["workflow"]): boolean {
   if (!workflow) return false;
@@ -55,6 +67,13 @@ export function nextScreen(input: JourneyInput): Destination {
     };
   }
   if (state.status === "activated") return { kind: "done" };
+
+  // The report exists. Nothing below this line can be worth showing instead —
+  // not a wait, and not a dead sync either, since the thing the sync was for
+  // has already been produced.
+  if (state.stage === REPORT_WRITTEN && state.baselineReportId !== null) {
+    return { kind: "report", reportId: state.baselineReportId };
+  }
 
   // The sync died. The run does not know, and never will.
   if (workflowFailed(input.workflow)) {

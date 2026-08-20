@@ -4,11 +4,12 @@ import type { Route } from "./+types/onboarding";
 import { OnboardingShell } from "../components/onboarding/OnboardingShell";
 import { StageTrail } from "../components/onboarding/StageTrail";
 import { JourneyFailure } from "../components/onboarding/JourneyFailure";
-import { EmptyState, ProblemNote, WorkingStrip } from "../components/v1/Honesty";
+import { SyncStage } from "../components/onboarding/SyncStage";
+import { EmptyState, ProblemNote } from "../components/v1/Honesty";
 import { RouteError } from "../components/RouteError";
 import { getMe, getOnboarding, getWorkflow, startRun } from "../lib/onboarding/api";
 import { nextScreen, shouldPoll } from "../lib/onboarding/nextScreen";
-import { waitLabel, workflowStageLabel, type FailureReason } from "../lib/onboarding/copy";
+import type { FailureReason } from "../lib/onboarding/copy";
 import { newIdempotencyKey } from "../lib/v1/client";
 import { usePoll } from "../lib/v1/usePoll";
 import { requireUser } from "../lib/session";
@@ -22,6 +23,9 @@ import type { OnboardingState, Workflow } from "../lib/v1/types";
  * unbounded**. When the workflow dies the run does not notice — its status
  * stays `active` and its next action stays `wait` — so this screen watches the
  * workflow as well, and stops.
+ *
+ * The wait itself is `SyncStage`, which takes the whole viewport. Everything
+ * else this route can land on is a short message and keeps the shared card.
  */
 
 const POLL_MS = 4000;
@@ -94,6 +98,22 @@ export default function Onboarding() {
     if (destination.kind === "report") void navigate("/report", { replace: true });
   }, [destination.kind, navigate]);
 
+  // The wait is the whole screen, and everything else is a message. They are
+  // different kinds of thing and they get different shells: minutes of work
+  // reported through a three-pixel bar inside a 26rem card was the complaint
+  // this replaced, and a two-sentence failure blown up to fill a monitor would
+  // be the same mistake pointed the other way.
+  if (destination.kind === "wait") {
+    return (
+      <SyncStage
+        runStage={state.stage}
+        workflow={workflow}
+        waitReason={destination.reason}
+        error={error}
+      />
+    );
+  }
+
   return (
     <OnboardingShell
       title="Reading your games"
@@ -106,14 +126,6 @@ export default function Onboarding() {
           mid-sentence with half a status. */}
       <div className="onboarding-body" aria-live="polite" aria-atomic="true">
         {error ? <ProblemNote error={error} /> : null}
-
-        {destination.kind === "wait" ? (
-          <WorkingStrip
-            label={waitLabel(destination.reason)}
-            percent={workflow?.progress.percent ?? null}
-            detail={workflowStageLabel(workflow?.progress.stage ?? null) ?? undefined}
-          />
-        ) : null}
 
         {destination.kind === "stuck" ? (
           <JourneyFailure

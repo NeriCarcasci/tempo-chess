@@ -220,6 +220,10 @@ export const WORKFLOW_STAGE_LABEL: Record<string, string> = {
   stockfish_deep_game: "Studying the moments that mattered",
   analysis_assess_transitions: "Judging the decisions",
   analysis_practical_context: "Working out how hard each one was",
+  // No worker registers this one on this branch yet. Written now for the same
+  // reason as the failure copy above: the alternative is the generic "Working"
+  // appearing on the sync screen the day it ships.
+  analysis_detect_concepts: "Naming the patterns behind them",
   coaching_onboarding_prepare: "Gathering what to read",
   coaching_examination_report: "Working out where you stand",
   coaching_baseline_examination: "Writing your report",
