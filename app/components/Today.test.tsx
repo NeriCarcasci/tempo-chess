@@ -31,6 +31,7 @@ const shape = (over: Partial<OpeningShape> = {}): OpeningShape => ({
 const game = (over: Partial<RecentGame> = {}): RecentGame => ({
   id: "g1",
   opponent: "someone",
+  opponentRating: null,
   colour: "black",
   speed: "blitz",
   result: "white",

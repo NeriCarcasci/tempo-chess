@@ -34,6 +34,7 @@ export default [
   route("lessons", "routes/lessons.tsx"),
   route("lessons/:slug", "routes/lesson.tsx"),
   route("account", "routes/account.tsx"),
+  route("profile", "routes/profile.tsx"),
   route("mistakes", "routes/mistakes.tsx"),
   route("play", "routes/play.tsx"),
   route("train", "routes/train.tsx"),

@@ -1,11 +1,9 @@
 /**
- * Recent games with their moves, for the screens that replay them and the one
- * that names the last of them.
+ * Recent games with their moves, for the screens that replay them.
  *
- * `GET /v1/games/recent` has landed. It answers `{ asOf, games }`, wraps the
- * opponent in an object and carries `outcome` — the subject's own result —
- * beside `result`, which names the winning colour. This module is still the
- * only place that knows the wire shape.
+ * `GET /v1/games/recent` is being written on the server as this ships, so this
+ * module is the seam: it is the only place that knows the wire shape, and the
+ * only file that has to change when the real route lands.
  *
  * Two rules follow from that, and both are deliberate:
  *
@@ -32,22 +30,24 @@ export interface RecentGame {
   id: string;
   /** The handle on the other side of the board, when the API names one. */
   opponent: string | null;
+  /** Their rating in that game, when the provider recorded one. */
+  opponentRating: number | null;
   /** The subject's colour, which decides which way up the board is drawn. */
   colour: "white" | "black" | null;
   speed: string | null;
-  /** Which colour won, or a draw. Not the subject's result — see `outcome`. */
+  /** Who won: `white`, `black` or `draw`. Not the subject's own result. */
   result: string | null;
   /**
-   * How it went *for the subject*.
+   * The subject's own result, which is the one a person reads.
    *
-   * Separate from `result` on purpose: "black won" and "you lost" are the same
-   * game only once you know which side the person was, and a screen that reads
-   * one as the other congratulates people on their defeats.
+   * Separate from `result` because they answer different questions and the
+   * route sends both: a game whose `result` is `black` is a win or a loss
+   * depending on which seat the subject was in, and collapsing the two here
+   * would put the wrong letter beside half of somebody's games.
    */
   outcome: "win" | "loss" | "draw" | null;
-  /** ISO 8601, as the API sends it. */
   playedAt: string | null;
-  /** The game on the site it was played on, when the provider exposes one. */
+  /** The game on the site it was played on, when the route names it. */
   providerUrl: string | null;
   /** Only set when the game did not start from the standard position. */
   initialFen: string | null;
@@ -77,22 +77,24 @@ function readMove(entry: unknown): GameMove | null {
 }
 
 /**
- * The handle across the board.
+ * The other side of the board, from either shape the route might send.
  *
- * The route sends `{ username, title, rating }`; a bare string is still read
- * because the sync screen shipped against that shape and a row reading "From
- * your archive" where a name belongs is a silent loss, not a visible one.
+ * `listRecentGames` ships `{ username, title, rating }`; this module was
+ * written against a bare string before the route existed, and reading only the
+ * string is why the sync screen said "From your archive" under every board it
+ * drew. Both are read, because one branch is cheaper than being wrong about
+ * every row.
  */
-function readOpponent(entry: unknown): string | null {
-  if (typeof entry === "string") return text(entry);
-  if (typeof entry !== "object" || entry === null) return null;
-  return text((entry as Record<string, unknown>).username);
+function readOpponent(value: unknown): { name: string | null; rating: number | null } {
+  if (typeof value === "string") return { name: text(value), rating: null };
+  if (typeof value !== "object" || value === null) return { name: null, rating: null };
+  const record = value as Record<string, unknown>;
+  const rating =
+    typeof record.rating === "number" && Number.isFinite(record.rating) ? record.rating : null;
+  return { name: text(record.username), rating };
 }
 
-function readOutcome(entry: unknown): RecentGame["outcome"] {
-  const value = text(entry)?.toLowerCase() ?? null;
-  return value === "win" || value === "loss" || value === "draw" ? value : null;
-}
+const OUTCOMES = new Set(["win", "loss", "draw"]);
 
 function readGame(entry: unknown): RecentGame | null {
   if (typeof entry !== "object" || entry === null) return null;
@@ -115,13 +117,19 @@ function readGame(entry: unknown): RecentGame | null {
   const rawColour = (text(record.colour) ?? text(record.color))?.toLowerCase() ?? null;
   const colour = rawColour === "white" || rawColour === "black" ? rawColour : null;
 
+  const opponent = readOpponent(record.opponent);
+  const rawOutcome = text(record.outcome)?.toLowerCase() ?? null;
+
   return {
     id,
-    opponent: readOpponent(record.opponent),
+    opponent: opponent.name,
+    opponentRating: opponent.rating,
     colour,
     speed: text(record.speed),
     result: text(record.result),
-    outcome: readOutcome(record.outcome),
+    // An outcome nobody agreed on is null rather than a guess, for the same
+    // reason as the colour: a wrong letter beside a game is worse than none.
+    outcome: rawOutcome !== null && OUTCOMES.has(rawOutcome) ? (rawOutcome as RecentGame["outcome"]) : null,
     playedAt: text(record.playedAt),
     providerUrl: text(record.providerUrl),
     initialFen: text(record.initialFen),

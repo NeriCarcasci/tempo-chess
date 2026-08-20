@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { nextScreen, shouldPoll, workflowFailed } from "./nextScreen";
+import { nextScreen, reportAlreadyOpened, shouldPoll, workflowFailed } from "./nextScreen";
 import type { OnboardingState } from "../v1/types";
 
 /**
@@ -198,5 +198,30 @@ describe("nextScreen", () => {
       sessionId: "session-1",
       reportId: "report-1",
     });
+  });
+});
+
+describe("reportAlreadyOpened", () => {
+  test("a run sitting on report_ready has not opened it", () => {
+    // The one that matters. Fetching the report is what moves the run off this
+    // stage, so a screen that read it here would have opened it on the
+    // person's behalf and then reported that they had.
+    expect(reportAlreadyOpened(state({ stage: "report_ready" }))).toBe(false);
+  });
+
+  test("every stage before the report is not opened either", () => {
+    for (const stage of ["linking", "syncing", "analysing", "diagnostic"] as const) {
+      expect(reportAlreadyOpened(state({ stage })), stage).toBe(false);
+    }
+  });
+
+  test("the stages only reachable by opening it say so", () => {
+    expect(reportAlreadyOpened(state({ stage: "goal_setting" }))).toBe(true);
+    expect(reportAlreadyOpened(state({ stage: "activated" }))).toBe(true);
+  });
+
+  test("an activated run counts however its stage reads", () => {
+    // Activation requires `report_viewed_at`, so the status alone is evidence.
+    expect(reportAlreadyOpened(state({ stage: "report_ready", status: "activated" }))).toBe(true);
   });
 });

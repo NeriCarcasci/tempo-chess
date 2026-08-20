@@ -14,9 +14,10 @@ import type { RecentGame } from "../v1/games";
 const game = (uci: string[], over: Partial<RecentGame> = {}): RecentGame => ({
   id: "g1",
   opponent: "someone",
+  opponentRating: null,
   colour: "white",
   speed: "blitz",
-  result: "1-0",
+  result: "white",
   outcome: "win",
   playedAt: null,
   providerUrl: null,
