@@ -49,7 +49,7 @@
  * scope written down.
  */
 
-import { client } from "../db/client.js";
+import postgres from "postgres";
 import { buildBenchmarkCorpus } from "../benchmark/corpus.js";
 import { analyzeFens, probeEngineIdentity } from "../engine/stockfish.js";
 import { ENGINE_COMPONENT_KEYS, TRANSITION_ASSESSMENT_FAMILY } from "../engine/contract.js";
@@ -57,6 +57,21 @@ import { registerEngineVersions } from "../engine/profiles.js";
 import { registerRecipeVersion } from "./versions.js";
 import { promoteRecipe, recordValidationRun, registerValidationDataset } from "./validation.js";
 import { createHash } from "node:crypto";
+
+/**
+ * Its own connection, and deliberately not `db/client.js`.
+ *
+ * Importing that runs E01's runtime startup gates, which require a *deployment*
+ * role and refuse `forma_migrator` outright: only `forma_api` may serve
+ * requests. This job never serves one. `ops/migrate.ts` is standalone for
+ * exactly the same reason and says so.
+ */
+const url = process.env.DATABASE_URL;
+if (!url) {
+  console.error("DATABASE_URL is not set; the promotion job has nothing to connect to");
+  process.exit(1);
+}
+const client = postgres(url, { max: 1, prepare: false });
 
 const RECIPE_VERSION = "1";
 const DATASET_VERSION = "1";
@@ -218,5 +233,9 @@ async function main(): Promise<void> {
   say("done", `previous examination recipe: ${examination.previousRecipeVersionId ?? "none"}`);
 }
 
-await main();
+try {
+  await main();
+} finally {
+  await client.end({ timeout: 5 });
+}
 process.exit(0);

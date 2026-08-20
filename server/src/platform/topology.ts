@@ -267,12 +267,22 @@ export const JOBS: readonly JobEntry[] = [
   },
   {
     name: "forma-promote",
-    serviceAccount: "forma-analysis",
-    databaseRole: "forma_analysis",
+    serviceAccount: "forma-migrator",
+    databaseRole: "forma_migrator",
     // Same reason as the two below: the image ships only `dist`, and tsx is a
-    // devDependency. Runs as `forma_analysis` because promoting writes the
-    // component versions, recipe versions and validation runs that live in the
-    // `analysis` schema, and because the engine it probes is in this image.
+    // devDependency.
+    //
+    // `forma_migrator`, and the grants say why. `forma_analysis` may register
+    // components, recipes and validation runs but may not promote: a worker
+    // records evidence, it does not choose the method. `forma_ops` may promote
+    // but may not record a validation run: an operator cites evidence, it does
+    // not manufacture it. That separation is correct and deliberate, and it
+    // means no single steady-state role can do both halves of a promotion.
+    //
+    // A *first* promotion has to do both, because there is no incumbent method
+    // and no prior evidence, and establishing initial state is what the
+    // migration role is for. Steady-state promotion should be two steps across
+    // the two roles rather than this one job run again.
     command: "node dist/analysis/promote.js",
     purpose: "Register the analysis method, validate it against the committed corpus, and promote it.",
     maxRetries: 0,
