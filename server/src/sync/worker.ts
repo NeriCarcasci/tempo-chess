@@ -36,7 +36,14 @@ import {
   startSyncRun,
 } from "./commit.js";
 import { normalizeGame, tallyRejections, type NormalizedGame, type RejectionReason, type SyncMode } from "./contract.js";
-import { fetcherFor, type ProviderFetch } from "./providers.js";
+import {
+  ProviderAccountMissing,
+  ProviderUnavailable,
+  fetcherFor,
+  type ProviderFetch,
+  type ProviderPage,
+} from "./providers.js";
+import { WorkFailure } from "../ops/retry.js";
 
 export const ACCOUNT_SYNC_TASK = "provider_account_sync";
 
@@ -97,6 +104,86 @@ export interface SyncSummary {
   cursorAfter: string | null;
   /** True when the provider had more to give than this item was willing to walk. */
   moreAvailable: boolean;
+}
+
+export interface PageWalkInput {
+  fetchPage: ProviderFetch;
+  username: string;
+  /** Where to resume, or null to start at the beginning of the archive. */
+  since: string | null;
+  /**
+   * Persist one page. Called before the next page is asked for, so a walk that
+   * dies halfway has committed everything it reported.
+   */
+  commit: (page: ProviderPage, sequenceNo: number) => Promise<void>;
+  checkpoint?: () => Promise<{ continue: boolean }>;
+}
+
+export interface PageWalkResult {
+  pages: number;
+  cursorAfter: string | null;
+  moreAvailable: boolean;
+}
+
+/**
+ * Walk a provider's pages forwards, committing each before asking for the next.
+ *
+ * Separated from `syncAccount` because the two questions this loop can get
+ * wrong — "did the cursor advance" and "did the walk stop before the archive
+ * did" — are answerable with a stubbed fetch and no database at all.
+ *
+ * A page with nothing on it is now the only thing that ends the walk. It used
+ * to also end on a page carrying fewer games than it had asked for, which is
+ * two mistakes in one line. The number being compared was the games the adapter
+ * had managed to map rather than the records the provider had sent, so a full
+ * page with one unreadable record on it read as the end of an archive. And how
+ * many records a page carries is the provider's decision, not a promise about
+ * what is behind it.
+ *
+ * That rule is not what stopped the sync this was found through — a swallowed
+ * Lichess 404 was, and that is fixed in the adapter — but it was the next thing
+ * that would have, and it fails the same silent way: the run is marked
+ * succeeded, `moreAvailable` says false, nothing re-enqueues and nobody is
+ * told. Stopping only on an empty page costs one extra request per completed
+ * sync and buys a `moreAvailable: false` an operator can believe.
+ */
+export async function walkProviderPages(input: PageWalkInput): Promise<PageWalkResult> {
+  const result: PageWalkResult = { pages: 0, cursorAfter: null, moreAvailable: false };
+  let cursor = input.since;
+
+  for (let page = 0; page < MAX_PAGES_PER_ITEM; page += 1) {
+    const fetched = await input.fetchPage({
+      username: input.username,
+      since: cursor,
+      limit: SYNC_PAGE_SIZE,
+    });
+    if (fetched.received === 0) {
+      // The provider had nothing to send, which is the one honest end of an
+      // archive. Nothing to commit, and no cursor to move.
+      result.moreAvailable = false;
+      break;
+    }
+
+    result.pages += 1;
+    // Records the provider sent that the adapter could not map are committed as
+    // an empty batch rather than skipped, because the commit is what carries
+    // the cursor past them. Without it the next page starts on them again.
+    await input.commit(fetched, result.pages);
+    result.cursorAfter = fetched.cursorAfter;
+    // Anything short of an empty page leaves the question open, so the summary
+    // says there is more until the provider says there is not. An operator
+    // reading `moreAvailable: false` has to be able to believe it.
+    result.moreAvailable = true;
+
+    // A page that did not move the cursor would be re-read forever.
+    if (fetched.cursorAfter === null || fetched.cursorAfter === cursor) break;
+    cursor = fetched.cursorAfter;
+
+    const decision = await input.checkpoint?.();
+    if (decision && !decision.continue) break;
+  }
+
+  return result;
 }
 
 /**
@@ -175,53 +262,43 @@ export async function syncAccount(
     // has nothing to resume from: both start at the beginning and rely on the
     // commit being idempotent per game rather than on
     // deleting anything first.
-    let cursor = payload.mode === "reconcile" || payload.mode === "initial" ? null : (state?.cursor_value ?? null);
+    const cursor = payload.mode === "reconcile" || payload.mode === "initial" ? null : (state?.cursor_value ?? null);
 
-    for (let page = 0; page < MAX_PAGES_PER_ITEM; page += 1) {
-      const fetched = await fetchPage({
-        username: account.username,
-        since: cursor,
-        limit: SYNC_PAGE_SIZE,
-      });
-      if (fetched.games.length === 0) break;
+    const walk = await walkProviderPages({
+      fetchPage,
+      username: account.username,
+      since: cursor,
+      checkpoint: input.checkpoint,
+      commit: async (fetched, sequenceNo) => {
+        const accepted: NormalizedGame[] = [];
+        const pageRejections: RejectionReason[] = [];
+        for (const raw of fetched.games) {
+          const outcome = normalizeGame(raw);
+          if (outcome.accepted) accepted.push(outcome.game);
+          else pageRejections.push(outcome.reason);
+        }
+        rejections.push(...pageRejections);
 
-      const accepted: NormalizedGame[] = [];
-      const pageRejections: RejectionReason[] = [];
-      for (const raw of fetched.games) {
-        const outcome = normalizeGame(raw);
-        if (outcome.accepted) accepted.push(outcome.game);
-        else pageRejections.push(outcome.reason);
-      }
-      rejections.push(...pageRejections);
-
-      summary.pages += 1;
-      const result = await commitBatch(sql, {
-        syncRunId,
-        linkedAccountId: payload.linkedAccountId,
-        subjectId: payload.subjectId,
-        providerId: account.provider_id,
-        sequenceNo: summary.pages,
-        cursorAfter: fetched.cursorAfter,
-        games: accepted,
-        subjectUsernames,
-        rejections: pageRejections,
-      });
-      summary.accepted += result.accepted;
-      summary.duplicate += result.duplicate;
-      summary.corrected += result.corrected;
-      summary.rejected += result.rejected;
-      summary.cursorAfter = fetched.cursorAfter;
-
-      // A page that did not move the cursor would be re-read forever.
-      if (fetched.cursorAfter === null || fetched.cursorAfter === cursor) break;
-      cursor = fetched.cursorAfter;
-
-      if (fetched.games.length < SYNC_PAGE_SIZE) break;
-      if (page === MAX_PAGES_PER_ITEM - 1) summary.moreAvailable = true;
-
-      const decision = await input.checkpoint?.();
-      if (decision && !decision.continue) break;
-    }
+        const result = await commitBatch(sql, {
+          syncRunId,
+          linkedAccountId: payload.linkedAccountId,
+          subjectId: payload.subjectId,
+          providerId: account.provider_id,
+          sequenceNo,
+          cursorAfter: fetched.cursorAfter,
+          games: accepted,
+          subjectUsernames,
+          rejections: pageRejections,
+        });
+        summary.accepted += result.accepted;
+        summary.duplicate += result.duplicate;
+        summary.corrected += result.corrected;
+        summary.rejected += result.rejected;
+      },
+    });
+    summary.pages = walk.pages;
+    summary.cursorAfter = walk.cursorAfter;
+    summary.moreAvailable = walk.moreAvailable;
 
     await finishSyncRun(sql, syncRunId, "succeeded", tallyRejections(rejections));
     return summary;
@@ -231,7 +308,7 @@ export async function syncAccount(
       syncRunId,
       "failed",
       tallyRejections(rejections),
-      error instanceof UnsupportedProvider ? "unsupported" : "transient",
+      syncFailureClass(error),
     );
     throw error;
   } finally {
@@ -239,18 +316,60 @@ export async function syncAccount(
   }
 }
 
+/**
+ * What the sync run records about a failure, for an operator reading the run.
+ *
+ * `account_missing` is separate from `transient` because the two ask different
+ * things of a person: one is "wait", the other is "this linked account no
+ * longer names a real provider account, relink it".
+ */
+export function syncFailureClass(error: unknown): string {
+  if (error instanceof UnsupportedProvider) return "unsupported";
+  if (error instanceof ProviderAccountMissing) return "account_missing";
+  return "transient";
+}
+
+/**
+ * The retry class the ledger needs, for the failures this task can produce.
+ *
+ * Anything a handler throws that is not a `WorkFailure` is classified
+ * `transient` by the executor, which is the right default for a surprise and
+ * the wrong answer for both of these. A provider that has no such account will
+ * still have no such account on the fifth attempt, and it should be dead on the
+ * first rather than spending four more. A 429 retried on the transient curve
+ * comes back in two seconds and walks into the same limit, which is the reason
+ * `rate_limit` has a sixty-second floor.
+ */
+export function syncWorkFailure(error: unknown): unknown {
+  if (error instanceof ProviderAccountMissing) {
+    return new WorkFailure("invalid_input", "provider_account_missing", error.providerSlug);
+  }
+  if (error instanceof UnsupportedProvider) {
+    return new WorkFailure("unsupported", "no_sync_adapter", error.providerSlug);
+  }
+  if (error instanceof ProviderUnavailable && error.status === 429) {
+    return new WorkFailure("rate_limit", "provider_rate_limited", null, error.retryAfter);
+  }
+  return error;
+}
+
 async function runSyncItem(context: WorkContext, sql: Sql): Promise<WorkResult> {
   const startedAt = Date.now();
   const payload = payloadOf(context.item.payload);
-  const summary = await syncAccount(
-    {
-      payload,
-      holder: `work-item:${context.item.id}`,
-      workflowId: context.item.workflowId ?? null,
-      checkpoint: () => context.checkpoint(),
-    },
-    sql,
-  );
+  let summary: SyncSummary;
+  try {
+    summary = await syncAccount(
+      {
+        payload,
+        holder: `work-item:${context.item.id}`,
+        workflowId: context.item.workflowId ?? null,
+        checkpoint: () => context.checkpoint(),
+      },
+      sql,
+    );
+  } catch (error) {
+    throw syncWorkFailure(error);
+  }
   return {
     outputRef: `linked-account:${payload.linkedAccountId}`,
     outputSummary: {
