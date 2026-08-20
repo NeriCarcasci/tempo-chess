@@ -13,8 +13,9 @@
  * already succeeded and calls exactly the same `detectForRun` the worker calls
  * -- not a second implementation, and not a shortcut past the actor binding.
  *
- * Idempotent, because `detectForRun` clears a run's evidence before writing it.
- * Running it twice produces the same rows.
+ * Idempotent, because evidence is append-only: `detectForRun` declines to write
+ * a second copy for a run that already has one. Running it twice is safe and
+ * the second run writes nothing.
  *
  * Usage: PROFILE_ID=<uuid> npm run concepts:backfill
  */
@@ -78,7 +79,10 @@ try {
       // One unreadable game must not stop the other hundred and ninety-five.
       // The count is reported at the end rather than swallowed.
       failed += 1;
-      console.error(`run ${run.id} failed: ${(error as Error).name}`);
+      // The SQLSTATE, not the message: a bare error name says a thing went
+      // wrong a hundred and ninety-six times and refuses to say which thing.
+      const code = (error as { code?: string }).code;
+      console.error(`run ${run.id} failed: ${(error as Error).name}${code ? ` [${code}]` : ""}`);
     }
     if ((index + 1) % 25 === 0) console.log(`progress   ${index + 1}/${runs.length}`);
   }

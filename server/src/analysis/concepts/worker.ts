@@ -157,13 +157,25 @@ export async function detectForRun(
       })),
     };
 
-    const detected = detectGame(facts);
+    // Evidence is append-only, and the grants say so: `forma_analysis` may
+    // insert and select these tables and may not delete from them. That is the
+    // right shape -- a worker that can delete a player's evidence can quietly
+    // rewrite what a report was based on -- so a re-delivery is answered by
+    // declining to write a second copy rather than by clearing the first.
+    //
+    // Redetecting the same game under a changed catalogue is a different
+    // matter, and it is a new analysis run, not an overwrite of this one.
+    const [existing] = await tx<{ count: string }[]>`
+      select count(*)::text from analysis.concept_opportunities where run_id = ${runId}
+    `;
+    if (existing && Number(existing.count) > 0) {
+      return {
+        outputRef: `run:${runId}`,
+        outputSummary: { opportunities: Number(existing.count), duplicate: true },
+      };
+    }
 
-    // Re-running a game must not double its evidence. Scoped to the run, so a
-    // replan is new evidence and a redelivery is not.
-    await tx`delete from analysis.concept_opportunities where run_id = ${runId}`;
-    await tx`delete from analysis.evidence_items where run_id = ${runId}`;
-    await tx`delete from analysis.chess_events where run_id = ${runId}`;
+    const detected = detectGame(facts);
 
     let written = 0;
     let censored = 0;
