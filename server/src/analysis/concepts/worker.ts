@@ -176,8 +176,14 @@ export async function detectForRun(
     //
     // Redetecting the same game under a changed catalogue is a different
     // matter, and it is a new analysis run, not an overwrite of this one.
+    // `run_id` on all three evidence tables references
+    // `chess.materialization_runs`, not `analysis.runs`. The evidence is about
+    // a position graph rather than about one pass of the engine over it, which
+    // is why the estimator joins these rows by game and snapshot and never by
+    // run at all.
     const [existing] = await tx<{ count: string }[]>`
-      select count(*)::text from analysis.concept_opportunities where run_id = ${runId}
+      select count(*)::text from analysis.concept_opportunities
+      where run_id = ${materializationRunId}
     `;
     if (existing && Number(existing.count) > 0) {
       return {
@@ -216,7 +222,7 @@ export async function detectForRun(
           run_id, replay_revision_id, subject_game_id, event_type, start_ply, focal_ply,
           end_ply, actor_color, affected_color, facts, detection_confidence, completeness
         ) values (
-          ${runId}, ${game.replay_revision_id}, ${run.subject_game_id},
+          ${materializationRunId}, ${game.replay_revision_id}, ${run.subject_game_id},
           ${observation.event.eventType}, ${observation.event.startPly},
           ${observation.event.focalPly}, ${observation.event.endPly},
           ${game.subject_color}, ${game.subject_color},
@@ -230,7 +236,7 @@ export async function detectForRun(
         insert into analysis.evidence_items (
           run_id, evidence_kind, subject_id, subject_game_id, occurred_at, confidence
         ) values (
-          ${runId}, 'opportunity', ${run.subject_id}, ${run.subject_game_id},
+          ${materializationRunId}, 'opportunity', ${run.subject_id}, ${run.subject_game_id},
           ${facts.playedAt.toISOString()}, null
         )
         returning id
@@ -244,7 +250,7 @@ export async function detectForRun(
           score, rubric_component_version_id, difficulty, phase, speed, context,
           confidence, evidence_source_kind, occurred_at
         ) values (
-          ${runId}, ${run.subject_id}, ${run.subject_game_id}, ${event.id}, ${conceptVersionId},
+          ${materializationRunId}, ${run.subject_id}, ${run.subject_game_id}, ${event.id}, ${conceptVersionId},
           ${observation.draft.role}, ${observation.draft.opportunityPly},
           ${observation.draft.responsePly}, ${observation.draft.responseObserved},
           ${observation.draft.censoredReason}, ${observation.draft.success},
