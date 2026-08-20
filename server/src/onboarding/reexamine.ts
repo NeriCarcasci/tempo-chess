@@ -17,7 +17,14 @@
  * that already has an active run resumes it and plans nothing, which is the
  * same answer the route gives.
  *
- * Usage: SUBJECT_ID=<uuid> npm run onboarding:reexamine
+ * It takes the profile, not the subject, for the same reason the route does:
+ * `app.analysis_subjects` is actor-scoped, so "which subject is this?" cannot be
+ * asked before there is an actor to ask it as. Identity comes first and the
+ * subject is resolved inside the binding -- taking a subject id would mean
+ * reading it unbound, which returns nothing and looks exactly like a subject
+ * that does not exist.
+ *
+ * Usage: PROFILE_ID=<uuid> npm run onboarding:reexamine
  */
 
 import postgres from "postgres";
@@ -29,23 +36,27 @@ import { withActor } from "../db/actor.js";
 // `analysis/promote.ts` are standalone: importing that runs E01's startup gates,
 // which admit only a deployment role serving requests. This serves none.
 const url = process.env.DATABASE_URL;
-const subjectId = process.env.SUBJECT_ID;
+const profileId = process.env.PROFILE_ID;
 if (!url) {
   console.error("DATABASE_URL is not set");
   process.exit(1);
 }
-if (!subjectId) {
-  console.error("SUBJECT_ID is not set; this command acts on exactly one subject");
+if (!profileId) {
+  console.error("PROFILE_ID is not set; this command acts on exactly one person");
   process.exit(1);
 }
 const client = postgres(url, { max: 1, prepare: false });
 
 try {
-  const [subject] = await client<{ owner_user_id: string }[]>`
-    select owner_user_id from app.analysis_subjects where id = ${subjectId}
-  `;
-  if (!subject) throw new Error(`no such subject: ${subjectId}`);
-  const userId = subject.owner_user_id;
+  const [subject] = await withActor(client, profileId, (tx) =>
+    tx<{ id: string }[]>`
+      select id from app.analysis_subjects where owner_user_id = ${profileId} order by id limit 1
+    `,
+  );
+  if (!subject) throw new Error(`no subject for profile ${profileId}`);
+  const subjectId = subject.id;
+  const userId = profileId;
+  console.log(`subject    ${subjectId}`);
 
   const started = await startRun(client, {
     userId,
