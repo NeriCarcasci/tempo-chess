@@ -29,6 +29,7 @@ import {
   type CohortDefinition,
   type SnapshotGameEntry,
 } from "./contract.js";
+import { jsonParam } from "../db/json.js";
 
 export interface RegisteredCohortVersion {
   id: string;
@@ -51,7 +52,7 @@ export async function registerCohortVersion(
 
   const [row] = await sql<{ id: string }[]>`
     insert into analysis.cohort_definition_versions (cohort_key, version, definition, definition_hash)
-    values (${input.cohortKey}, ${input.version}, ${sql.json(definition as never)}, ${definitionHash})
+    values (${input.cohortKey}, ${input.version}, ${jsonParam(definition)}::jsonb, ${definitionHash})
     returning id
   `;
   return { id: row.id, definitionHash, alreadyRegistered: false };

@@ -440,12 +440,20 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
     );
   }
 
-  const cohort = await registerCohortVersion(sql, {
+  // Everything from here writes tenant tables -- `analysis.subject_data_snapshots`,
+  // `analysis.runs` and their children -- whose policies resolve ownership
+  // through `app.analysis_subjects` and `private.current_actor_id()`. The owner
+  // was resolved at the top of this function and then never used: the writes
+  // went out on the unbound connection and the snapshot insert was refused by
+  // its own policy. `buildExamination` above binds the actor for exactly this
+  // reason; this one did not.
+  return withActor(sql, ownerProfileId, async (tx) => {
+  const cohort = await registerCohortVersion(tx, {
     cohortKey: ONBOARDING_COHORT.key,
     version: ONBOARDING_COHORT.version,
     definition: ONBOARDING_COHORT.definition,
   });
-  const snapshot = await freezeSubjectSnapshot(sql, {
+  const snapshot = await freezeSubjectSnapshot(tx, {
     subjectId: run.subject_id,
     cohortVersionId: cohort.id,
     // Now, and stated: a snapshot never includes a game played after its
@@ -457,7 +465,7 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
   // The promotion surface, not the run type: `onboarding_examination` is the
   // surface a baseline is served from, and promoting a new method for it must
   // not silently change what a live profile reads.
-  const recipe = await currentRecipeFor(sql, "onboarding_examination");
+  const recipe = await currentRecipeFor(tx, "onboarding_examination");
   if (!recipe) {
     // Truthful rather than a placeholder report: with no promoted recipe there
     // is no method to run, and saying so is better than inventing one.
@@ -468,7 +476,7 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
     );
   }
 
-  const planned = await planRun(sql, {
+  const planned = await planRun(tx, {
     recipeVersionId: recipe.recipeVersionId,
     scope: { subjectId: run.subject_id, subjectDataSnapshotId: snapshot.id },
     trigger: "user_request",
@@ -479,7 +487,7 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
   // Recording only. The report, the examination and the advance were planned
   // with this item, and they resolve the run id from this row when they get
   // there — a worker role cannot create work, and should not be able to.
-  await sql`
+  await tx`
     update coaching.onboarding_runs
     set subject_data_snapshot_id = ${snapshot.id},
         examination_run_id = ${planned.id},
@@ -498,6 +506,7 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
     },
     metrics: { inputCount: snapshot.gameCount, outputCount: 1 },
   };
+  });
 }
 
 // ---------------------------------------------------------------------------

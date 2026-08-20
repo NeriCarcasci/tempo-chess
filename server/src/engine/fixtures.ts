@@ -38,6 +38,7 @@ import {
 import { registerEngineVersions, type EngineIdentity, type RegisteredEngineVersions } from "./profiles.js";
 import type { EngineSession } from "./worker.js";
 import type { CandidateLine, PositionEval, SearchHistory } from "./stockfish.js";
+import { jsonParam } from "../db/json.js";
 
 export const SHA = (seed: string): string => createHash("sha256").update(seed).digest("hex");
 
@@ -104,7 +105,7 @@ export async function seedAnalysableGame(
       normalized_sha256, played_at, rated, speed, result, ply_count, revision_reason
     ) values (
       ${providerGame!.id}, 1, 'norm-v1',
-      ${sql.json({ moves } as never)}, ${SHA(stamp)}, now(), true, 'blitz', 'white',
+      ${jsonParam({ moves })}::jsonb, ${SHA(stamp)}, now(), true, 'blitz', 'white',
       ${moves.length}, 'first_seen'
     )
     returning id

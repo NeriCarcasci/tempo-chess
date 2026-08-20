@@ -20,6 +20,7 @@ import {
   type PolicyDistribution,
 } from "./policy.js";
 import { lookupCalibrationSlice, resolvePromotedHumanModel } from "./store.js";
+import { jsonParam } from "../db/json.js";
 
 /**
  * Compute practical counterplay for one analysis run.
@@ -398,7 +399,7 @@ async function storeInference(
         ${input.context.actorRating}, ${input.context.opponentRating}, ${input.context.speed},
         ${input.context.hasMoveHistory}, ${HUMAN_POLICY_CONTRACT_HASH}, ${input.cacheKey},
         ${input.policy.retainedMass}, ${input.policy.moves.length}, ${input.policy.entropyBits},
-        ${tx.json({ networkBand: input.networkBand })}
+        ${jsonParam({ networkBand: input.networkBand })}::jsonb
       )
       returning id
     `;

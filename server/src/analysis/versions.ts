@@ -24,6 +24,7 @@ import {
   type ComponentCategory,
   type RunType,
 } from "./contract.js";
+import { jsonParam } from "../db/json.js";
 
 export interface ComponentInput {
   componentKey: string;
@@ -156,7 +157,7 @@ export async function registerComponentVersion(
           content_hash, model_identity, licence, provenance, deterministic
         ) values (
           ${component.id}, ${input.version}, ${input.implementationSha256},
-          ${tx.json(configuration as never)}, ${configurationHash(configuration)},
+          ${jsonParam(configuration)}::jsonb, ${configurationHash(configuration)},
           ${contentHash}, ${modelIdentity === null ? null : tx.json(modelIdentity as never)},
           ${input.licence ?? null}, ${input.provenance ?? null}, ${input.deterministic}
         )

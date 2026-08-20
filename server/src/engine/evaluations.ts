@@ -37,6 +37,7 @@ import {
 } from "./contract.js";
 import type { ResolvedProfile } from "./profiles.js";
 import type { CandidateLine, PositionEval } from "./stockfish.js";
+import { jsonParam } from "../db/json.js";
 
 /** Everything that identifies one search, before it has been run. */
 export interface EvaluationRequest {
@@ -213,7 +214,7 @@ export async function storeEvaluation(
           ${row.id}, ${candidate.rank}, ${candidate.pv[0]!}, ${candidate.evalCp ?? null},
           ${candidate.mate ?? null}, ${candidate.wdl?.[0] ?? null}, ${candidate.wdl?.[1] ?? null},
           ${candidate.wdl?.[2] ?? null}, ${roundScore(value.value)}, ${value.method},
-          ${tx.json(candidate.pv as never)}, ${candidate.nodes ?? null}
+          ${jsonParam(candidate.pv)}::jsonb, ${candidate.nodes ?? null}
         )
       `;
     }

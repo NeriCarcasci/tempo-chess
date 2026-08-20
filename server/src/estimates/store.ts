@@ -17,6 +17,7 @@ import type { CandidateFinding } from "./findings.js";
 import { structuredInputHash } from "./findings.js";
 import type { TrajectoryBin } from "./trajectory.js";
 import { checkRendering, renderTemplate } from "./render.js";
+import { jsonParam } from "../db/json.js";
 
 /**
  * Persistence for the estimate, trajectory and finding layer.
@@ -342,8 +343,8 @@ export async function writeFinding(
     ) values (
       ${input.analysisRunId}, ${input.subjectId}, ${write.playerSkillEstimateId},
       ${candidate.findingType}, ${write.conceptVersionId}, ${write.role},
-      ${sql.json({})}, ${candidate.priority}, ${candidate.confidenceTier},
-      ${sql.json(candidate.claim as never)}, ${candidate.claimFamily},
+      ${jsonParam({})}::jsonb, ${candidate.priority}, ${candidate.confidenceTier},
+      ${jsonParam(candidate.claim)}::jsonb, ${candidate.claimFamily},
       ${candidate.adjustedProbability === null ? null : input.correctionComponentVersionId},
       ${candidate.adjustedProbability}
     )

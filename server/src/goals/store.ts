@@ -5,6 +5,7 @@ import type { CloseOutcome, GoalStatus } from "./contract.js";
 import type { Requirement } from "./plan.js";
 import type { ProgressReading } from "./progress.js";
 import type { ResolvedTarget } from "./resolve.js";
+import { jsonParam } from "../db/json.js";
 
 /**
  * Reading and writing goals.
@@ -178,7 +179,7 @@ export async function writeRequirements(
         ${input.cycleId}, ${requirement.requirementKey}, ${requirement.kind},
         ${requirement.quantity}, ${requirement.unit}, ${requirement.windowDays},
         ${requirement.essential}, ${requirement.rationale},
-        ${input.generatorComponentVersionId}, ${sql.json(requirement.cohortFilter as never)},
+        ${input.generatorComponentVersionId}, ${jsonParam(requirement.cohortFilter)}::jsonb,
         ${requirement.displayRank}
       )
       on conflict (cycle_id, requirement_key) do nothing

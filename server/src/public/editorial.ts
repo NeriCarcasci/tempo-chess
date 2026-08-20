@@ -25,6 +25,7 @@ import { publicationReadiness } from "./readiness.js";
 import type { Blocker } from "./readiness.js";
 import { contentChecksum } from "./projection.js";
 import type { CaseStudyRecord, DirectoryProfileRecord } from "./projection.js";
+import { jsonParam } from "../db/json.js";
 
 type Sql = typeof client;
 
@@ -124,7 +125,7 @@ export async function recordReview(input: ReviewInput, sql: Sql = client): Promi
       redaction_policy_version, note
     ) values (
       ${input.subjectId}, ${input.runId}, ${input.reviewerUserId}, ${input.decision},
-      ${sql.json(input.checklist)}, ${input.redactionPolicyVersion ?? REDACTION_POLICY_VERSION},
+      ${jsonParam(input.checklist)}::jsonb, ${input.redactionPolicyVersion ?? REDACTION_POLICY_VERSION},
       ${input.note ?? null}
     )
     returning id

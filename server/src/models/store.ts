@@ -13,6 +13,7 @@ import {
 import type { PromotionVerdict } from "./calibration.js";
 import { calibrationRowsFor } from "./calibration.js";
 import type { SupportedSlice } from "./practical.js";
+import { jsonParam } from "../db/json.js";
 
 /**
  * Persistence for the human-context layer.
@@ -252,12 +253,12 @@ export async function recordValidation(
       ) values (
         ${dataset!.id}, ${evidence.modelComponentVersionId}, ${evidence.executionRevision},
         ${verdict.promote ? "passed" : "failed"}, ${evidence.outputChecksum},
-        ${tx.json({
+        ${jsonParam({
           promote: verdict.promote,
           blockers: verdict.blockers,
           supportedSliceCount: verdict.supportedSliceCount,
           totalSampleSize: verdict.totalSampleSize,
-        })}
+        })}::jsonb
       )
       returning id
     `;
