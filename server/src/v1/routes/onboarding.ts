@@ -180,11 +180,19 @@ const startRoute: RouteDefinition<never, z.infer<typeof startBody>, OnboardingSt
     // the run, so a second call would be refused anyway, and not asking is
     // cheaper than being refused.
     if (started.created) {
-      await beginOnboarding(client, {
-        runId: started.runId,
-        userId: auth.profileId,
-        subjectId,
-      });
+      // Inside the actor context, not on the pooled client. The planner counts
+      // the subject's accounts through `app.subject_account_memberships`, which
+      // forces row level security against `private.current_actor_id()` -- null
+      // off the pool. Read unbound it returns no accounts, and the planner
+      // faithfully reports the only thing that can mean: `no_linked_account`,
+      // for a subject whose account had just been linked successfully.
+      await withActorContext(auth.profileId, (sql) =>
+        beginOnboarding(sql, {
+          runId: started.runId,
+          userId: auth.profileId,
+          subjectId,
+        }),
+      );
     }
     const run = await withActorContext(auth.profileId, (sql) =>
       loadRun(sql, { runId: started.runId, ownerProfileId: auth.profileId }),

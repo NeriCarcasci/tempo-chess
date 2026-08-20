@@ -18,6 +18,7 @@
 import type { Sql } from "postgres";
 import { createWorkflow } from "../ops/ledger.js";
 import { planGameAnalysis } from "../engine/plan.js";
+import { withActor } from "../db/actor.js";
 import { MATERIALIZE_TASK } from "../positions/worker.js";
 
 export interface PlanPendingInput {
@@ -82,11 +83,21 @@ export async function planPendingGameAnalyses(
   let planned = 0;
   let skipped = 0;
   for (const game of pending) {
-    const outcome = await planGameAnalysis(sql, {
-      subjectGameId: game.subject_game_id,
-      ownerProfileId: game.owner_user_id!,
-      trigger: "scheduled",
-    });
+    // Bound to the owner of the game being planned, one at a time. The survey
+    // above is deliberately cross-subject -- that is the question a sweep asks
+    // -- but writing an `analysis.runs` row is an act on one subject, and its
+    // policy resolves ownership through `private.current_actor_id()`. Unbound,
+    // the insert is refused and the sweep reports `db_permission_denied` for
+    // work it had correctly identified. The owner is already selected above for
+    // exactly this purpose and was being passed as an argument while the
+    // connection stayed anonymous.
+    const outcome = await withActor(sql, game.owner_user_id!, (tx) =>
+      planGameAnalysis(tx, {
+        subjectGameId: game.subject_game_id,
+        ownerProfileId: game.owner_user_id!,
+        trigger: "scheduled",
+      }),
+    );
     if (outcome?.state === "scheduled") planned += 1;
     else if (outcome?.state === "unavailable" && outcome.reason === "no_promoted_recipe") {
       // Nothing is analysable without a promoted method, and every remaining

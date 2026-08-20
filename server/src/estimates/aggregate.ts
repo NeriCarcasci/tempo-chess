@@ -1,4 +1,5 @@
 import type { Sql } from "postgres";
+import { requiredDate, type RawTimestamp } from "../db/timestamps.js";
 
 import type { Queryable } from "../db/queryable.js";
 import { ESTIMATOR_POLICY, type Frame } from "./contract.js";
@@ -58,7 +59,7 @@ interface OpportunityRow {
   success: boolean | null;
   score: string | null;
   censored_reason: string | null;
-  occurred_at: Date;
+  occurred_at: RawTimestamp;
   evidence_item_id: string | null;
 }
 
@@ -172,7 +173,7 @@ export async function aggregateSubjectReport(
   for (const frame of MEASURED_FRAMES) {
     for (const [dimensionKey, rows] of byDimension) {
       const observations: Observation[] = rows.map((row) => ({
-        occurredAt: row.occurred_at,
+        occurredAt: requiredDate(row.occurred_at, "concept_opportunities.occurred_at"),
         score: row.score !== null ? Number(row.score) : row.success ? 1 : 0,
         censored: row.censored_reason !== null,
         graded: row.score !== null,

@@ -1,10 +1,12 @@
 import type { Sql } from "postgres";
+import { isoOf } from "../db/timestamps.js";
 
 import type { Queryable } from "../db/queryable.js";
 import type { CloseOutcome, GoalStatus } from "./contract.js";
 import type { Requirement } from "./plan.js";
 import type { ProgressReading } from "./progress.js";
 import type { ResolvedTarget } from "./resolve.js";
+import { jsonParam } from "../db/json.js";
 
 /**
  * Reading and writing goals.
@@ -178,7 +180,7 @@ export async function writeRequirements(
         ${input.cycleId}, ${requirement.requirementKey}, ${requirement.kind},
         ${requirement.quantity}, ${requirement.unit}, ${requirement.windowDays},
         ${requirement.essential}, ${requirement.rationale},
-        ${input.generatorComponentVersionId}, ${sql.json(requirement.cohortFilter as never)},
+        ${input.generatorComponentVersionId}, ${jsonParam(requirement.cohortFilter)}::jsonb,
         ${requirement.displayRank}
       )
       on conflict (cycle_id, requirement_key) do nothing
@@ -246,7 +248,7 @@ export async function recordCommitment(
     select ${input.cycleId}, ${input.commitmentKey},
            coalesce(max(revision), 0) + 1, ${input.target}, ${input.cadence},
            ${input.unit}, ${input.enabled}, ${input.acceptedRequirementKeys as string[]},
-           ${input.effectiveFrom}, ${input.confirmedAt}
+           ${input.effectiveFrom}, ${isoOf(input.confirmedAt)}
     from coaching.goal_commitments
     where cycle_id = ${input.cycleId} and commitment_key = ${input.commitmentKey}
     returning revision

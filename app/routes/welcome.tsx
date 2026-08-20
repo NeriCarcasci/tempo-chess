@@ -4,9 +4,11 @@ import type { Route } from "./+types/welcome";
 import { OnboardingShell } from "../components/onboarding/OnboardingShell";
 import { ProviderChoice, type Provider } from "../components/onboarding/ProviderChoice";
 import { RouteError } from "../components/RouteError";
-import { getOnboarding, linkAndStart } from "../lib/onboarding/api";
+import { getMe, getOnboarding, linkAccount, startRun } from "../lib/onboarding/api";
 import { nextScreen } from "../lib/onboarding/nextScreen";
 import { ProblemError } from "../lib/v1/problem";
+import { newIdempotencyKey } from "../lib/v1/client";
+import type { LinkedAccount } from "../lib/v1/types";
 import { apiFetch } from "../lib/api";
 import { invalidateSession, requireUser, setActiveAccount } from "../lib/session";
 import { invalidateCache } from "../lib/loaderCache";
@@ -53,9 +55,15 @@ interface Candidate {
 type ActionResult =
   | { kind: "not-found"; platform: Provider; username: string }
   | { kind: "candidate"; candidate: Candidate }
+  | { kind: "added"; handle: string }
   | { kind: "error"; message: string; code?: string };
 
-export async function clientLoader() {
+interface LoaderData {
+  /** Everything already connected, so the list survives adding the next one. */
+  accounts: LinkedAccount[];
+}
+
+export async function clientLoader(): Promise<LoaderData> {
   await requireUser();
   const state = await getOnboarding();
 
@@ -73,7 +81,11 @@ export async function clientLoader() {
   if (state.stage !== "not_started" && live && destination.kind !== "welcome") {
     throw redirect("/onboarding");
   }
-  return null;
+  // The list is read from the server rather than accumulated in component
+  // state: adding an account is a write on two surfaces, and a client-side
+  // list would happily show one that only half-landed.
+  const me = await getMe().catch(() => null);
+  return { accounts: me?.accounts ?? [] };
 }
 
 export async function clientAction({ request }: Route.ClientActionArgs): Promise<ActionResult> {
@@ -84,7 +96,9 @@ export async function clientAction({ request }: Route.ClientActionArgs): Promise
     : "lichess") as Provider;
   const username = String(form.get("username") ?? "").trim();
 
-  if (!username) return { kind: "error", message: "Enter the name you play under." };
+  if (intent !== "start" && !username) {
+    return { kind: "error", message: "Enter the name you play under." };
+  }
 
   if (intent === "lookup") {
     const response = await apiFetch(
@@ -97,38 +111,66 @@ export async function clientAction({ request }: Route.ClientActionArgs): Promise
         message: "That chess site did not answer. It is usually brief — try again in a moment.",
       };
     }
-    const candidate = (await response.json()) as Candidate;
-    return { kind: "candidate", candidate };
+    // The route answers `{ found: false }` with a 200, not a 404: "we asked and
+    // there is no such player" is a successful lookup. It also wraps the account
+    // in an envelope. Reading the envelope as the account itself is what made
+    // every field undefined and crashed the screen on `games.toLocaleString()`.
+    const body = (await response.json()) as
+      | { found: false }
+      | { found: true; account: Candidate };
+    if (!body.found || !body.account) return { kind: "not-found", platform, username };
+    return { kind: "candidate", candidate: body.account };
   }
 
-  // --- confirm ------------------------------------------------------------
-  try {
-    // 1-3: the legacy surface, so the session and the unported screens work.
-    const legacy = await apiFetch("/me/accounts", {
-      json: { username, platform },
-    });
-    if (legacy.ok || legacy.status === 409) {
-      const body = (await legacy.json().catch(() => null)) as { id?: string; userId?: string } | null;
-      if (body?.id && body.userId) setActiveAccount(body.userId, body.id);
-      invalidateSession();
-      invalidateCache();
-      await apiFetch("/imports/lichess", {
-        // `platform` is not optional: without it the importer assumed Lichess
-        // for everybody, which imported nothing for a Chess.com player.
-        json: { username, platform, games: "all" },
-      }).catch(() => null);
+  // --- add -----------------------------------------------------------------
+  // Linking and starting are separate intents now. Somebody who plays on both
+  // sites gets one report covering both, and the planner already emits a sync
+  // task per account and holds the baseline until every one of them lands --
+  // starting after the first would freeze a snapshot over half an archive.
+  if (intent === "add") {
+    try {
+      // The legacy surface too, so the session and the unported screens see the
+      // account. Goes first: `requireSession()` reads the legacy list, and an
+      // account that exists only on /v1 leaves the person bounced out of every
+      // product route with nothing on screen explaining why.
+      const legacy = await apiFetch("/me/accounts", { json: { username, platform } });
+      if (legacy.ok || legacy.status === 409) {
+        const body = (await legacy.json().catch(() => null)) as
+          | { id?: string; userId?: string }
+          | null;
+        if (body?.id && body.userId) setActiveAccount(body.userId, body.id);
+        invalidateSession();
+        invalidateCache();
+        await apiFetch("/imports/lichess", {
+          // `platform` is not optional: without it the importer assumed Lichess
+          // for everybody, which imported nothing for a Chess.com player.
+          json: { username, platform, games: "all" },
+        }).catch(() => null);
+      }
+      await linkAccount({
+        provider: platform,
+        handle: username,
+        idempotencyKey: newIdempotencyKey(),
+      });
+      return { kind: "added", handle: username };
+    } catch (error) {
+      if (error instanceof ProblemError) {
+        return { kind: "error", message: error.message, code: error.code };
+      }
+      return { kind: "error", message: "That did not go through. Try again." };
     }
+  }
 
-    // 4-5: the versioned surface, which is what the examination reads.
-    const state = await linkAndStart({ provider: platform, handle: username });
-
+  // --- start ---------------------------------------------------------------
+  try {
+    const state = await startRun({ idempotencyKey: newIdempotencyKey() });
     // A 2xx does not mean it started: with no active linked account the planner
     // fails the run inside the same request.
     if (state.status === "failed") {
       return {
         kind: "error",
         message:
-          "That account linked, but there was nothing to read from it. Check the name and try again.",
+          "Those accounts linked, but there was nothing to read from them. Check the names and try again.",
         code: state.failureReason ?? undefined,
       };
     }
@@ -146,7 +188,8 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   return <RouteError title="Could not open this page" error={error} />;
 }
 
-export default function Welcome() {
+export default function Welcome({ loaderData }: Route.ComponentProps) {
+  const { accounts } = loaderData as LoaderData;
   const result = useActionData<ActionResult>();
   const navigation = useNavigation();
   const busy = navigation.state !== "idle";
@@ -156,59 +199,52 @@ export default function Welcome() {
   // they pressed is disabled while it runs — which drops focus to <body>. Move
   // it to the new heading so a keyboard or screen-reader user is told where
   // they now are instead of being silently returned to the top of the document.
+  // The screen no longer swaps under the person, so there is no new heading to
+  // move focus to. The result region is what changed, and it is what a keyboard
+  // or screen-reader user needs to be taken to.
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (result) headingRef.current?.focus();
+    if (result) resultRef.current?.focus();
   }, [result]);
 
-  if (result?.kind === "candidate") {
-    const { candidate } = result;
-    return (
-      <OnboardingShell
-        title="Is this you?"
-        sub="Forma will read this account's public games and build your first report from them."
-        headingRef={headingRef}
-      >
-        <div className="line-list" style={{ marginTop: "1.2rem" }}>
-          <div className="line-row">
-            <div className="coverage-dimension">
-              <strong>
-                {candidate.platform === "chesscom" ? <ChessComMark size={16} /> : <LichessMark size={16} />}{" "}
-                {candidate.username}
-              </strong>
-              <p className="tag-note">
-                {candidate.games === null
-                  ? "Public games available"
-                  : `${candidate.games.toLocaleString()} public games`}
-                {candidate.rating === null ? "" : ` · rated ${candidate.rating}`}
-              </p>
-              {candidate.closed ? (
-                <p className="tag-note">This account is closed. Its games can still be read.</p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <Form method="post" className="onboarding-actions">
-          <input type="hidden" name="intent" value="confirm" />
-          <input type="hidden" name="platform" value={candidate.platform} />
-          <input type="hidden" name="username" value={candidate.username} />
-          <button className="primary-button btn-lg" disabled={busy}>
-            {busy ? "Starting…" : "Yes, read my games"}
-          </button>
-          <Link to="/welcome" className="chip-btn">
-            Not me
-          </Link>
-        </Form>
-      </OnboardingShell>
-    );
-  }
+  const connected = accounts.filter((account) => account.status === "active");
 
   return (
     <OnboardingShell
-      title="Connect your chess account"
-      sub="Forma reads the games you have already played. Nothing is posted, and only public game data is read."
+      title={connected.length ? "Add another account?" : "Connect your chess account"}
+      sub={
+        connected.length
+          ? "Add every site you play on and the first report covers all of them together. You can start whenever you are ready."
+          : "Forma reads the games you have already played. Nothing is posted, and only public game data is read."
+      }
     >
+      {connected.length > 0 ? (
+        <div className="connected-list">
+          <p className="cap">Connected</p>
+          <ul>
+            {connected.map((account) => (
+              <li key={account.id} className="connected-row">
+                <span className="connected-mark" aria-hidden="true">
+                  {account.provider === "chesscom" ? <ChessComMark size={16} /> : <LichessMark size={16} />}
+                </span>
+                <strong>{account.handle ?? "Connected account"}</strong>
+                <span className="tag tag-sub">
+                  {account.provider === "chesscom" ? "Chess.com" : "Lichess"}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <Form method="post" className="onboarding-actions">
+            <input type="hidden" name="intent" value="start" />
+            <button className="primary-button btn-lg" disabled={busy}>
+              {busy ? "Starting…" : `Read my games`}
+            </button>
+          </Form>
+        </div>
+      ) : null}
+
       <Form method="post" className="auth-reset">
         <input type="hidden" name="intent" value="lookup" />
         <ProviderChoice value={provider} onChange={setProvider} />
@@ -233,6 +269,45 @@ export default function Welcome() {
         </button>
       </Form>
 
+      {/* Inline, not a screen of its own. Confirming used to replace the page
+          and send you back to an empty form, which made connecting a second
+          site feel like starting over. The check itself stays: it is what
+          stops a typo becoming a linked account and an import of a stranger. */}
+      <div ref={resultRef} tabIndex={-1} className="outline-none">
+      {result?.kind === "candidate" ? (
+        <div className="candidate-card">
+          <p className="cap">Is this you?</p>
+          <div className="candidate-head">
+            <span aria-hidden="true">
+              {result.candidate.platform === "chesscom" ? <ChessComMark size={16} /> : <LichessMark size={16} />}
+            </span>
+            <strong>{result.candidate.username}</strong>
+          </div>
+          <p className="tag-note">
+            {result.candidate.games == null
+              ? "Public games available"
+              : `${result.candidate.games.toLocaleString()} public games`}
+            {result.candidate.rating == null ? "" : ` · rated ${result.candidate.rating}`}
+          </p>
+          {result.candidate.closed ? (
+            <p className="tag-note">This account is closed. Its games can still be read.</p>
+          ) : null}
+          <Form method="post" className="candidate-actions">
+            <input type="hidden" name="intent" value="add" />
+            <input type="hidden" name="platform" value={result.candidate.platform} />
+            <input type="hidden" name="username" value={result.candidate.username} />
+            <button className="primary-button" disabled={busy}>
+              {busy ? "Connecting…" : "Yes, that's me"}
+            </button>
+            <Link to="/welcome" className="chip-btn">
+              Not me
+            </Link>
+          </Form>
+        </div>
+      ) : null}
+
+      </div>
+
       <div aria-live="assertive" id="welcome-problem">
         {result?.kind === "not-found" ? (
           <p className="auth-error">
@@ -244,6 +319,11 @@ export default function Welcome() {
           `ProblemError` whose code decides the copy, and here the server has
           already told us what went wrong. */}
         {result?.kind === "error" ? <p className="auth-error">{result.message}</p> : null}
+        {result?.kind === "added" ? (
+          <p className="auth-note">
+            <strong>{result.handle}</strong> is connected. Add another site, or read your games.
+          </p>
+        ) : null}
       </div>
     </OnboardingShell>
   );

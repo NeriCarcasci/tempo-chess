@@ -71,9 +71,25 @@ export async function writePracticalContext(
     throw new WorkFailure("invalid_input", "invalid_payload", "the payload names no run");
   }
 
-  const [run] = await sql<{ subject_game_id: string | null; replay_revision_id: string | null }[]>`
-    select subject_game_id, replay_revision_id from analysis.runs where id = ${runId}
+  // The owner is resolved before anything reads a tenant table, not after.
+  // `ops.workflows` is role-scoped so it can be read unbound; `analysis.runs`
+  // is not, and reading it anonymously returned no row -- reported as
+  // `unknown_run`, "no such analysis run", for a run that had just been written
+  // three steps earlier. The compute below was already bound; the lookup that
+  // decides whether to reach it was not.
+  const [workflow] = await sql<{ owner_profile_id: string | null }[]>`
+    select owner_profile_id from ops.workflows where id = ${context.item.workflowId}
   `;
+  if (!workflow?.owner_profile_id) {
+    throw new WorkFailure("invalid_input", "unowned_workflow", "the workflow names no owner");
+  }
+  const ownerProfileId = workflow.owner_profile_id;
+
+  const [run] = await withActor(sql, ownerProfileId, (tx) =>
+    tx<{ subject_game_id: string | null; replay_revision_id: string | null }[]>`
+      select subject_game_id, replay_revision_id from analysis.runs where id = ${runId}
+    `,
+  );
   if (!run?.subject_game_id) {
     throw new WorkFailure("invalid_input", "unknown_run", "no such analysis run");
   }
@@ -97,15 +113,8 @@ export async function writePracticalContext(
   // The actor comes from the workflow the API created, never from the payload,
   // so the forced owner policies apply on the real worker path exactly as they
   // do in E12's assessment step.
-  const [workflow] = await sql<{ owner_profile_id: string | null }[]>`
-    select owner_profile_id from ops.workflows where id = ${context.item.workflowId}
-  `;
-  if (!workflow?.owner_profile_id) {
-    throw new WorkFailure("invalid_input", "unowned_workflow", "the workflow names no owner");
-  }
-
   const engine = resolveHumanPolicyEngine();
-  const summary = await withActor(sql, workflow.owner_profile_id, (tx) =>
+  const summary = await withActor(sql, ownerProfileId, (tx) =>
     computePracticalContext(tx, engine, {
       runId,
       materializationRunId: materialization.id,

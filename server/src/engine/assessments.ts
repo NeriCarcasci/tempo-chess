@@ -37,6 +37,7 @@ import {
 import type { StoredEvaluation } from "./evaluations.js";
 import type { GamePhase } from "../analysis/phase.js";
 import type { CriticalReasonDetail } from "./critical-position.js";
+import { jsonParam } from "../db/json.js";
 
 export interface TransitionEvidence {
   fromPly: number;
@@ -198,11 +199,11 @@ export async function writeAssessments(
         ) values (
           ${input.runId}, ${input.materializationRunId}, ${row.fromPly},
           ${row.beforeEvaluationId}, ${row.afterEvaluationId}, ${row.deepEvaluationId},
-          ${row.deepStatus}, ${tx.json(row.deepSelectionReasons as never)},
+          ${row.deepStatus}, ${jsonParam(row.deepSelectionReasons)}::jsonb,
           ${row.actorColor}, ${row.playedUci}, ${row.bestMoveUci}, ${row.playedMoveRank},
           ${row.expectedScoreBefore}, ${row.expectedScoreAfter}, ${input.toleranceVersionId},
           ${row.playedMoveAcceptable}, ${row.acceptableMoveCount}, ${row.onlyMove},
-          ${row.criticality}, ${tx.json(row.difficultyFeatures as never)}, ${row.phase}
+          ${row.criticality}, ${jsonParam(row.difficultyFeatures)}::jsonb, ${row.phase}
         )
         on conflict (analysis_run_id, materialization_run_id, from_ply) do nothing
       `;

@@ -387,6 +387,25 @@ export class Engine {
     return result;
   }
 
+  /**
+   * What this engine is, once it has said so.
+   *
+   * Read from the running binary rather than configured: the name and network
+   * come out of the UCI handshake, and the digest is of the executable that
+   * actually answered. An identity taken from a config file is a claim about
+   * what somebody meant to deploy.
+   */
+  async identity(): Promise<EngineIdentityFacts> {
+    await this.initialization;
+    this.binaryDigestValue = await this.binaryDigest;
+    return {
+      engineName: this.engineName,
+      engineVersion: versionFromName(this.engineName) ?? null,
+      binarySha256: this.binaryDigestValue ?? null,
+      networkHash: networkHashFromName(this.network) ?? null,
+    };
+  }
+
   quit() {
     try {
       this.write("quit");
@@ -394,6 +413,30 @@ export class Engine {
       /* ignore */
     }
     this.sf.kill();
+  }
+}
+
+/** The four facts `analysis.component_versions` records about an engine. */
+export interface EngineIdentityFacts {
+  engineName: string;
+  engineVersion: string | null;
+  binarySha256: string | null;
+  networkHash: string | null;
+}
+
+/**
+ * Start the engine, ask it what it is, and stop it.
+ *
+ * Used at worker start-up to register the component versions every evaluation
+ * will cite. Deliberately its own short-lived process: the answer must describe
+ * the binary on this machine, and nothing else needs the engine to stay up.
+ */
+export async function probeEngineIdentity(): Promise<EngineIdentityFacts> {
+  const engine = new Engine();
+  try {
+    return await engine.identity();
+  } finally {
+    engine.quit();
   }
 }
 

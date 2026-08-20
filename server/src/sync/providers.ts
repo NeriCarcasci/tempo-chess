@@ -17,6 +17,10 @@
  * cursor advance correctly" is a question a test can answer.
  */
 
+import { Chess } from "chessops/chess";
+import { parseFen, INITIAL_FEN } from "chessops/fen";
+import { parseSan } from "chessops/san";
+import { makeUci } from "chessops/util";
 import type { ProviderGameInput } from "./contract.js";
 
 export const LICHESS_API = process.env.LICHESS_API_URL ?? "https://lichess.org";
@@ -81,17 +85,59 @@ interface LichessGame {
  * it is; getting this wrong would either drop every draw or admit games still
  * being played.
  */
+/**
+ * Replay a SAN line into `{ uci, san }` pairs, or refuse it.
+ *
+ * `chessops` is the same library the materializer uses, so a line that parses
+ * here is one that will replay there — which is the property that matters, and
+ * the one that was missing.
+ */
+function sanToMoves(
+  sanLine: string,
+  initialFen: string | null,
+  clocks: readonly number[] | undefined,
+): { uci: string; san: string; clockMs: number | null }[] | null {
+  const trimmed = sanLine.trim();
+  const tokens = trimmed.length > 0 ? trimmed.split(/\s+/) : [];
+  const setup = parseFen(initialFen ?? INITIAL_FEN);
+  if (setup.isErr) return null;
+  const position = Chess.fromSetup(setup.unwrap());
+  if (position.isErr) return null;
+  const board = position.unwrap();
+
+  const moves: { uci: string; san: string; clockMs: number | null }[] = [];
+  for (const [index, san] of tokens.entries()) {
+    const move = parseSan(board, san);
+    if (!move) return null;
+    moves.push({
+      uci: makeUci(move),
+      san,
+      // Lichess reports clocks in centiseconds, one entry per ply.
+      clockMs: clocks?.[index] !== undefined ? clocks[index]! * 10 : null,
+    });
+    board.play(move);
+  }
+  return moves;
+}
+
 export function lichessGameInput(game: LichessGame): ProviderGameInput | null {
   if (!game.id || typeof game.moves !== "string" || game.createdAt === undefined) return null;
   const finished = game.status !== undefined && game.status !== "started" && game.status !== "created";
   const winner = game.winner ?? (finished ? null : undefined);
 
-  const uciMoves = game.moves.length > 0 ? game.moves.split(" ") : [];
-  const moves = uciMoves.map((uci, index) => ({
-    uci,
-    // Lichess reports clocks in centiseconds, one entry per ply.
-    clockMs: game.clocks?.[index] !== undefined ? game.clocks[index]! * 10 : null,
-  }));
+  // Lichess returns SAN in `moves`, not UCI. There is no flag on this endpoint
+  // that changes that, so the conversion has to happen here -- and it was not
+  // happening: the SAN was stored in the `uci` field and `san` was left null,
+  // which every replay downstream then failed to parse at ply 1. Nothing that
+  // reads a game could read one, and the failure surfaced as `unparsable_move`
+  // rather than as "the provider adapter wrote the wrong field".
+  //
+  // Replaying is also the only way to be sure: SAN is only meaningful relative
+  // to the position before it, so a game whose moves do not make a legal line
+  // is not a game we can store. Returning null rejects it, which the sync
+  // already counts and reports.
+  const moves = sanToMoves(game.moves, game.initialFen ?? null, game.clocks);
+  if (moves === null) return null;
 
   const participant = (player: LichessPlayer | undefined) => ({
     username: player?.user?.name ?? null,

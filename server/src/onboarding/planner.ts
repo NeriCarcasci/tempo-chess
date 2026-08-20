@@ -32,6 +32,7 @@ import { createWorkflow, type CreateWorkflowInput } from "../ops/ledger.js";
 import { ACCOUNT_SYNC_TASK } from "../sync/worker.js";
 import { COVERAGE_POLICY } from "./contract.js";
 import type { CohortDefinition } from "../analysis/contract.js";
+import { fetcherFor } from "../sync/providers.js";
 
 export const PREPARE_TASK = "coaching_onboarding_prepare";
 export const ADVANCE_TASK = "coaching_onboarding_advance";
@@ -95,7 +96,7 @@ export async function planOnboardingWork(
   sql: Sql,
   input: PlanInput,
 ): Promise<PlannedOnboarding> {
-  const accounts = await sql<{ id: string; provider_slug: string }[]>`
+  const linked = await sql<{ id: string; provider_slug: string }[]>`
     select la.id, pr.slug as provider_slug
     from app.subject_account_memberships m
     join app.linked_accounts la on la.id = m.linked_account_id
@@ -106,6 +107,20 @@ export async function planOnboardingWork(
       and la.status = 'active'
     order by la.id
   `;
+
+  // Only providers there is a canonical sync adapter for. Chess.com can be
+  // linked today and cannot be read yet, and the connect screen says so -- but
+  // the planner did not know it, so it queued a sync that could only ever
+  // raise `UnsupportedProvider`. That task exhausted its retries, and every
+  // step that depended on it failed `dependency_failed`: one unreadable
+  // account took down the whole examination, including the games that had
+  // already synced successfully from the other one.
+  //
+  // Planning no work for an account is not the same as hiding it. The accounts
+  // are still linked and still shown; they simply contribute nothing until
+  // there is an adapter, which is a fact about Forma rather than about the
+  // player.
+  const accounts = linked.filter((account) => fetcherFor(account.provider_slug) !== null);
 
   const syncCount = accounts.length;
   const prepareIndex = syncCount;

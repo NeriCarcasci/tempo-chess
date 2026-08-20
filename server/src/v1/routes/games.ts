@@ -1,9 +1,20 @@
 import { z } from "zod";
 import { recordAuditEvent } from "../audit.js";
 import { ProblemError } from "../problem.js";
+import { POLICIES } from "../rate-limit.js";
 import type { RouteDefinition } from "../registry.js";
 import { readSubjectGame } from "../../analysis/game-view.js";
-import { withActorContext } from "../auth/context.js";
+import {
+  readRecentSubjectGames,
+  RECENT_GAMES_DEFAULT_LIMIT,
+  RECENT_GAMES_MAX_LIMIT,
+  type RecentGames,
+} from "../../analysis/recent-games.js";
+import { resolveAnalysisSubject, withActorContext } from "../auth/context.js";
+
+// ---------------------------------------------------------------------------
+// GET /v1/games/{gameId}
+// ---------------------------------------------------------------------------
 
 /**
  * `GET /v1/games/{gameId}`, per plans/v1-api-contract.md §7.
@@ -135,4 +146,92 @@ const getGameRoute: RouteDefinition<never, never, Game> = {
   },
 };
 
-export const GAME_ROUTES = [getGameRoute] as const;
+// ---------------------------------------------------------------------------
+// GET /v1/games/recent
+// ---------------------------------------------------------------------------
+
+const moveSchema = z.object({
+  uci: z.string(),
+  san: z.string().nullable(),
+  clockMs: z.number().nullable(),
+});
+
+const recentGameSchema = z.object({
+  id: z.string(),
+  playedAt: z.string(),
+  speed: z.string().nullable(),
+  result: z.enum(["white", "black", "draw"]),
+  color: z.enum(["white", "black"]).nullable(),
+  outcome: z.enum(["win", "loss", "draw"]).nullable(),
+  opponent: z.object({
+    username: z.string().nullable(),
+    title: z.string().nullable(),
+    rating: z.number().int().nullable(),
+  }),
+  providerUrl: z.string().nullable(),
+  /** Null means the standard starting position. */
+  initialFen: z.string().nullable(),
+  moves: z.array(moveSchema),
+});
+
+const recentGamesSchema = z.object({
+  /** The newest sync behind this answer, not the time the query ran. */
+  asOf: z.string().nullable(),
+  games: z.array(recentGameSchema),
+});
+
+const recentQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(RECENT_GAMES_MAX_LIMIT).optional(),
+});
+
+/**
+ * `GET /v1/games/recent` — the newest owned games, moves included.
+ *
+ * A resource rather than a collection, because the body carries `asOf` beside
+ * the list and the collection envelope's `data` is the bare array. It is also
+ * not a paginated surface: the whole point is a bounded handful of boards to
+ * animate, and a cursor would advertise a walk of the entire history that this
+ * endpoint has no intention of serving.
+ */
+const recentGamesRoute: RouteDefinition<z.infer<typeof recentQuery>, never, RecentGames> = {
+  method: "GET",
+  path: "/v1/games/recent",
+  operationId: "listRecentGames",
+  summary: "Your newest synced games, with the moves in them",
+  description:
+    "Newest first by when the game was played. Each game carries its full move list, so a client can replay the board without a second request. `initialFen` is null for the standard starting position. `asOf` is when the newest of these games was last written by a sync, so the ETag matches until something actually changes. Nothing here depends on analysis having run.",
+  kind: "read",
+  auth: "required",
+  envelope: "resource",
+  successStatus: 200,
+  querySchema: recentQuery,
+  dataSchema: recentGamesSchema,
+  // The onboarding screen re-reads this while it waits, and the answer only
+  // changes when a sync writes, so an ETag turns most of those polls into a 304
+  // instead of resending every move of every game.
+  etag: true,
+  cacheControl: "private, max-age=0, must-revalidate",
+  rateLimits: [{ policy: POLICIES.onboardingRead, source: "actor" }],
+  async handler({ auth, query }) {
+    if (!auth) throw new ProblemError("AUTH_REQUIRED");
+    const limit = query.limit ?? RECENT_GAMES_DEFAULT_LIMIT;
+
+    return withActorContext(auth.profileId, async (sql) => {
+      // Not `auth.subjects[0]` — that is the profile id, always, and querying
+      // `subject_id = <profile uuid>` matches nothing while looking exactly
+      // like an account with no games. See `resolveAnalysisSubject`.
+      const subjectId = await resolveAnalysisSubject(sql, auth.profileId);
+      // No subject means the account has not been through onboarding. That is
+      // an empty account, not a missing resource: a 404 here would make a fresh
+      // signup look like a broken URL.
+      if (!subjectId) return { data: { asOf: null, games: [] } };
+      return { data: await readRecentSubjectGames(sql, { subjectId, limit }) };
+    });
+  },
+};
+
+// `/v1/games/recent` is registered before `/v1/games/:gameId` because Hono runs
+// matched handlers in registration order and stops at the first that answers.
+// With the parameterised route first, `recent` is matched as a game id, fails
+// the uuid parse, and the endpoint 404s.
+export const GAME_ROUTES = [recentGamesRoute, getGameRoute] as const;

@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import type postgres from "postgres";
 import { REDACTION_POLICY_VERSION } from "../contract.js";
 import type { PermissionBasis } from "../contract.js";
+import { jsonParam } from "../../db/json.js";
 
 /** A distinct 64-hex string, so two seeded runs never collide on a hash. */
 export function randomHex(): string {
@@ -189,8 +190,7 @@ export async function seedEditorial(
       redaction_policy_version, note
     ) values (
       ${subject!.id}, ${run!.id}, ${reviewer!.user_id}, ${reviewDecision},
-      ${sql.json(
-        reviewDecision === "approved"
+      ${jsonParam(reviewDecision === "approved"
           ? {
               source_verified: true,
               licence_verified: true,
@@ -198,8 +198,7 @@ export async function seedEditorial(
               redactions_verified: true,
               facts_unchanged: true,
             }
-          : { source_verified: true },
-      )},
+          : { source_verified: true },)}::jsonb,
       ${policy},
       ${reviewDecision === "approved" ? null : "The source is not established."}
     )

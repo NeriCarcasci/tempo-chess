@@ -11,6 +11,7 @@ import { pendingAnalysisCount } from "../analysis/planner.js";
 import { registerHandler, type WorkContext, type WorkResult } from "../ops/handlers.js";
 import { WorkFailure } from "../ops/retry.js";
 import { withActor } from "../db/actor.js";
+import { requiredDate, toDate, type RawTimestamp } from "../db/timestamps.js";
 import { COVERAGE_POLICY, DIAGNOSTIC_POLICY, STAGES } from "./contract.js";
 import {
   ADVANCE_TASK,
@@ -269,7 +270,7 @@ export async function buildExamination(
 async function readGameFacts(sql: Sql, snapshotId: string): Promise<GameFacts[]> {
   const rows = await sql<
     {
-      played_at: Date;
+      played_at: RawTimestamp;
       speed: string | null;
       has_clock: boolean;
       reached_middlegame: boolean;
@@ -293,7 +294,7 @@ async function readGameFacts(sql: Sql, snapshotId: string): Promise<GameFacts[]>
     where g.snapshot_id = ${snapshotId}
   `;
   return rows.map((row) => ({
-    playedAt: row.played_at,
+    playedAt: requiredDate(row.played_at, "game_replay_revisions.played_at"),
     speed: row.speed ?? "unknown",
     hasClock: row.has_clock,
     reachedMiddlegame: row.reached_middlegame,
@@ -312,8 +313,8 @@ async function readDimensionFacts(sql: Sql, analysisRunId: string): Promise<Dime
       dimension_key: string;
       raw_sample_size: number;
       effective_sample_size: string;
-      evidence_from: Date | null;
-      evidence_to: Date | null;
+      evidence_from: RawTimestamp;
+      evidence_to: RawTimestamp;
     }[]
   >`
     select d.dimension_key, e.raw_sample_size, e.effective_sample_size,
@@ -329,8 +330,8 @@ async function readDimensionFacts(sql: Sql, analysisRunId: string): Promise<Dime
     dimensionKey: row.dimension_key.replace(/_(objective|personal_current|peer_current|peer_stretch)$/, ""),
     observationCount: row.raw_sample_size,
     effectiveCount: Number(row.effective_sample_size),
-    earliestPlayedAt: row.evidence_from,
-    latestPlayedAt: row.evidence_to,
+    earliestPlayedAt: toDate(row.evidence_from),
+    latestPlayedAt: toDate(row.evidence_to),
   }));
 }
 
@@ -440,12 +441,20 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
     );
   }
 
-  const cohort = await registerCohortVersion(sql, {
+  // Everything from here writes tenant tables -- `analysis.subject_data_snapshots`,
+  // `analysis.runs` and their children -- whose policies resolve ownership
+  // through `app.analysis_subjects` and `private.current_actor_id()`. The owner
+  // was resolved at the top of this function and then never used: the writes
+  // went out on the unbound connection and the snapshot insert was refused by
+  // its own policy. `buildExamination` above binds the actor for exactly this
+  // reason; this one did not.
+  return withActor(sql, ownerProfileId, async (tx) => {
+  const cohort = await registerCohortVersion(tx, {
     cohortKey: ONBOARDING_COHORT.key,
     version: ONBOARDING_COHORT.version,
     definition: ONBOARDING_COHORT.definition,
   });
-  const snapshot = await freezeSubjectSnapshot(sql, {
+  const snapshot = await freezeSubjectSnapshot(tx, {
     subjectId: run.subject_id,
     cohortVersionId: cohort.id,
     // Now, and stated: a snapshot never includes a game played after its
@@ -457,7 +466,7 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
   // The promotion surface, not the run type: `onboarding_examination` is the
   // surface a baseline is served from, and promoting a new method for it must
   // not silently change what a live profile reads.
-  const recipe = await currentRecipeFor(sql, "onboarding_examination");
+  const recipe = await currentRecipeFor(tx, "onboarding_examination");
   if (!recipe) {
     // Truthful rather than a placeholder report: with no promoted recipe there
     // is no method to run, and saying so is better than inventing one.
@@ -468,7 +477,7 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
     );
   }
 
-  const planned = await planRun(sql, {
+  const planned = await planRun(tx, {
     recipeVersionId: recipe.recipeVersionId,
     scope: { subjectId: run.subject_id, subjectDataSnapshotId: snapshot.id },
     trigger: "user_request",
@@ -479,7 +488,7 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
   // Recording only. The report, the examination and the advance were planned
   // with this item, and they resolve the run id from this row when they get
   // there — a worker role cannot create work, and should not be able to.
-  await sql`
+  await tx`
     update coaching.onboarding_runs
     set subject_data_snapshot_id = ${snapshot.id},
         examination_run_id = ${planned.id},
@@ -498,6 +507,7 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
     },
     metrics: { inputCount: snapshot.gameCount, outputCount: 1 },
   };
+  });
 }
 
 // ---------------------------------------------------------------------------

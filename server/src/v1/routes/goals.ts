@@ -333,7 +333,11 @@ const createRoute: RouteDefinition<never, z.infer<typeof createBody>, z.infer<ty
       // show rather than "nothing has been measured yet" on the day somebody
       // set the goal. Planned here because only the API may create work.
       if (activation.activated) {
-        await planProgressForSubject(client, {
+        // `sql`, not `client`: this block already runs inside the actor
+        // transaction, and the planner reads `app.analysis_subjects` and
+        // `chess.subject_games`, whose policies are `= current_actor_id()`.
+        // On the pooled client that is null and both return no rows.
+        await planProgressForSubject(sql, {
           subjectId,
           ownerProfileId: auth.profileId,
           reason: `cycle-opened:${activation.cycleId}`,

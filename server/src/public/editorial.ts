@@ -13,7 +13,7 @@
  */
 
 import { client } from "../db/client.js";
-import { toDate, type RawTimestamp } from "../db/timestamps.js";
+import { toDate, type RawTimestamp, isoOf } from "../db/timestamps.js";
 import {
   DIRECTORY_MAX_LIMIT,
   REDACTION_POLICY_VERSION,
@@ -25,6 +25,7 @@ import { publicationReadiness } from "./readiness.js";
 import type { Blocker } from "./readiness.js";
 import { contentChecksum } from "./projection.js";
 import type { CaseStudyRecord, DirectoryProfileRecord } from "./projection.js";
+import { jsonParam } from "../db/json.js";
 
 type Sql = typeof client;
 
@@ -80,7 +81,7 @@ export async function recordConsent(input: ConsentInput, sql: Sql = client): Pro
     ) values (
       ${input.subjectId}, ${input.consentingUserId ?? null},
       ${input.consentArtifactId ?? null}, ${input.scope},
-      ${input.grantedAt}, ${input.expiresAt ?? null}, ${input.recordedBy ?? null}
+      ${isoOf(input.grantedAt)}, ${isoOf(input.expiresAt ?? null)}, ${input.recordedBy ?? null}
     )
     returning id
   `;
@@ -124,7 +125,7 @@ export async function recordReview(input: ReviewInput, sql: Sql = client): Promi
       redaction_policy_version, note
     ) values (
       ${input.subjectId}, ${input.runId}, ${input.reviewerUserId}, ${input.decision},
-      ${sql.json(input.checklist)}, ${input.redactionPolicyVersion ?? REDACTION_POLICY_VERSION},
+      ${jsonParam(input.checklist)}::jsonb, ${input.redactionPolicyVersion ?? REDACTION_POLICY_VERSION},
       ${input.note ?? null}
     )
     returning id

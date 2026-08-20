@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isoOf } from "../db/timestamps.js";
 
 import type { Sql } from "postgres";
 
@@ -17,6 +18,7 @@ import type { CandidateFinding } from "./findings.js";
 import { structuredInputHash } from "./findings.js";
 import type { TrajectoryBin } from "./trajectory.js";
 import { checkRendering, renderTemplate } from "./render.js";
+import { jsonParam } from "../db/json.js";
 
 /**
  * Persistence for the estimate, trajectory and finding layer.
@@ -249,7 +251,7 @@ export async function writeEstimate(
       ${result.status === "available" ? result.intervalLow : null},
       ${result.status === "available" ? result.intervalHigh : null},
       ${coverage.raw}, ${coverage.effective}, ${coverage.success}, ${coverage.failure},
-      ${coverage.graded}, ${coverage.censored}, ${coverage.from}, ${coverage.to},
+      ${coverage.graded}, ${coverage.censored}, ${isoOf(coverage.from)}, ${isoOf(coverage.to)},
       ${write.comparisonEstimateId}, ${write.delta}, ${write.improvementProbability},
       ${result.coverageStatus},
       ${result.status === "unavailable" ? result.reason : null}
@@ -342,8 +344,8 @@ export async function writeFinding(
     ) values (
       ${input.analysisRunId}, ${input.subjectId}, ${write.playerSkillEstimateId},
       ${candidate.findingType}, ${write.conceptVersionId}, ${write.role},
-      ${sql.json({})}, ${candidate.priority}, ${candidate.confidenceTier},
-      ${sql.json(candidate.claim as never)}, ${candidate.claimFamily},
+      ${jsonParam({})}::jsonb, ${candidate.priority}, ${candidate.confidenceTier},
+      ${jsonParam(candidate.claim)}::jsonb, ${candidate.claimFamily},
       ${candidate.adjustedProbability === null ? null : input.correctionComponentVersionId},
       ${candidate.adjustedProbability}
     )

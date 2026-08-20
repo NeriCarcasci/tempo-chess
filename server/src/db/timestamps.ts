@@ -42,3 +42,19 @@ export function requiredIso(value: RawTimestamp, column: string): string {
   if (iso === null) throw new Error(`${column} is null, but the schema says it cannot be`);
   return iso;
 }
+
+/**
+ * The same, for code that needs the Date rather than the wire format.
+ *
+ * `toDate` returns `Date | null` because most columns can be null. A caller
+ * that then does arithmetic on it — `playedAt.getTime()` — needs the non-null
+ * one, and reaching for `toDate(x)!` puts the assertion at the call site where
+ * nobody checks it. The baseline examination died on exactly this: the row was
+ * annotated `Date`, the driver handed back a string, and the TypeError landed
+ * in `decideCoverage`, three frames from the query.
+ */
+export function requiredDate(value: RawTimestamp, column: string): Date {
+  const date = toDate(value);
+  if (date === null) throw new Error(`${column} is null, but the schema says it cannot be`);
+  return date;
+}

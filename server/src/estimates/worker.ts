@@ -131,12 +131,35 @@ export async function buildSubjectReport(
     return { outputRef: `run:${runId}`, outputSummary: { duplicate: true } };
   }
 
-  await completeRun(sql, runId);
-  const publication = await publishSubjectLive(sql, {
-    runId,
-    reason: "new_run",
-    actor: { kind: "system" },
-    traceId: context.traceId,
+  // Both of these read `analysis.runs`, whose policy resolves ownership through
+  // `app.analysis_subjects` and `private.current_actor_id()`. They sat outside
+  // the actor transaction that closes above, so the run they had just written
+  // was invisible to them and `completeRun` failed with "no such run" -- a
+  // report that had been fully computed was then thrown away on the last step.
+  const publication = await withActor(sql, workflow.owner_profile_id, async (tx) => {
+    // `completeRun` does not throw on an incomplete manifest -- it returns the
+    // run unchanged and names the families that are missing, so the caller can
+    // fail it with a classification. Discarding that return value turned the
+    // one informative outcome into the least informative one: the run stayed
+    // `planned`, publication refused `RUN_NOT_SUCCEEDED`, and the reason -- the
+    // family names -- was thrown away one line before it was needed.
+    const completion = await completeRun(tx, runId);
+    if (completion.status !== "succeeded") {
+      throw new WorkFailure(
+        "permanent",
+        "manifest_incomplete",
+        `the run declares artifacts it did not produce: ${completion.missing.join(", ") || "none named"}`
+        + (completion.undeclared.length > 0
+          ? `; and produced undeclared: ${completion.undeclared.join(", ")}`
+          : ""),
+      );
+    }
+    return publishSubjectLive(tx, {
+      runId,
+      reason: "new_run",
+      actor: { kind: "system" },
+      traceId: context.traceId,
+    });
   });
   if (!publication.published && publication.refusedCode !== "ALREADY_PUBLISHED") {
     throw new WorkFailure("permanent", "publication_refused", publication.refusedCode ?? "unknown");

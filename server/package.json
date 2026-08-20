@@ -56,7 +56,7 @@
     "backfill:games": "tsx src/backfill/cli.ts games",
     "backfill:reconcile": "tsx src/backfill/cli.ts reconcile",
     "backfill:cutover": "tsx src/backfill/cli.ts cutover",
-    "analysis:unit": "tsx src/analysis/observations.test.ts",
+    "analysis:unit": "tsx src/analysis/observations.test.ts && node --test --import tsx src/analysis/recent-games.test.ts",
     "analysis:integration": "tsx src/analysis/gates/integration.ts",
     "analysis:security": "tsx src/analysis/gates/security.ts",
     "analysis:migration": "tsx src/analysis/gates/migration.ts",
@@ -68,6 +68,7 @@
     "engine:migration": "tsx src/engine/gates/migration.ts",
     "engine:performance": "tsx src/engine/gates/performance.ts",
     "engine:api": "tsx src/engine/gates/api.ts",
+    "analysis:promote": "tsx src/analysis/promote.ts",
     "analysis:live": "tsx src/analysis/observations.live.ts",
     "models:unit": "tsx src/models/models.test.ts",
     "models:holdout": "tsx src/models/fetch-holdout.ts",
@@ -97,7 +98,9 @@
     "public:migration": "tsx src/public/gates/migration.ts",
     "public:security": "tsx src/public/gates/security.ts",
     "public:integration": "tsx src/public/gates/integration.ts",
-    "editorial": "node --env-file=.env --import tsx src/public/cli.ts"
+    "editorial": "node --env-file=.env --import tsx src/public/cli.ts",
+    "onboarding:reexamine": "tsx src/onboarding/reexamine.ts",
+    "concepts:backfill": "tsx src/analysis/concepts/backfill.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

@@ -239,6 +239,27 @@
       "when": 1787580000000,
       "tag": "0033_e20_editorial_publications",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1787580060000,
+      "tag": "0035_policy_reachable_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1787580120000,
+      "tag": "0036_ops_can_survey_what_it_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1787580180000,
+      "tag": "0037_terminal_positions_are_decided",
+      "breakpoints": true
     }
   ]
 }

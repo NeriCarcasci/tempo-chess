@@ -1,4 +1,6 @@
 import { QUEUES, type Queue } from "./contract.js";
+import { queueRoute } from "../platform/topology.js";
+import { resolveWorkerEndpoint } from "../platform/deployment.js";
 import { assertMinimalTaskPayload, type TaskPayload } from "./tokens.js";
 
 /**
@@ -119,7 +121,35 @@ export class CloudTasksTransport implements TaskTransport {
   constructor(
     private readonly config: TasksConfig,
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly env: NodeJS.ProcessEnv = process.env,
   ) {}
+
+  /**
+   * Where a queue's work actually goes.
+   *
+   * `QUEUE_ROUTES` has always named a target deployment per queue, and
+   * `resolveWorkerEndpoint` has always been able to turn that into a URL and an
+   * audience -- but nothing called it outside a test, so every task was posted
+   * to the single `FORMA_WORKER_BASE_URL` regardless of its queue. A sync bound
+   * for `forma-ingestion` and an analysis bound for `forma-analysis` went to
+   * the same place, and whichever service received one it does not execute
+   * dead-lettered it as unsupported.
+   *
+   * The audience is per service on purpose: a token minted for one worker must
+   * not be accepted by another.
+   *
+   * A loopback endpoint is the emulator the gates run against, and it pins one
+   * base URL deliberately, so that case keeps the configured value.
+   */
+  private endpointFor(queue: Queue): { baseUrl: string; audience: string } {
+    if (isLoopback(this.config.endpoint)) {
+      return { baseUrl: this.config.workerBaseUrl, audience: this.config.audience };
+    }
+    const route = queueRoute(queue);
+    if (!route) throw new Error(`queue ${queue} has no declared target deployment`);
+    const endpoint = resolveWorkerEndpoint(this.env, route.target);
+    return { baseUrl: endpoint.baseUrl, audience: endpoint.audience };
+  }
 
   async createTask(request: TaskRequest): Promise<CreateTaskResult> {
     if (!(QUEUES as readonly string[]).includes(request.queue)) {
@@ -131,11 +161,12 @@ export class CloudTasksTransport implements TaskTransport {
     assertMinimalTaskPayload(request.payload as unknown as Record<string, unknown>);
 
     const parent = `projects/${this.config.project}/locations/${this.config.location}/queues/${request.queue}`;
+    const target = this.endpointFor(request.queue);
     const body: Record<string, unknown> = {
       task: {
         name: `${parent}/tasks/${request.name}`,
         httpRequest: {
-          url: `${this.config.workerBaseUrl}${workerPath(request.payload.workItemId)}`,
+          url: `${target.baseUrl}${workerPath(request.payload.workItemId)}`,
           httpMethod: "POST",
           headers: { "content-type": "application/json" },
           body: Buffer.from(JSON.stringify(request.payload), "utf8").toString("base64"),
@@ -143,7 +174,7 @@ export class CloudTasksTransport implements TaskTransport {
             ? {
                 oidcToken: {
                   serviceAccountEmail: this.config.invokerServiceAccount,
-                  audience: this.config.audience,
+                  audience: target.audience,
                 },
               }
             : {}),

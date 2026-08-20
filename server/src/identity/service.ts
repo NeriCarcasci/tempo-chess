@@ -204,7 +204,15 @@ export async function linkAccount(
       (provider_id, provider_identity_key, key_basis, current_display_username, current_normalized_username)
     values (${providerId}, ${normalized}, 'username', ${rawHandle.trim()}, ${normalized})
     on conflict (provider_id, provider_identity_key) do update
-      set last_seen_at = now()
+      -- The display name is refreshed on every sighting, not written once and
+      -- kept forever. The provider owns how a handle is spelled -- somebody who
+      -- restyles theirs should see the new one -- and this row is shared by
+      -- every linker, so a bad value written once outlives the account that
+      -- caused it. One did: a security probe overwrote two display names in
+      -- July and they survived a complete account deletion, because nothing
+      -- here ever wrote the column a second time.
+      set last_seen_at = now(),
+          current_display_username = excluded.current_display_username
     returning id
   `;
 
