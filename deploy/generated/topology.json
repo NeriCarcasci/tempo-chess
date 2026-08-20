@@ -195,6 +195,15 @@
       "timeoutSeconds": 1800
     },
     {
+      "name": "forma-promote",
+      "serviceAccount": "forma-analysis@tempo-chess-neri.iam.gserviceaccount.com",
+      "databaseRole": "forma_analysis",
+      "command": "node dist/analysis/promote.js",
+      "purpose": "Register the analysis method, validate it against the committed corpus, and promote it.",
+      "maxRetries": 0,
+      "timeoutSeconds": 1800
+    },
+    {
       "name": "forma-reconcile",
       "serviceAccount": "forma-ops@tempo-chess-neri.iam.gserviceaccount.com",
       "databaseRole": "forma_ops",

@@ -68,6 +68,7 @@
     "engine:migration": "tsx src/engine/gates/migration.ts",
     "engine:performance": "tsx src/engine/gates/performance.ts",
     "engine:api": "tsx src/engine/gates/api.ts",
+    "analysis:promote": "tsx src/analysis/promote.ts",
     "analysis:live": "tsx src/analysis/observations.live.ts",
     "models:unit": "tsx src/models/models.test.ts",
     "models:holdout": "tsx src/models/fetch-holdout.ts",

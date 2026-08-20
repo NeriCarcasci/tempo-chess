@@ -115,4 +115,5 @@ gcloud run services update-traffic <service> --project tempo-chess-neri --region
 | Job | Runs as | Command | Purpose |
 | --- | --- | --- | --- |
 | `forma-migrate` | forma_migrator | `node dist/ops/migrate.js` | Apply and verify additive migrations from an immutable image. |
+| `forma-promote` | forma_analysis | `node dist/analysis/promote.js` | Register the analysis method, validate it against the committed corpus, and promote it. |
 | `forma-reconcile` | forma_ops | `node dist/ops/reconcile-report.js` | Additive backfill and queue/ledger reconciliation, resumable by checkpoint. |

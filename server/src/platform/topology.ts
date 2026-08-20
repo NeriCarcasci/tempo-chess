@@ -266,6 +266,19 @@ export const JOBS: readonly JobEntry[] = [
     timeoutSeconds: 1_800,
   },
   {
+    name: "forma-promote",
+    serviceAccount: "forma-analysis",
+    databaseRole: "forma_analysis",
+    // Same reason as the two below: the image ships only `dist`, and tsx is a
+    // devDependency. Runs as `forma_analysis` because promoting writes the
+    // component versions, recipe versions and validation runs that live in the
+    // `analysis` schema, and because the engine it probes is in this image.
+    command: "node dist/analysis/promote.js",
+    purpose: "Register the analysis method, validate it against the committed corpus, and promote it.",
+    maxRetries: 0,
+    timeoutSeconds: 1_800,
+  },
+  {
     name: "forma-reconcile",
     serviceAccount: "forma-ops",
     databaseRole: "forma_ops",
