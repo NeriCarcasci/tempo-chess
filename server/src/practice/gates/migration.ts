@@ -16,6 +16,7 @@ import postgres from "postgres";
 import { GateReport } from "../../v1/gates/harness.js";
 import { createDisposableDatabase } from "../../platform/harness/postgres.js";
 import { applyMigrations, MIGRATIONS_FOLDER } from "../../platform/harness/migrations.js";
+import { jsonParam } from "../../db/json.js";
 
 const report = new GateReport("E18 practice migration gate");
 
@@ -440,7 +441,7 @@ async function seedPractice(sql: postgres.Sql): Promise<Seeded> {
         claim_family
       ) values (
         ${run!.id}, ${subject!.id}, 'foundational_miss', 90, 'high',
-        ${tx.json({ dimension: "fork_recognize" })}, 'concept_success'
+        ${jsonParam({ dimension: "fork_recognize" })}::jsonb, 'concept_success'
       )
       returning id
     `;

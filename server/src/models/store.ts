@@ -264,7 +264,7 @@ export async function recordValidation(
     `;
 
     for (const slice of verdict.slices) {
-      const sliceJson = tx.json({
+      const sliceJson = jsonParam({
         provider: slice.slice.provider,
         speed: slice.slice.speed,
         rating_band_low: slice.slice.band.low,
@@ -283,7 +283,7 @@ export async function recordValidation(
           insert into analysis.validation_metrics (
             validation_run_id, metric_key, slice, sample_size, value, unavailable_reason
           ) values (
-            ${run!.id}, ${key}, ${sliceJson}, ${metrics.sampleSize},
+            ${run!.id}, ${key}, ${sliceJson}::jsonb, ${metrics.sampleSize},
             ${value}, ${value === null ? (slice.supported ? "not measured" : "slice is not supported") : null}
           )
         `;

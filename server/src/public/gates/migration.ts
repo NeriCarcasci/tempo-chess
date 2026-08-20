@@ -18,6 +18,7 @@ import { createDisposableDatabase, grantRolePasswords } from "../../platform/har
 import { applyMigrations, MIGRATIONS_FOLDER } from "../../platform/harness/migrations.js";
 import { REDACTION_POLICY_VERSION } from "../contract.js";
 import { insertCaseStudy, randomHex, seedEditorial } from "./fixture.js";
+import { jsonParam } from "../../db/json.js";
 
 const report = new GateReport("E20 public projections migration gate");
 
@@ -116,13 +117,13 @@ report.section("from an empty database");
               subject_id, run_id, reviewer_user_id, decision, checklist, redaction_policy_version
             ) values (
               ${fixture.subjectId}, ${fixture.runId}, ${fixture.reviewerUserId}, 'approved',
-              ${sql.json({
+              ${jsonParam({
                 source_verified: true,
                 licence_verified: true,
                 consent_verified: true,
                 redactions_verified: true,
                 facts_unchanged: false,
-              })},
+              })}::jsonb,
               ${REDACTION_POLICY_VERSION}
             )
           `,

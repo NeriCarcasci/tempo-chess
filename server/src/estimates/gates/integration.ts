@@ -32,6 +32,7 @@ import { planRun } from "../../analysis/runs.js";
 import { readDashboard } from "../dashboard.js";
 import { setEstimatesEventSink } from "../telemetry.js";
 import { ESTIMATE_COMPONENT_KEYS, registerEstimateComponents } from "../store.js";
+import { jsonParam } from "../../db/json.js";
 
 const report = new GateReport("E15 estimates integration gate");
 const harness = await startAnalysisHarness();
@@ -201,7 +202,7 @@ try {
               claim, claim_family
             ) values (
               ${run.id}, ${game.subjectId}, 'strength', 50, 'high',
-              ${tx.json({ dimension: "nothing" })}, 'concept_success'
+              ${jsonParam({ dimension: "nothing" })}::jsonb, 'concept_success'
             )
           `;
         }),
@@ -217,7 +218,7 @@ try {
           claim, claim_family
         ) values (
           ${run.id}, ${game.subjectId}, 'insufficient_evidence', 10, 'low',
-          ${tx.json({ dimension: "nothing yet" })}, 'concept_success'
+          ${jsonParam({ dimension: "nothing yet" })}::jsonb, 'concept_success'
         )
       `;
     });
@@ -231,7 +232,7 @@ try {
           claim, claim_family
         ) values (
           ${run.id}, ${game.subjectId}, 'established_improvement', 90, 'high',
-          ${sql.json({ dimension: "wishful" })}, 'personal_change'
+          ${jsonParam({ dimension: "wishful" })}::jsonb, 'personal_change'
         )
       `,
       /findings_improvement_needs_estimate/,
@@ -386,8 +387,8 @@ async function seedConcept(): Promise<string> {
       rubric_contract, version_hash
     ) values (
       ${concept!.id}, 1, 'A fork attacks two targets at once.',
-      ${sql.json({ detector: "gate" })}, array['recognize','execute']::text[],
-      ${sql.json({ rubric: "gate" })}, ${SHA(`concept-${SUFFIX}`)}
+      ${jsonParam({ detector: "gate" })}::jsonb, array['recognize','execute']::text[],
+      ${jsonParam({ rubric: "gate" })}::jsonb, ${SHA(`concept-${SUFFIX}`)}
     )
     returning id
   `;
@@ -428,7 +429,7 @@ async function seedOpportunities(
         end_ply, actor_color, facts, completeness
       ) values (
         ${game.materializationRunId}, ${game.replayRevisionId}, ${game.subjectGameId},
-        'tactical_opportunity', ${i}, ${i}, ${i}, 'white', ${sql.json({ gate: true })},
+        'tactical_opportunity', ${i}, ${i}, ${i}, 'white', ${jsonParam({ gate: true })}::jsonb,
         ${censored ? "censored" : "complete"}
       )
       returning id

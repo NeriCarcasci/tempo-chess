@@ -21,6 +21,7 @@ import { GateReport, startAnalysisHarness } from "../../analysis/gates/harness.j
 import { setAnalysisEventSink } from "../../analysis/telemetry.js";
 import { DASHBOARD_BUDGETS } from "../contract.js";
 import { readDashboard } from "../dashboard.js";
+import { jsonParam } from "../../db/json.js";
 
 const report = new GateReport("E15 estimates performance gate");
 const harness = await startAnalysisHarness();
@@ -241,7 +242,7 @@ async function seedPublishedReport(
           claim, claim_family
         ) values (
           ${run!.id}, ${subject!.id}, 'insufficient_evidence', ${50 - i}, 'moderate',
-          ${tx.json({ dimension: `perf_dim_${i}` })}, 'concept_success'
+          ${jsonParam({ dimension: `perf_dim_${i}` })}::jsonb, 'concept_success'
         )
         returning id
       `;

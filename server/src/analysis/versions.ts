@@ -158,7 +158,7 @@ export async function registerComponentVersion(
         ) values (
           ${component.id}, ${input.version}, ${input.implementationSha256},
           ${jsonParam(configuration)}::jsonb, ${configurationHash(configuration)},
-          ${contentHash}, ${modelIdentity === null ? null : tx.json(modelIdentity as never)},
+          ${contentHash}, ${modelIdentity === null ? null : jsonParam(modelIdentity)}::jsonb,
           ${input.licence ?? null}, ${input.provenance ?? null}, ${input.deterministic}
         )
         returning id
