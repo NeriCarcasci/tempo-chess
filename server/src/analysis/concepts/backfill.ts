@@ -21,6 +21,7 @@
 
 import postgres from "postgres";
 import { detectForRun } from "./worker.js";
+import { withActor } from "../../db/actor.js";
 
 const url = process.env.DATABASE_URL;
 const profileId = process.env.PROFILE_ID;
@@ -35,20 +36,24 @@ if (!profileId) {
 const client = postgres(url, { max: 1, prepare: false });
 
 try {
-  // Bound, like everything else that touches a tenant table: `analysis.runs`
-  // resolves ownership through the subject, and an unbound read of it returns
-  // nothing rather than raising.
-  const runs = await client<{ id: string }[]>`
-    select r.id
-    from analysis.runs r
-    join chess.subject_games g on g.id = r.subject_game_id
-    join app.analysis_subjects s on s.id = g.subject_id
-    where s.owner_user_id = ${profileId}
-      and r.status = 'succeeded'
-      and r.subject_game_id is not null
-      and exists (select 1 from analysis.transition_assessments t where t.analysis_run_id = r.id)
-    order by r.id
-  `;
+  // Bound, like everything else that touches a tenant table. All three of
+  // these force row level security against `private.current_actor_id()`, so
+  // unbound this returns no rows and reports "0 analysed games to measure" for
+  // a subject with a hundred and ninety-six of them -- which is exactly what it
+  // did the first time it ran, under a comment claiming it was bound.
+  const runs = await withActor(client, profileId, (tx) =>
+    tx<{ id: string }[]>`
+      select r.id
+      from analysis.runs r
+      join chess.subject_games g on g.id = r.subject_game_id
+      join app.analysis_subjects s on s.id = g.subject_id
+      where s.owner_user_id = ${profileId}
+        and r.status = 'succeeded'
+        and r.subject_game_id is not null
+        and exists (select 1 from analysis.transition_assessments t where t.analysis_run_id = r.id)
+      order by r.id
+    `,
+  );
   console.log(`runs       ${runs.length} analysed games to measure`);
 
   let opportunities = 0;
