@@ -1,13 +1,14 @@
 import { describe, expect, test, vi } from "vitest";
 
 /**
- * The adapter for a route that does not exist yet.
+ * The adapter for `/v1/games/recent`.
  *
  * Every test here is the same worry from a different side: this module is the
- * only thing standing between a screen full of chess and a screen that throws,
- * and it is reading a shape nobody has shipped. So it is pinned on what it does
- * when the route is missing, when the body is not what was agreed, and when a
- * game in an otherwise fine list is unusable.
+ * only thing standing between a screen full of chess and a screen that throws.
+ * So it is pinned on what it does when the route is missing, when the body is
+ * not what was agreed, and when a game in an otherwise fine list is unusable —
+ * and, since the route landed, on the two fields whose shape differs from the
+ * one the sync screen was written against.
  *
  * The client is stubbed with a plain function rather than a `vi.fn()`: a spy
  * keeps a handle on every promise it returns, so a test that makes one reject
@@ -101,5 +102,35 @@ describe("fetchRecentGames", () => {
     answering([wire({ moves: ["e2e4", "e7e5", "g1f3"] })]);
     const games = await fetchRecentGames(4);
     expect(games[0]!.moves.map((move) => move.uci)).toEqual(["e2e4", "e7e5", "g1f3"]);
+  });
+
+  test("the opponent arrives as an object and is still a name", async () => {
+    // The shipped route sends `{ username, title, rating }`. Read as a string
+    // it is null, and every row on the sync screen reads "From your archive".
+    answering([wire({ opponent: { username: "magnus", title: "GM", rating: 2839 } })]);
+    const games = await fetchRecentGames(4);
+    expect(games[0]!.opponent).toBe("magnus");
+  });
+
+  test("an opponent object with no username is null, not an empty name", async () => {
+    answering([wire({ opponent: { username: null, title: null, rating: null } })]);
+    const games = await fetchRecentGames(4);
+    expect(games[0]!.opponent).toBeNull();
+  });
+
+  test("outcome is the subject's result and result is the winning colour", async () => {
+    // Both are sent, they disagree by design, and reading `result` where
+    // `outcome` belongs congratulates half of all players on a loss.
+    answering([wire({ result: "white", outcome: "loss", providerUrl: "https://lichess.org/x" })]);
+    const games = await fetchRecentGames(4);
+    expect(games[0]!.outcome).toBe("loss");
+    expect(games[0]!.result).toBe("white");
+    expect(games[0]!.providerUrl).toBe("https://lichess.org/x");
+  });
+
+  test("an outcome nobody agreed on is null rather than a guess", async () => {
+    answering([wire({ outcome: "1-0" })]);
+    const games = await fetchRecentGames(4);
+    expect(games[0]!.outcome).toBeNull();
   });
 });

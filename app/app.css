@@ -1115,21 +1115,12 @@
     padding: clamp(2rem, 5vw, 3.25rem) 1.5rem 7rem;
   }
 
-  /* Orientation in one line, not a row of tiles. */
-  .today-standing {
-    display: flex; flex-wrap: wrap; gap: 0.35rem 1.6rem;
-    font-size: 0.84rem; color: var(--color-ink-muted);
-  }
-  .today-standing b {
-    font-family: var(--font-mono); font-weight: 620; color: var(--color-ink);
-    font-variant-numeric: tabular-nums;
-  }
-  .today-standing i {
-    font-style: normal; font-family: var(--font-mono); font-size: 0.72rem;
-    margin-left: 0.3rem;
-  }
-  .today-standing i[data-dir="up"] { color: var(--color-win); }
-  .today-standing i[data-dir="down"] { color: var(--color-loss); }
+  /* The standing line — a rating, a lifetime record, a game count in the
+     numeral face — is gone with the endpoint that fed it. Its rules went with
+     it rather than sitting here waiting for a `/v1` figure that may arrive in
+     a different shape. What stands in its place is the shared `.empty-card`,
+     which needs nothing but the space around it. */
+  .today > .empty-card { margin-top: clamp(1.5rem, 3.5vw, 2.25rem); }
 
   /* -- the shape --------------------------------------------------------- */
   .today-shape { margin-top: clamp(1.75rem, 4vw, 2.75rem); }
@@ -1140,6 +1131,13 @@
     text-wrap: balance; font-variant-numeric: tabular-nums;
   }
   .today-shape.is-empty h1 { max-width: 26ch; }
+  /* An empty page has to say which kind of empty it is: nothing connected,
+     nothing matching, or positions not built yet. That is a sentence, and it
+     goes under the heading at reading size rather than in hero type. */
+  .today-shape.is-empty p {
+    max-width: 52ch; margin-top: 0.85rem;
+    font-size: 0.95rem; line-height: 1.65; color: var(--color-ink-muted);
+  }
 
   .shape-chart { margin-top: clamp(1.5rem, 3.5vw, 2.25rem); }
   /* Capped independently of the page: twelve bars stretched across the full

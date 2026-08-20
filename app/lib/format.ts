@@ -25,6 +25,20 @@ export function relTime(ms: number): string {
   return `${Math.floor(months / 12)}y ago`;
 }
 
+/**
+ * The same, for the ISO 8601 timestamps `/v1` sends.
+ *
+ * Separate from `relTime` rather than a widened argument, because the failure
+ * has to be caught here: `Date.parse` of something unexpected is `NaN`, and
+ * `relTime(NaN)` renders it as "56y ago" beside a game played this morning.
+ * Null in or unparseable in, null out, and the caller says nothing at all.
+ */
+export function relTimeIso(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? null : relTime(ms);
+}
+
 export function signed(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
