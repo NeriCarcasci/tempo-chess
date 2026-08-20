@@ -84,6 +84,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every measurement behind your published profile
+         * @description The published dashboard for your own subject: skill estimates with their intervals and sample sizes, findings with their evidence, the trajectory bins, and the rating profile. This is the report that was published rather than a fresh computation, so it always agrees with the findings stored beside it. Estimates carry a null value and a reason when the evidence is too thin, and censored chances are reported separately from failures because a chance the player never got is not a chance they missed.
+         */
+        get: operations["getDashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/diagnostic-sessions/{sessionId}": {
         parameters: {
             query?: never;
@@ -1142,6 +1162,184 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getDashboard: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every measurement behind your published profile */
+            200: {
+                headers: {
+                    /** @description Strong validator for If-None-Match. */
+                    ETag?: string;
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            coverageWarnings: string[];
+                            estimates: {
+                                coverage: {
+                                    censored: number;
+                                    failure: number;
+                                    graded: number;
+                                    success: number;
+                                };
+                                coverageStatus: string;
+                                delta: number | null;
+                                dimensionKey: string;
+                                displayName: string;
+                                effectiveSampleSize: number;
+                                estimate: number | null;
+                                frame: string;
+                                improvementProbability: number | null;
+                                intervalHigh: number | null;
+                                intervalLow: number | null;
+                                rawSampleSize: number;
+                                unavailableReason: string | null;
+                                windowKind: string;
+                            }[];
+                            findings: {
+                                adjustedProbability: number | null;
+                                claim: {
+                                    [key: string]: unknown;
+                                };
+                                confidenceTier: string;
+                                evidence: {
+                                    displayRank: number;
+                                    evidenceItemId: string;
+                                    role: string;
+                                }[];
+                                explanation: string | null;
+                                explanationState: string | null;
+                                findingType: string;
+                                id: string;
+                                priority: number;
+                            }[];
+                            publicationId: string;
+                            publishedAt: string;
+                            ratingProfile: {
+                                note: string;
+                                pools: {
+                                    inSupportedRange: boolean;
+                                    intervalHigh: number | null;
+                                    intervalLow: number | null;
+                                    observedRating: number | null;
+                                    pool: string;
+                                    provider: string;
+                                    scaleEstimate: number | null;
+                                    speed: string;
+                                    suppressedReason: string | null;
+                                }[];
+                                /** @enum {string} */
+                                state: "published" | "unavailable";
+                            };
+                            runId: string;
+                            sections: {
+                                /** @enum {string} */
+                                connections: "published" | "unavailable";
+                                /** @enum {string} */
+                                estimates: "published" | "unavailable";
+                                /** @enum {string} */
+                                findings: "published" | "unavailable";
+                                /** @enum {string} */
+                                goal: "published" | "unavailable";
+                                /** @enum {string} */
+                                ratingProfile: "published" | "unavailable";
+                                /** @enum {string} */
+                                trajectory: "published" | "unavailable";
+                            };
+                            subjectId: string;
+                            trajectory: {
+                                bins: {
+                                    binOrdinal: number;
+                                    gamesContributing: number;
+                                    intervalHigh: number | null;
+                                    intervalLow: number | null;
+                                    medianExpectedScore: number;
+                                    p25ExpectedScore: number;
+                                    p75ExpectedScore: number;
+                                    phase: string;
+                                    phaseReachRate: number;
+                                    progressHigh: number;
+                                    progressLow: number;
+                                }[];
+                                includedGameCount: number;
+                                snapshotId: string | null;
+                                /** @enum {string} */
+                                state: "published" | "unavailable";
+                                unreachedPhases: string[];
+                            };
+                            version: {
+                                estimatorVersions: string[];
+                                recipeVersionId: string;
+                                snapshotId: string;
+                            };
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description The caller's copy is current. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
             };
             /** @description Too many requests */
             429: {

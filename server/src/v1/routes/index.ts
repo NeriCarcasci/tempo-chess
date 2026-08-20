@@ -3,6 +3,7 @@ import { generateOpenApiDocument } from "../openapi.js";
 import type { RouteDefinition } from "../registry.js";
 import { ARTIFACT_ROUTES } from "./artifacts.js";
 import { CASE_STUDY_ROUTES } from "./case-studies.js";
+import { DASHBOARD_ROUTES } from "./dashboard.js";
 import { DIRECTORY_ROUTES } from "./directory.js";
 import { GAME_ROUTES } from "./games.js";
 import { IDENTITY_ROUTES } from "./identity.js";
@@ -34,6 +35,7 @@ const PRODUCT_ROUTES = [
   ...GOAL_ROUTES,
   ...PRACTICE_ROUTES,
   ...OPENING_ROUTES,
+  ...DASHBOARD_ROUTES,
 ] as unknown as RouteDefinition<never, never, never>[];
 
 /**

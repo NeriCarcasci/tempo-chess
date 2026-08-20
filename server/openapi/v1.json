@@ -1017,6 +1017,686 @@
         "summary": "One published case study, with its source, permission basis and version"
       }
     },
+    "/v1/dashboard": {
+      "get": {
+        "description": "The published dashboard for your own subject: skill estimates with their intervals and sample sizes, findings with their evidence, the trajectory bins, and the rating profile. This is the report that was published rather than a fresh computation, so it always agrees with the findings stored beside it. Estimates carry a null value and a reason when the evidence is too thin, and censored chances are reported separately from failures because a chance the player never got is not a chance they missed.",
+        "operationId": "getDashboard",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "coverageWarnings": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "estimates": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "coverage": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "censored": {
+                                    "type": "number"
+                                  },
+                                  "failure": {
+                                    "type": "number"
+                                  },
+                                  "graded": {
+                                    "type": "number"
+                                  },
+                                  "success": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "success",
+                                  "failure",
+                                  "graded",
+                                  "censored"
+                                ],
+                                "type": "object"
+                              },
+                              "coverageStatus": {
+                                "type": "string"
+                              },
+                              "delta": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "dimensionKey": {
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              },
+                              "effectiveSampleSize": {
+                                "type": "number"
+                              },
+                              "estimate": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "frame": {
+                                "type": "string"
+                              },
+                              "improvementProbability": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "intervalHigh": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "intervalLow": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "rawSampleSize": {
+                                "type": "number"
+                              },
+                              "unavailableReason": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "windowKind": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "dimensionKey",
+                              "displayName",
+                              "frame",
+                              "windowKind",
+                              "estimate",
+                              "intervalLow",
+                              "intervalHigh",
+                              "rawSampleSize",
+                              "effectiveSampleSize",
+                              "coverage",
+                              "coverageStatus",
+                              "unavailableReason",
+                              "delta",
+                              "improvementProbability"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "findings": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "adjustedProbability": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "claim": {
+                                "additionalProperties": {},
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "type": "object"
+                              },
+                              "confidenceTier": {
+                                "type": "string"
+                              },
+                              "evidence": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "displayRank": {
+                                      "type": "number"
+                                    },
+                                    "evidenceItemId": {
+                                      "type": "string"
+                                    },
+                                    "role": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "evidenceItemId",
+                                    "role",
+                                    "displayRank"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "explanation": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "explanationState": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "findingType": {
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "string"
+                              },
+                              "priority": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "findingType",
+                              "priority",
+                              "confidenceTier",
+                              "claim",
+                              "adjustedProbability",
+                              "evidence",
+                              "explanation",
+                              "explanationState"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "publicationId": {
+                          "type": "string"
+                        },
+                        "publishedAt": {
+                          "type": "string"
+                        },
+                        "ratingProfile": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "note": {
+                              "type": "string"
+                            },
+                            "pools": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "inSupportedRange": {
+                                    "type": "boolean"
+                                  },
+                                  "intervalHigh": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "intervalLow": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "observedRating": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "pool": {
+                                    "type": "string"
+                                  },
+                                  "provider": {
+                                    "type": "string"
+                                  },
+                                  "scaleEstimate": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "speed": {
+                                    "type": "string"
+                                  },
+                                  "suppressedReason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "pool",
+                                  "speed",
+                                  "observedRating",
+                                  "scaleEstimate",
+                                  "intervalLow",
+                                  "intervalHigh",
+                                  "inSupportedRange",
+                                  "suppressedReason"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "state": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "pools",
+                            "note"
+                          ],
+                          "type": "object"
+                        },
+                        "runId": {
+                          "type": "string"
+                        },
+                        "sections": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "connections": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "estimates": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "findings": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "goal": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "ratingProfile": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "trajectory": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "estimates",
+                            "findings",
+                            "trajectory",
+                            "ratingProfile",
+                            "goal",
+                            "connections"
+                          ],
+                          "type": "object"
+                        },
+                        "subjectId": {
+                          "type": "string"
+                        },
+                        "trajectory": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "bins": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "binOrdinal": {
+                                    "type": "number"
+                                  },
+                                  "gamesContributing": {
+                                    "type": "number"
+                                  },
+                                  "intervalHigh": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "intervalLow": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "medianExpectedScore": {
+                                    "type": "number"
+                                  },
+                                  "p25ExpectedScore": {
+                                    "type": "number"
+                                  },
+                                  "p75ExpectedScore": {
+                                    "type": "number"
+                                  },
+                                  "phase": {
+                                    "type": "string"
+                                  },
+                                  "phaseReachRate": {
+                                    "type": "number"
+                                  },
+                                  "progressHigh": {
+                                    "type": "number"
+                                  },
+                                  "progressLow": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "phase",
+                                  "binOrdinal",
+                                  "progressLow",
+                                  "progressHigh",
+                                  "gamesContributing",
+                                  "medianExpectedScore",
+                                  "p25ExpectedScore",
+                                  "p75ExpectedScore",
+                                  "intervalLow",
+                                  "intervalHigh",
+                                  "phaseReachRate"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "includedGameCount": {
+                              "type": "number"
+                            },
+                            "snapshotId": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "state": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
+                            "unreachedPhases": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "snapshotId",
+                            "includedGameCount",
+                            "bins",
+                            "unreachedPhases"
+                          ],
+                          "type": "object"
+                        },
+                        "version": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "estimatorVersions": {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            "recipeVersionId": {
+                              "type": "string"
+                            },
+                            "snapshotId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "recipeVersionId",
+                            "snapshotId",
+                            "estimatorVersions"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "subjectId",
+                        "publicationId",
+                        "runId",
+                        "publishedAt",
+                        "sections",
+                        "estimates",
+                        "findings",
+                        "trajectory",
+                        "ratingProfile",
+                        "coverageWarnings",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Every measurement behind your published profile",
+            "headers": {
+              "ETag": {
+                "description": "Strong validator for If-None-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The caller's copy is current."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "Every measurement behind your published profile"
+      }
+    },
     "/v1/diagnostic-sessions/{sessionId}": {
       "get": {
         "description": "The current item carries the explanation of what it is testing and never the expected move. Platform spec 14.7's pre-explanation guarantee costs a little signal and buys the difference between an examination and a trap.",
