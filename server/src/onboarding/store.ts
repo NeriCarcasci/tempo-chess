@@ -1,4 +1,5 @@
 import type { Sql } from "postgres";
+import { isoOf } from "../db/timestamps.js";
 
 import type { Queryable } from "../db/queryable.js";
 import type { Stage } from "./contract.js";
@@ -221,7 +222,7 @@ export async function writeCoverage(
         ${input.subjectDataSnapshotId}, ${input.policyComponentVersionId},
         ${decision.overallState}, ${decision.totalGames}, ${decision.eligibleGames},
         ${decision.dimensions.reduce((sum, d) => sum + d.observationCount, 0)},
-        ${decision.earliestPlayedAt}, ${decision.latestPlayedAt},
+        ${isoOf(decision.earliestPlayedAt)}, ${isoOf(decision.latestPlayedAt)},
         ${decision.speedsCovered}, ${decision.clockAvailableGames},
         ${decision.openingReachCount}, ${decision.middlegameReachCount},
         ${decision.endgameReachCount}, ${decision.ratingInCalibratedRange},
@@ -247,8 +248,8 @@ export async function writeCoverage(
           earliest_played_at, latest_played_at, state, limitation_reason
         ) values (
           ${snapshot.id}, ${dimension.dimensionKey}, ${dimension.observationCount},
-          ${dimension.effectiveCount}, ${dimension.earliestPlayedAt},
-          ${dimension.latestPlayedAt}, ${dimension.state}, ${dimension.limitationReason}
+          ${dimension.effectiveCount}, ${isoOf(dimension.earliestPlayedAt)},
+          ${isoOf(dimension.latestPlayedAt)}, ${dimension.state}, ${dimension.limitationReason}
         )
         on conflict do nothing
       `;

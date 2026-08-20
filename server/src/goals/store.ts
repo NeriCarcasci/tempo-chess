@@ -1,4 +1,5 @@
 import type { Sql } from "postgres";
+import { isoOf } from "../db/timestamps.js";
 
 import type { Queryable } from "../db/queryable.js";
 import type { CloseOutcome, GoalStatus } from "./contract.js";
@@ -247,7 +248,7 @@ export async function recordCommitment(
     select ${input.cycleId}, ${input.commitmentKey},
            coalesce(max(revision), 0) + 1, ${input.target}, ${input.cadence},
            ${input.unit}, ${input.enabled}, ${input.acceptedRequirementKeys as string[]},
-           ${input.effectiveFrom}, ${input.confirmedAt}
+           ${input.effectiveFrom}, ${isoOf(input.confirmedAt)}
     from coaching.goal_commitments
     where cycle_id = ${input.cycleId} and commitment_key = ${input.commitmentKey}
     returning revision

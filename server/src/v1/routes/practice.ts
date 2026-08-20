@@ -269,7 +269,7 @@ const attemptRoute: RouteDefinition<never, z.infer<typeof attemptBody>, z.infer<
             due_at, interval_days, stability, difficulty, last_attempt_id
           ) values (
             ${subjectId}, ${assignment.training_item_version_id}, ${selectorVersionId},
-            ${next.dueAt}, ${next.intervalDays}, ${next.stability}, ${next.difficulty},
+            ${isoOf(next.dueAt)}, ${next.intervalDays}, ${next.stability}, ${next.difficulty},
             ${attempt!.id}
           )
           on conflict (subject_id, training_item_version_id) do update

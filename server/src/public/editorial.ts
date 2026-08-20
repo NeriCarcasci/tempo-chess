@@ -13,7 +13,7 @@
  */
 
 import { client } from "../db/client.js";
-import { toDate, type RawTimestamp } from "../db/timestamps.js";
+import { toDate, type RawTimestamp, isoOf } from "../db/timestamps.js";
 import {
   DIRECTORY_MAX_LIMIT,
   REDACTION_POLICY_VERSION,
@@ -81,7 +81,7 @@ export async function recordConsent(input: ConsentInput, sql: Sql = client): Pro
     ) values (
       ${input.subjectId}, ${input.consentingUserId ?? null},
       ${input.consentArtifactId ?? null}, ${input.scope},
-      ${input.grantedAt}, ${input.expiresAt ?? null}, ${input.recordedBy ?? null}
+      ${isoOf(input.grantedAt)}, ${isoOf(input.expiresAt ?? null)}, ${input.recordedBy ?? null}
     )
     returning id
   `;
