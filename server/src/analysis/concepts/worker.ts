@@ -39,6 +39,7 @@ import { isRecordableOpportunity, difficultyIsUncontaminated } from "../observat
 import { conceptBySlug } from "./catalogue.js";
 import { conceptVersionIds } from "./register.js";
 import { detectGame, type GameFacts, type PositionFact, type TransitionFact } from "./detect.js";
+import { publishedMaterializationRun } from "../../engine/recipe.js";
 
 export const DETECT_TASK = "analysis_detect_concepts";
 
@@ -48,8 +49,8 @@ interface Payload {
 
 interface RunRow {
   subject_game_id: string | null;
-  materialization_run_id: string | null;
   subject_id: string | null;
+  replay_revision_id: string | null;
 }
 
 /**
@@ -68,13 +69,23 @@ export async function detectForRun(
 ): Promise<WorkResult> {
   return withActor(sql, ownerProfileId, async (tx) => {
     const [run] = await tx<RunRow[]>`
-      select r.subject_game_id, r.materialization_run_id, g.subject_id
-      from analysis.runs r
-      left join chess.subject_games g on g.id = r.subject_game_id
-      where r.id = ${runId}
+      select subject_game_id, subject_id, replay_revision_id
+      from analysis.runs where id = ${runId}
     `;
-    if (!run?.subject_game_id || !run.materialization_run_id || !run.subject_id) {
+    if (!run?.subject_game_id || !run.subject_id || !run.replay_revision_id) {
       throw new WorkFailure("invalid_input", "unknown_run", "no such analysis run");
+    }
+
+    // The position graph hangs off the materialization, not off the analysis
+    // run: a run names the replay revision it analysed, and the materializer
+    // publishes exactly one chain per revision.
+    const materializationRunId = await publishedMaterializationRun(tx, run.replay_revision_id);
+    if (materializationRunId === null) {
+      throw new WorkFailure(
+        "invalid_input",
+        "no_published_materialization",
+        "the run's replay revision has no published position graph",
+      );
     }
 
     const [game] = await tx<{
@@ -96,7 +107,7 @@ export async function detectForRun(
 
     const positions = await tx<{ ply: number; fen: string }[]>`
       select ply, fen from chess.position_occurrences
-      where run_id = ${run.materialization_run_id}
+      where run_id = ${materializationRunId}
       order by ply
     `;
     const transitions = await tx<{
