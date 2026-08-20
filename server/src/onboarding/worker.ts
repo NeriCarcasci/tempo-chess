@@ -11,6 +11,7 @@ import { pendingAnalysisCount } from "../analysis/planner.js";
 import { registerHandler, type WorkContext, type WorkResult } from "../ops/handlers.js";
 import { WorkFailure } from "../ops/retry.js";
 import { withActor } from "../db/actor.js";
+import { requiredDate, toDate, type RawTimestamp } from "../db/timestamps.js";
 import { COVERAGE_POLICY, DIAGNOSTIC_POLICY, STAGES } from "./contract.js";
 import {
   ADVANCE_TASK,
@@ -269,7 +270,7 @@ export async function buildExamination(
 async function readGameFacts(sql: Sql, snapshotId: string): Promise<GameFacts[]> {
   const rows = await sql<
     {
-      played_at: Date;
+      played_at: RawTimestamp;
       speed: string | null;
       has_clock: boolean;
       reached_middlegame: boolean;
@@ -293,7 +294,7 @@ async function readGameFacts(sql: Sql, snapshotId: string): Promise<GameFacts[]>
     where g.snapshot_id = ${snapshotId}
   `;
   return rows.map((row) => ({
-    playedAt: row.played_at,
+    playedAt: requiredDate(row.played_at, "game_replay_revisions.played_at"),
     speed: row.speed ?? "unknown",
     hasClock: row.has_clock,
     reachedMiddlegame: row.reached_middlegame,
@@ -312,8 +313,8 @@ async function readDimensionFacts(sql: Sql, analysisRunId: string): Promise<Dime
       dimension_key: string;
       raw_sample_size: number;
       effective_sample_size: string;
-      evidence_from: Date | null;
-      evidence_to: Date | null;
+      evidence_from: RawTimestamp;
+      evidence_to: RawTimestamp;
     }[]
   >`
     select d.dimension_key, e.raw_sample_size, e.effective_sample_size,
@@ -329,8 +330,8 @@ async function readDimensionFacts(sql: Sql, analysisRunId: string): Promise<Dime
     dimensionKey: row.dimension_key.replace(/_(objective|personal_current|peer_current|peer_stretch)$/, ""),
     observationCount: row.raw_sample_size,
     effectiveCount: Number(row.effective_sample_size),
-    earliestPlayedAt: row.evidence_from,
-    latestPlayedAt: row.evidence_to,
+    earliestPlayedAt: toDate(row.evidence_from),
+    latestPlayedAt: toDate(row.evidence_to),
   }));
 }
 
