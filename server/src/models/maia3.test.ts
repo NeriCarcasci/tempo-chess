@@ -2,10 +2,17 @@ import { strict as assert } from "node:assert";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { CONTINUATION_RATINGS, isContinuationRating } from "./continuation-rating.js";
 import { Maia3Engine } from "./maia3.js";
 import { normalizePolicy, stablePolicyMove } from "./policy.js";
 
 const bridgePath = fileURLToPath(new URL("./fixtures/fake-maia3-bridge.mjs", import.meta.url));
+
+test("continuation strengths are a closed set of cache-friendly rating bands", () => {
+  assert.deepEqual(CONTINUATION_RATINGS, [800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400]);
+  for (const rating of CONTINUATION_RATINGS) assert.equal(isContinuationRating(rating), true);
+  for (const rating of [799, 801, 1500, 2399, 2401]) assert.equal(isContinuationRating(rating), false);
+});
 
 test("Maia-3 bridge starts once and serializes rating-conditioned requests", async () => {
   const engine = new Maia3Engine({

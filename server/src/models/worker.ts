@@ -7,9 +7,8 @@ import { MaiaEngine, type MaiaNetwork } from "./maia.js";
 import { Maia3Engine } from "./maia3.js";
 import { computePracticalContext, type HumanPolicyEngine } from "./practical-context.js";
 import { recordModelsEvent } from "./telemetry.js";
+import { isContinuationRating } from "./continuation-rating.js";
 import {
-  CONTINUATION_RATING_MAX,
-  CONTINUATION_RATING_MIN,
   CONTINUATION_TASK,
   resolveContinuationEngine,
   storeContinuationPolicy,
@@ -113,8 +112,7 @@ export async function writeContinuationPolicy(
     halfmoveClock < 0 ||
     rating === null ||
     !Number.isInteger(rating) ||
-    rating < CONTINUATION_RATING_MIN ||
-    rating > CONTINUATION_RATING_MAX ||
+    !isContinuationRating(rating) ||
     modelComponentVersionId === null ||
     cacheKey === null ||
     !/^[0-9a-f]{64}$/.test(cacheKey)

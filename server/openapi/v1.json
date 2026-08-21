@@ -8873,7 +8873,7 @@
     },
     "/v1/positions/continuations": {
       "post": {
-        "description": "Validates a standard-chess FEN and uses the promoted CPU Maia-3 policy at the requested rating. A cached policy returns immediately; a cache miss returns a durable workflow. Repeating a completed request with the same turnKey returns the same sampled move. This is a scenario continuation primitive, not the legacy play surface and not an objective engine evaluation.",
+        "description": "Validates a standard-chess FEN and uses the promoted CPU Maia-3 policy at one of the supported strengths (800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400). A cached policy returns immediately; a cache miss returns a durable workflow. Repeating a completed request with the same turnKey returns the same sampled move. This is a scenario continuation primitive, not the legacy play surface and not an objective engine evaluation.",
         "operationId": "requestPositionContinuation",
         "parameters": [
           {
@@ -8900,9 +8900,44 @@
                     "type": "string"
                   },
                   "rating": {
-                    "maximum": 2400,
-                    "minimum": 800,
-                    "type": "integer"
+                    "anyOf": [
+                      {
+                        "const": 800,
+                        "type": "number"
+                      },
+                      {
+                        "const": 1000,
+                        "type": "number"
+                      },
+                      {
+                        "const": 1200,
+                        "type": "number"
+                      },
+                      {
+                        "const": 1400,
+                        "type": "number"
+                      },
+                      {
+                        "const": 1600,
+                        "type": "number"
+                      },
+                      {
+                        "const": 1800,
+                        "type": "number"
+                      },
+                      {
+                        "const": 2000,
+                        "type": "number"
+                      },
+                      {
+                        "const": 2200,
+                        "type": "number"
+                      },
+                      {
+                        "const": 2400,
+                        "type": "number"
+                      }
+                    ]
                   },
                   "turnKey": {
                     "pattern": "^[A-Za-z0-9_-]{8,128}$",
@@ -8960,9 +8995,44 @@
                           ]
                         },
                         "rating": {
-                          "maximum": 9007199254740991,
-                          "minimum": -9007199254740991,
-                          "type": "integer"
+                          "anyOf": [
+                            {
+                              "const": 800,
+                              "type": "number"
+                            },
+                            {
+                              "const": 1000,
+                              "type": "number"
+                            },
+                            {
+                              "const": 1200,
+                              "type": "number"
+                            },
+                            {
+                              "const": 1400,
+                              "type": "number"
+                            },
+                            {
+                              "const": 1600,
+                              "type": "number"
+                            },
+                            {
+                              "const": 1800,
+                              "type": "number"
+                            },
+                            {
+                              "const": 2000,
+                              "type": "number"
+                            },
+                            {
+                              "const": 2200,
+                              "type": "number"
+                            },
+                            {
+                              "const": 2400,
+                              "type": "number"
+                            }
+                          ]
                         },
                         "state": {
                           "enum": [

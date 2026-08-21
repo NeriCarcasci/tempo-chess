@@ -1,19 +1,30 @@
 import { z } from "zod";
 
 import { client } from "../../db/client.js";
+import { CONTINUATION_RATINGS } from "../../models/continuation-rating.js";
 import {
-  CONTINUATION_RATING_MAX,
-  CONTINUATION_RATING_MIN,
   requestContinuationMove,
 } from "../../models/continuation.js";
 import { ProblemError } from "../problem.js";
 import { POLICIES } from "../rate-limit.js";
 import type { RouteDefinition } from "../registry.js";
 
+const continuationRatingSchema = z.union([
+  z.literal(800),
+  z.literal(1000),
+  z.literal(1200),
+  z.literal(1400),
+  z.literal(1600),
+  z.literal(1800),
+  z.literal(2000),
+  z.literal(2200),
+  z.literal(2400),
+]);
+
 const continuationBodySchema = z
   .object({
     fen: z.string().min(10).max(120),
-    rating: z.number().int().min(CONTINUATION_RATING_MIN).max(CONTINUATION_RATING_MAX),
+    rating: continuationRatingSchema,
     /** Stable for one game turn; used to make policy sampling retry-safe. */
     turnKey: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/),
   })
@@ -23,7 +34,7 @@ const continuationResultSchema = z.object({
   state: z.enum(["ready", "scheduled"]),
   workflowId: z.string().nullable(),
   moveUci: z.string().nullable(),
-  rating: z.number().int(),
+  rating: continuationRatingSchema,
   candidates: z.array(z.object({ uci: z.string(), probability: z.number() })),
 });
 
@@ -37,7 +48,7 @@ const requestContinuationRoute: RouteDefinition<
   operationId: "requestPositionContinuation",
   summary: "Ask Maia for a human-style reply from a position",
   description:
-    "Validates a standard-chess FEN and uses the promoted CPU Maia-3 policy at the requested rating. A cached policy returns immediately; a cache miss returns a durable workflow. Repeating a completed request with the same turnKey returns the same sampled move. This is a scenario continuation primitive, not the legacy play surface and not an objective engine evaluation.",
+    `Validates a standard-chess FEN and uses the promoted CPU Maia-3 policy at one of the supported strengths (${CONTINUATION_RATINGS.join(", ")}). A cached policy returns immediately; a cache miss returns a durable workflow. Repeating a completed request with the same turnKey returns the same sampled move. This is a scenario continuation primitive, not the legacy play surface and not an objective engine evaluation.`,
   kind: "command",
   auth: "required",
   idempotency: "key",

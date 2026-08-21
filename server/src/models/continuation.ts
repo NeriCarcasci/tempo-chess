@@ -3,6 +3,7 @@ import type { Sql } from "postgres";
 import { jsonParam } from "../db/json.js";
 import { internPosition } from "../engine/interactive.js";
 import { DuplicateWorkError, insertWorkflow } from "../ops/ledger.js";
+import type { ContinuationRating } from "./continuation-rating.js";
 import { Maia3Engine } from "./maia3.js";
 import {
   inferenceCacheKey,
@@ -14,8 +15,6 @@ import {
 
 export const CONTINUATION_TASK = "maia3_generate_continuation_policy";
 export const CONTINUATION_RETAINED_MOVE_LIMIT = 218;
-export const CONTINUATION_RATING_MIN = 800;
-export const CONTINUATION_RATING_MAX = 2400;
 
 export const CONTINUATION_CONTRACT = {
   name: "maia3_continuation_context.v1",
@@ -32,7 +31,7 @@ export type ContinuationOutcome =
   | {
       state: "ready";
       moveUci: string;
-      rating: number;
+      rating: ContinuationRating;
       candidates: readonly { uci: string; probability: number }[];
     }
   | { state: "scheduled"; workflowId: string }
@@ -42,7 +41,7 @@ export type ContinuationOutcome =
 
 export interface ContinuationRequest {
   fen: string;
-  rating: number;
+  rating: ContinuationRating;
   turnKey: string;
   ownerProfileId: string;
 }

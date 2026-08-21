@@ -13,7 +13,9 @@ The private `forma-maia` service uses CSSLab Maia-3 5M on CPU:
 - checkpoint SHA-256
   `ba14208b2992d85502f5fb501934abf6aaaeb355e9f3fdf90e326911f562524f`;
 - PyTorch CPU wheel only, AMP disabled, one OpenMP/MKL thread;
-- model range exposed by Forma: rating 800–2400.
+- strengths exposed by Forma: 800, 1000, 1200, 1400, 1600, 1800, 2000,
+  2200 and 2400. Other values are rejected at both the API and worker boundary so
+  equivalent requests share the same rating-conditioned policy cache.
 
 The optional Docker target is `maia-production`. The default final target
 remains the lean service image, so API, ingestion and Stockfish cold starts do
