@@ -9,7 +9,6 @@ import {
 } from "react-router";
 
 import type { Route } from "./+types/root";
-import { EarlyAccessBoundary, earlyAccessEnabled } from "./components/EarlyAccessGate";
 import "@fontsource-variable/manrope";
 import "@fontsource-variable/newsreader";
 import "@fontsource-variable/jetbrains-mono";
@@ -32,7 +31,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#f4f1ea" />
-        {earlyAccessEnabled ? <meta name="robots" content="noindex, nofollow" /> : null}
+        {/* Unconditional while Forma is in closed beta. This used to hang off
+            the early-access code, which is gone -- but the reason for it never
+            was that code: an unlaunched product should not be in an index, and
+            access is about to be decided by approval rather than by a string in
+            the bundle. Remove this at public launch, deliberately. */}
+        <meta name="robots" content="noindex, nofollow" />
         <Meta />
         <Links />
       </head>
@@ -54,7 +58,7 @@ function NavProgress() {
 }
 
 export default function App() {
-  return <EarlyAccessBoundary><Outlet /></EarlyAccessBoundary>;
+  return <Outlet />;
 }
 
 export function HydrateFallback() {
