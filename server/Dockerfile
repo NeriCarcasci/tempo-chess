@@ -19,7 +19,7 @@ RUN python3 -m venv /opt/maia3-venv \
     && /opt/maia3-venv/bin/pip install --no-cache-dir \
       --extra-index-url https://download.pytorch.org/whl/cpu torch==2.13.0+cpu \
     && /opt/maia3-venv/bin/pip install --no-cache-dir \
-      huggingface-hub==1.28.0 numpy==2.5.2 python-chess==1.999 \
+      huggingface-hub==1.28.0 numpy==2.4.6 python-chess==1.999 \
     && mkdir -p /tmp/maia3 \
     && git -C /tmp/maia3 init \
     && git -C /tmp/maia3 remote add origin https://github.com/CSSLab/maia3.git \
