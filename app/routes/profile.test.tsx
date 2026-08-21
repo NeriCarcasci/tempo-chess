@@ -126,11 +126,11 @@ const shown = (over: Partial<Record<string, unknown>> = {}): string => {
 };
 
 describe("the measures", () => {
-  test("no rate is drawn, because no rate is published", () => {
-    // The estimate, its interval and the graded/censored split live in
-    // `analysis.player_skill_estimates` and no /v1 route returns them. A page
-    // that filled the gap with a figure of its own would be making a claim
-    // nobody computed, and it would be making it without an interval.
+  test("with nothing published, no rate is invented", () => {
+    // `/v1/dashboard` now serves the estimates, but this case is the page
+    // before it has anything to give — a new account, or a 404. It must not
+    // fill the gap with a figure of its own: a rate nobody computed is a claim
+    // nobody can defend, and it would be made without an interval.
     const text = shown();
     expect(text).not.toMatch(/\d+(\.\d+)?%/);
     expect(text).not.toMatch(/0\.\d\d\b/);

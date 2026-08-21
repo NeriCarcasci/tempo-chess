@@ -11,6 +11,7 @@ import { v1, v1Collect, v1Data, newIdempotencyKey } from "../v1/client";
 import type { V1Result } from "../v1/client";
 import type {
   BaselineReport,
+  Dashboard,
   LinkedAccount,
   Me,
   OnboardingCoverage,
@@ -50,6 +51,23 @@ export function listWorkflows(): Promise<Workflow[]> {
 
 export function getCoverage(runId: string): Promise<OnboardingCoverage> {
   return v1Data<OnboardingCoverage>(`/v1/onboarding/runs/${runId}/coverage`);
+}
+
+/**
+ * Every measurement behind the published profile.
+ *
+ * Unlike `getReport`, this is a plain read and safe to call from anywhere: it
+ * does not record a view and does not advance the run. It exists because the
+ * baseline report ships its items as *identifiers* -- a finding id, an estimate
+ * id, a trajectory snapshot id -- and for a long time there was nothing to
+ * dereference them against, so a profile screen could render the shape of an
+ * answer and none of its numbers.
+ *
+ * 404 means no published profile yet, which is an empty account rather than a
+ * missing resource. Callers should render that as "not measured yet".
+ */
+export function getDashboard(): Promise<V1Result<Dashboard>> {
+  return v1<Dashboard>("/v1/dashboard");
 }
 
 /**

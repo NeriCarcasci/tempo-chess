@@ -5,7 +5,7 @@ import { RouteError } from "../components/RouteError";
 import { ChessComMark, LichessMark } from "../components/PlatformMarks";
 import { CoverageBadge, EmptyState } from "../components/v1/Honesty";
 import { WithheldNote } from "../components/onboarding/WithheldNote";
-import { getCoverage, getMe, getOnboarding, getReport } from "../lib/onboarding/api";
+import { getCoverage, getDashboard, getMe, getOnboarding, getReport } from "../lib/onboarding/api";
 import { reportAlreadyOpened } from "../lib/onboarding/nextScreen";
 import { limitationText, STAGE_LABEL, type Stage } from "../lib/onboarding/copy";
 import { fetchRecentGames, type RecentGame } from "../lib/v1/games";
@@ -17,7 +17,14 @@ import {
   summariseReport,
   widestEvidence,
 } from "../lib/v1/measures";
-import type { BaselineReport, Me, OnboardingCoverage, OnboardingState } from "../lib/v1/types";
+import type {
+  BaselineReport,
+  Dashboard,
+  Me,
+  OnboardingCoverage,
+  OnboardingState,
+  SkillEstimate,
+} from "../lib/v1/types";
 import { requireSession } from "../lib/session";
 
 /**
@@ -64,6 +71,30 @@ interface LoaderData {
   coverage: OnboardingCoverage | null;
   report: BaselineReport | null;
   games: RecentGame[];
+  dashboard: Dashboard | null;
+}
+
+/**
+ * The lifetime, objective estimate for a coverage dimension.
+ *
+ * Coverage strips the frame suffix from a dimension key -- `critical_moment_execute`
+ * -- while an estimate keeps it, because the same chances are estimated under
+ * several frames and windows. `objective` over the `lifetime` window is the one
+ * that answers "how often, across everything we have", which is what this page
+ * asks. The other frames compare a player to their own earlier form and belong
+ * on a trend surface, not here.
+ */
+export function estimatesByDimension(dashboard: Dashboard | null): Map<string, SkillEstimate> {
+  const found = new Map<string, SkillEstimate>();
+  // Absent as well as null: a caller that has not fetched the dashboard yet and
+  // one that fetched a 404 both mean "no measurements to attach", and throwing
+  // on the first would take the whole page down over a missing optional read.
+  if (!dashboard) return found;
+  for (const estimate of dashboard.estimates) {
+    if (estimate.frame !== "objective" || estimate.windowKind !== "lifetime") continue;
+    found.set(estimate.dimensionKey.replace(/_objective$/, ""), estimate);
+  }
+  return found;
 }
 
 export async function clientLoader(): Promise<LoaderData> {
@@ -82,7 +113,15 @@ export async function clientLoader(): Promise<LoaderData> {
   const report =
     reportId !== null && reportAlreadyOpened(state) ? (await getReport(reportId)).data : null;
 
-  return { me, state, coverage, report, games };
+  // The measurements themselves. A 404 is "nothing published yet", which is an
+  // empty account rather than a broken page, so it degrades to null and the
+  // sections fall back to showing the evidence without the rates. Unlike the
+  // report, reading this records nothing and advances nothing.
+  const dashboard = await getDashboard()
+    .then((result) => result.data)
+    .catch(() => null);
+
+  return { me, state, coverage, report, games, dashboard };
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
@@ -90,7 +129,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 }
 
 export default function Profile() {
-  const { me, state, coverage, report, games } = useLoaderData<LoaderData>();
+  const { me, state, coverage, report, games, dashboard } = useLoaderData<LoaderData>();
   const published = coverage !== null && coverage.state === "published";
 
   return (
@@ -102,7 +141,7 @@ export default function Profile() {
         {published ? (
           <>
             <ReadSection coverage={coverage} />
-            <MeasureSection coverage={coverage} />
+            <MeasureSection coverage={coverage} dashboard={dashboard} />
             <ReportSection report={report} state={state} />
             <GameSection games={games} />
             <Provenance report={report} />
@@ -258,19 +297,25 @@ function ReadSection({ coverage }: { coverage: OnboardingCoverage }) {
 // The measures themselves
 // ---------------------------------------------------------------------------
 
-function MeasureSection({ coverage }: { coverage: OnboardingCoverage }) {
+function MeasureSection({
+  coverage,
+  dashboard,
+}: {
+  coverage: OnboardingCoverage;
+  dashboard: Dashboard | null;
+}) {
   const rows = orderDimensions(coverage.dimensions);
   const widest = widestEvidence(rows);
+  const estimates = estimatesByDimension(dashboard);
 
   return (
     <section className="profile-section">
       <h2>What Forma measures</h2>
       <p className="profile-lede">
-        Each row is a named chance Forma can find in your games, and the figure is how many of them
-        it found. How often you took each one, and the range that number could plausibly sit in,
-        are worked out from these chances and are not published to this screen yet. A rate shown
-        without its range is a firmer claim than the evidence supports, so this page shows you the
-        evidence instead of a number it cannot qualify.
+        Each row is a named chance Forma can find in your games: how many it found, how often you
+        took them, and the range that rate could plausibly sit in. The range is not decoration.
+        A rate over two hundred chances and a rate over seventeen hundred are different claims,
+        and the interval is what says so.
       </p>
 
       {rows.length === 0 ? (
@@ -292,6 +337,7 @@ function MeasureSection({ coverage }: { coverage: OnboardingCoverage }) {
                   {measure?.definition ??
                     "Forma measures this, and this build does not carry a description of it yet."}
                 </p>
+                <MeasureRate estimate={estimates.get(row.dimensionKey) ?? null} />
                 <p className="measure-count">
                   <span className="figure">{row.observationCount.toLocaleString()}</span>{" "}
                   {row.observationCount === 1 ? "chance seen" : "chances seen"}
@@ -316,6 +362,53 @@ function MeasureSection({ coverage }: { coverage: OnboardingCoverage }) {
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * The rate, and never without its range.
+ *
+ * An estimate with no value carries a reason instead, and the reason is shown
+ * rather than swallowed: a dimension nobody has enough evidence for is a
+ * different statement from one measured at zero, and rendering the first as the
+ * second says the player always fails at something nobody has watched them do.
+ *
+ * The interval is rendered at the same weight as the rate on purpose. 0.502
+ * over two hundred chances spans ±0.06; 0.844 over seventeen hundred spans
+ * ±0.015. Printing the first digit-for-digit beside the second, with nothing to
+ * separate them, is the most common way a measurement lies.
+ */
+export function MeasureRate({ estimate }: { estimate: SkillEstimate | null }) {
+  if (estimate === null) return null;
+
+  if (estimate.estimate === null) {
+    return (
+      <p className="measure-unmeasured">
+        {estimate.unavailableReason ?? "Not enough evidence to state a rate yet."}
+      </p>
+    );
+  }
+
+  const pct = (value: number) => `${Math.round(value * 100)}%`;
+  const low = estimate.intervalLow;
+  const high = estimate.intervalHigh;
+
+  return (
+    <p className="measure-rate">
+      <span className="figure">{pct(estimate.estimate)}</span>
+      {low !== null && high !== null ? (
+        <span className="measure-range">
+          {" "}
+          {pct(low)}&ndash;{pct(high)}
+        </span>
+      ) : null}
+      {estimate.coverage.censored > 0 ? (
+        <span className="measure-set-aside">
+          {" "}
+          · {estimate.coverage.censored.toLocaleString()} set aside
+        </span>
+      ) : null}
+    </p>
   );
 }
 

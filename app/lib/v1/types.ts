@@ -49,6 +49,15 @@ export type OnboardingState = Data<"getOnboarding">;
 export type NextAction = OnboardingState["nextAction"];
 export type OnboardingCoverage = Data<"getOnboardingCoverage">;
 export type BaselineReport = Data<"getBaselineReport">;
+/**
+ * Every measurement behind the published profile: estimates with their
+ * intervals and sample sizes, findings with their evidence, the trajectory
+ * bins, the rating profile. The baseline report names these by id; this is what
+ * the ids point at.
+ */
+export type Dashboard = Data<"getDashboard">;
+export type SkillEstimate = Dashboard["estimates"][number];
+export type TrajectoryBin = Dashboard["trajectory"]["bins"][number];
 export type DiagnosticSession = Data<"getDiagnosticSession">;
 
 // --- goals ------------------------------------------------------------------

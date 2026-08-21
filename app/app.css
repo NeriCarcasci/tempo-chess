@@ -2795,6 +2795,23 @@
   .measure-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; }
   .measure-head strong { font-size: 0.98rem; font-weight: 650; }
   .measure-def { max-width: 68ch; font-size: 0.85rem; line-height: 1.65; color: var(--color-ink-muted); }
+  /* The rate and its range read as one statement, so the range cannot be
+     skimmed past. It is deliberately not smaller or lighter than the figure by
+     much: an interval set in fine print is an interval nobody reads, and the
+     whole reason it is here is that 50% over 200 chances and 84% over 1,700 are
+     different claims. */
+  .measure-rate { font-size: 0.82rem; color: var(--color-ink-muted); margin-bottom: 0.15rem; }
+  .measure-rate .figure { font-size: 1.35rem; font-weight: 620; color: var(--color-ink); }
+  .measure-range { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .measure-set-aside { color: var(--color-ink-muted); }
+  /* A dimension with no rate states why. Recessed, because it is an absence
+     rather than a measurement, and never styled as a zero. */
+  .measure-unmeasured {
+    font-size: 0.82rem;
+    color: var(--color-ink-muted);
+    font-style: italic;
+    margin-bottom: 0.15rem;
+  }
   .measure-count { font-size: 0.82rem; color: var(--color-ink-muted); }
   .measure-count .figure { font-size: 1.05rem; font-weight: 620; color: var(--color-ink); }
   .measure-bar {
