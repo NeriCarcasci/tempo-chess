@@ -81,6 +81,16 @@ export type OpeningGraphV1 = NonNullable<OpeningExplorer["graph"]>;
 export type OpeningGraphV1Node = OpeningGraphV1["nodes"][number];
 export type OpeningGraphV1Edge = OpeningGraphV1["edges"][number];
 
+// --- play -------------------------------------------------------------------
+
+export type OpponentCatalogue = Data<"listPlayOpponents">;
+export type OpponentFamilyEntry = OpponentCatalogue["families"][number];
+export type OpponentFamilyLevel = OpponentFamilyEntry["levels"][number];
+export type OpponentFamily = OpponentFamilyEntry["family"];
+export type OpponentMove = Data<"requestOpponentMove">;
+export type OpponentMoveBody = Body<"requestOpponentMove">;
+export type PlayLevelKey = OpponentFamilyLevel["key"];
+
 // --- games ------------------------------------------------------------------
 
 export type Game = Data<"getGame">;

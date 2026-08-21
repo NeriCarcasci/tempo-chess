@@ -2005,6 +2005,9 @@
     box-shadow: var(--shadow-flat);
   }
   .play-strength select:focus { outline: 0; box-shadow: 0 0 0 2px var(--color-accent); }
+  /* The caveat under the strength selector: an engine that cannot play the
+     level it was asked for says so rather than letting the label stand. */
+  .play-strength small { color: var(--color-ink-faint); font-size: 0.72rem; line-height: 1.4; }
   .play-moves { margin-top: 1rem; }
   .play-moves .movelist-cell.is-empty { pointer-events: none; }
   .play-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.1rem; }

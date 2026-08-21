@@ -8708,6 +8708,556 @@
         "summary": "Your opening tree, from the positions your games actually reached"
       }
     },
+    "/v1/play/moves": {
+      "post": {
+        "description": "Validates the position and every supplied move server-side, then returns one bounded engine move. No game is stored: it lives in the client, and a game against the engine is never part of the player's archive or of any analysis. The reply carries no evaluation, and there is no depth, time or MultiPV parameter. A family the deployment cannot serve is refused rather than answered by a different engine.",
+        "operationId": "requestOpponentMove",
+        "parameters": [
+          {
+            "description": "Opaque client-generated value. An identical retry replays the original response; a different request under the same key is a conflict.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "additionalProperties": false,
+                "properties": {
+                  "opponent": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "family": {
+                        "enum": [
+                          "stockfish",
+                          "maia"
+                        ],
+                        "type": "string"
+                      },
+                      "level": {
+                        "enum": [
+                          "800",
+                          "1000",
+                          "1200",
+                          "1400",
+                          "1600",
+                          "1800",
+                          "2000",
+                          "2200",
+                          "2400"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "family",
+                      "level"
+                    ],
+                    "type": "object"
+                  },
+                  "position": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "fen": {
+                        "maxLength": 120,
+                        "minLength": 10,
+                        "type": "string"
+                      },
+                      "moves": {
+                        "default": [],
+                        "items": {
+                          "pattern": "^[a-h][1-8][a-h][1-8][qrbn]?$",
+                          "type": "string"
+                        },
+                        "maxItems": 300,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "fen"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "position",
+                  "opponent"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "opponent": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "clamped": {
+                              "type": "boolean"
+                            },
+                            "engine": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "family": {
+                              "enum": [
+                                "stockfish",
+                                "maia"
+                              ],
+                              "type": "string"
+                            },
+                            "level": {
+                              "enum": [
+                                "800",
+                                "1000",
+                                "1200",
+                                "1400",
+                                "1600",
+                                "1800",
+                                "2000",
+                                "2200",
+                                "2400"
+                              ],
+                              "type": "string"
+                            },
+                            "nominalRating": {
+                              "maximum": 9007199254740991,
+                              "minimum": -9007199254740991,
+                              "type": "integer"
+                            },
+                            "playsAt": {
+                              "maximum": 9007199254740991,
+                              "minimum": -9007199254740991,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "family",
+                            "level",
+                            "nominalRating",
+                            "playsAt",
+                            "clamped",
+                            "engine"
+                          ],
+                          "type": "object"
+                        },
+                        "position": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "fen": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "enum": [
+                                "in_play",
+                                "checkmate",
+                                "stalemate",
+                                "insufficient_material",
+                                "fifty_move"
+                              ],
+                              "type": "string"
+                            },
+                            "turn": {
+                              "enum": [
+                                "white",
+                                "black"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "fen",
+                            "turn",
+                            "status"
+                          ],
+                          "type": "object"
+                        },
+                        "reply": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "san": {
+                                  "type": "string"
+                                },
+                                "uci": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "uci",
+                                "san"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "reply",
+                        "position",
+                        "opponent"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The opponent's reply in a game against the engine",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The request could not be accepted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "This idempotency key was already used for a different request"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "The opponent's reply in a game against the engine"
+      }
+    },
+    "/v1/play/opponents": {
+      "get": {
+        "description": "The server's level catalogue, per family. `available` is false when a family is not configured here; a client must not offer an unavailable family, and asking for one is refused rather than served by a different engine. `playsAt` is the rating the family really plays a level at and `clamped` says it could not reach the level — Stockfish's strength limiter stops at 1320, so the lower levels are its floor rather than their nominal rating.",
+        "operationId": "listPlayOpponents",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "families": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "available": {
+                                "type": "boolean"
+                              },
+                              "family": {
+                                "enum": [
+                                  "stockfish",
+                                  "maia"
+                                ],
+                                "type": "string"
+                              },
+                              "levels": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "clamped": {
+                                      "type": "boolean"
+                                    },
+                                    "key": {
+                                      "enum": [
+                                        "800",
+                                        "1000",
+                                        "1200",
+                                        "1400",
+                                        "1600",
+                                        "1800",
+                                        "2000",
+                                        "2200",
+                                        "2400"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "nominalRating": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": -9007199254740991,
+                                      "type": "integer"
+                                    },
+                                    "playsAt": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": -9007199254740991,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "key",
+                                    "nominalRating",
+                                    "playsAt",
+                                    "clamped"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "unavailableReason": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "not_configured",
+                                      "not_permitted_here"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "family",
+                              "available",
+                              "unavailableReason",
+                              "levels"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "families"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The opponents and strengths this deployment can actually play",
+            "headers": {
+              "ETag": {
+                "description": "Strong validator for If-None-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The caller's copy is current."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "The opponents and strengths this deployment can actually play"
+      }
+    },
     "/v1/players/{handle}": {
       "get": {
         "description": "Returns only the explicit public projection. A profile that has not opted into discovery is indistinguishable from one that does not exist.",

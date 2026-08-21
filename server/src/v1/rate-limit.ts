@@ -40,6 +40,18 @@ export const POLICIES = {
    */
   interactiveEvaluation: { name: "interactive_evaluation", windowSeconds: 60, max: 30 },
   /**
+   * One bot move in a game against the engine. Per actor, for the same reason
+   * as the evaluation above: engine time is spent by whoever is signed in.
+   *
+   * Sixty a minute is deliberately generous against a person and tight against
+   * a script. A human playing a bot game makes a move every few seconds and
+   * will never approach it; a loop asking for a move as fast as the API answers
+   * would otherwise keep an engine process running continuously on one account.
+   * Higher than the evaluation limit because a game is many small requests
+   * where an evaluation is one large one.
+   */
+  playMove: { name: "play_move", windowSeconds: 60, max: 60 },
+  /**
    * E16's onboarding surface. Counted per actor: an onboarding screen polls
    * while a sync runs, so the read limit is generous, and the command limit is
    * tight because every command here either starts real work or records a
