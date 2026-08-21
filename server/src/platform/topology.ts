@@ -1,7 +1,8 @@
 /**
  * The deployed service topology, frozen in one place.
  *
- * E05 splits one public autoscaling process into five deployments. Everything
+ * E05 split one public autoscaling process into five deployments; interactive
+ * Maia serving adds a sixth without coupling player latency to offline work.
  * that could disagree about that split — Cloud Run ingress, service accounts,
  * database roles, secrets, queue routing, OIDC audiences, capacity — is derived
  * from this table, so a change lands in one place or fails a test.
@@ -134,6 +135,22 @@ export const DEPLOYMENTS: readonly DeploymentEntry[] = [
     timeoutSeconds: 900,
   },
   {
+    name: "forma-maia",
+    ingress: "internal",
+    serviceAccount: "forma-maia",
+    databaseRole: "forma_maia",
+    databaseSecret: "forma-maia-db-url",
+    capabilities: ["model_inference"],
+    executes: ["cpu_interactive_model"],
+    audience: "forma-maia",
+    maxInstances: 2,
+    containerConcurrency: 1,
+    poolSize: 1,
+    cpu: "2",
+    memory: "2Gi",
+    timeoutSeconds: 90,
+  },
+  {
     name: "forma-analysis",
     ingress: "internal",
     serviceAccount: "forma-analysis",
@@ -142,7 +159,7 @@ export const DEPLOYMENTS: readonly DeploymentEntry[] = [
     capabilities: ["model_inference"],
     executes: ["cpu_model", "aggregation", "publication"],
     audience: "forma-analysis",
-    maxInstances: 3,
+    maxInstances: 2,
     containerConcurrency: 2,
     poolSize: 2,
     cpu: "2",
@@ -200,16 +217,23 @@ export const QUEUE_ROUTES: readonly QueueEntry[] = [
     maxAttempts: 3,
   },
   {
+    name: "maia-play",
+    target: "forma-maia",
+    maxConcurrentDispatches: 2,
+    maxDispatchesPerSecond: 2,
+    maxAttempts: 3,
+  },
+  {
     name: "analysis",
     target: "forma-analysis",
-    maxConcurrentDispatches: 4,
-    maxDispatchesPerSecond: 4,
+    maxConcurrentDispatches: 3,
+    maxDispatchesPerSecond: 3,
     maxAttempts: 5,
   },
   {
     name: "maintenance",
     target: "forma-analysis",
-    maxConcurrentDispatches: 2,
+    maxConcurrentDispatches: 1,
     maxDispatchesPerSecond: 1,
     maxAttempts: 3,
   },

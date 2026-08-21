@@ -1,0 +1,13 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --target
+      - maia-production
+      - --tag
+      - ${_IMAGE}
+      - .
+images:
+  - ${_IMAGE}
+substitutions:
+  _IMAGE: europe-west1-docker.pkg.dev/tempo-chess-neri/cloud-run-source-deploy/forma-maia:local

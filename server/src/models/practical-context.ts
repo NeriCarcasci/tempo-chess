@@ -48,7 +48,12 @@ export interface HumanPolicyEngine {
   inferPolicy(
     fen: string,
     rating: number,
-  ): Promise<{ policy: PolicyDistribution; latencyMs: number; networkBand: number }>;
+  ): Promise<{
+    policy: PolicyDistribution;
+    latencyMs: number;
+    networkBand?: number;
+    modelRating?: number;
+  }>;
 }
 
 export interface PracticalContextSummary {
@@ -247,7 +252,8 @@ async function decideOne(
         context,
         cacheKey,
         policy: inference.policy,
-        networkBand: inference.networkBand,
+        networkBand: inference.networkBand ?? null,
+        modelRating: inference.modelRating ?? null,
       });
       input.summary.inferencesComputed += 1;
     } catch {
@@ -383,7 +389,8 @@ async function storeInference(
     context: InferenceContext;
     cacheKey: string;
     policy: PolicyDistribution;
-    networkBand: number;
+    networkBand: number | null;
+    modelRating: number | null;
   },
 ): Promise<string> {
   return sql.begin(async (tx) => {
@@ -399,7 +406,7 @@ async function storeInference(
         ${input.context.actorRating}, ${input.context.opponentRating}, ${input.context.speed},
         ${input.context.hasMoveHistory}, ${HUMAN_POLICY_CONTRACT_HASH}, ${input.cacheKey},
         ${input.policy.retainedMass}, ${input.policy.moves.length}, ${input.policy.entropyBits},
-        ${jsonParam({ networkBand: input.networkBand })}::jsonb
+        ${jsonParam({ networkBand: input.networkBand, modelRating: input.modelRating })}::jsonb
       )
       returning id
     `;

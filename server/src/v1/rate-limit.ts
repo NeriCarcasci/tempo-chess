@@ -39,6 +39,8 @@ export const POLICIES = {
    * behind a changing address run the worker pool flat.
    */
   interactiveEvaluation: { name: "interactive_evaluation", windowSeconds: 60, max: 30 },
+  /** CPU model work. A human cannot reasonably make more than twenty replies a minute. */
+  maiaContinuation: { name: "maia_continuation", windowSeconds: 60, max: 20 },
   /**
    * E16's onboarding surface. Counted per actor: an onboarding screen polls
    * while a sync runs, so the read limit is generous, and the command limit is

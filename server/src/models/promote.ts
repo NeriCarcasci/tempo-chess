@@ -36,6 +36,17 @@ const MAIA_LICENCE = {
   note: "Maia-family weights, licence-reviewed as platform spec 12.1 requires before promotion.",
 };
 
+const MAIA3_LICENCE = {
+  spdx: "AGPL-3.0-only",
+  sourceUrl: "https://github.com/CSSLab/maia3",
+  obligations:
+    "AGPL-3.0. Forma runs the unmodified Maia-3 package as a separate CPU process, keeps the exact upstream revision and licence with the deployment, and publishes this integration source. Any deployed modification to the covered Maia-3 program must remain available to network users under the same licence.",
+  distributionPosture: "server_side_only" as const,
+  reviewer: "forma-platform",
+  decision: "cleared" as const,
+  note: "Maia-3 code and the Maia3-5M model card both point to the repository licence; exact revisions and checkpoint digest are pinned.",
+};
+
 async function main(): Promise<void> {
   const args = new Map(
     process.argv.slice(2).map((arg) => {
@@ -45,18 +56,23 @@ async function main(): Promise<void> {
   );
   const reportPath = args.get("report") ?? "benchmark-result.json";
   const apply = args.get("apply") === "true";
-  const modelVersion = args.get("version") ?? "maia-1.0";
   const datasetKey = args.get("dataset-key") ?? "lichess_public_holdout";
   const datasetVersion = args.get("dataset-version") ?? "1";
   const corpusPath = args.get("corpus") ?? null;
 
   const report = JSON.parse(await readFile(reportPath, "utf8")) as BenchmarkReport;
   const verdict = report.verdict;
+  const family = report.model.family ?? "maia1";
+  const modelVersion = args.get("version") ?? (family === "maia3" ? "maia3-5m" : "maia-1.0");
 
   console.log(describeVerdict(verdict));
   console.log(`corpus     ${report.corpus.positions} positions, ${report.corpus.accounts} accounts`);
   console.log(`manifest   ${report.corpus.manifestSha256}`);
-  console.log(`networks   ${report.model.networks.map((n) => n.band).join(", ")}`);
+  console.log(
+    family === "maia3"
+      ? `model      Maia-3 5M ${report.model.checkpoint?.sha256.slice(0, 16) ?? "missing digest"}`
+      : `networks   ${report.model.networks.map((n) => n.band).join(", ")}`,
+  );
   console.log(`supported  ${verdict.supportedSliceCount} of ${verdict.slices.length} slices`);
   if (!apply) {
     console.log("\nnothing written: pass --apply to record this.");
@@ -68,26 +84,53 @@ async function main(): Promise<void> {
   const sql = postgres(databaseUrl, { max: 2, prepare: false, onnotice: () => {} });
 
   try {
+    if (family === "maia3" && (!report.model.checkpoint || !report.model.bridge)) {
+      throw new Error("a Maia-3 report must identify the checkpoint and policy bridge");
+    }
+    const assets = family === "maia3"
+      ? [
+          {
+            kind: "binary" as const,
+            sha256: report.model.engineSha256,
+            byteSize: report.model.engineByteSize,
+            sourceUrl: "https://www.python.org/downloads/",
+          },
+          {
+            kind: "weights" as const,
+            sha256: report.model.checkpoint!.sha256,
+            byteSize: report.model.checkpoint!.byteSize,
+            sourceUrl:
+              "https://huggingface.co/UofTCSSLab/Maia3-5M/tree/b6559de2398d7140b985f28fd2c19fb5e47ddabe",
+          },
+          {
+            kind: "config" as const,
+            sha256: report.model.bridge!.sha256,
+            byteSize: report.model.bridge!.byteSize,
+            sourceUrl: "https://github.com/NKO42/forma-chess",
+          },
+        ]
+      : [
+          {
+            kind: "binary" as const,
+            sha256: report.model.engineSha256,
+            byteSize: report.model.engineByteSize,
+            sourceUrl: "https://github.com/LeelaChessZero/lc0/releases",
+          },
+          ...report.model.networks.map((network) => ({
+            kind: "weights" as const,
+            sha256: network.sha256,
+            byteSize: network.byteSize,
+            sourceUrl: `https://github.com/CSSLab/maia-chess/raw/master/maia_weights/maia-${network.band}.pb.gz`,
+          })),
+        ];
     const model = await registerHumanModel(sql, {
       version: modelVersion,
-      assets: [
-        {
-          kind: "binary",
-          sha256: report.model.engineSha256,
-          byteSize: report.model.engineByteSize,
-          sourceUrl: "https://github.com/LeelaChessZero/lc0/releases",
-        },
-        ...report.model.networks.map((network) => ({
-          kind: "weights" as const,
-          sha256: network.sha256,
-          byteSize: network.byteSize,
-          sourceUrl: `https://github.com/CSSLab/maia-chess/raw/master/maia_weights/maia-${network.band}.pb.gz`,
-        })),
-      ],
-      licence: MAIA_LICENCE,
-      provenance:
-        `CSSLab maia-chess maia_weights (bands ${report.model.networks.map((n) => n.band).join(", ")}), ` +
-        "executed through Lc0 at one node with policy softmax temperature 1.0.",
+      family,
+      assets,
+      licence: family === "maia3" ? MAIA3_LICENCE : MAIA_LICENCE,
+      provenance: family === "maia3"
+        ? "CSSLab Maia-3 code revision 1e13597c42d4858b7cfd7cfdae01e297263364b2 and UofTCSSLab/Maia3-5M checkpoint revision b6559de2398d7140b985f28fd2c19fb5e47ddabe, CPU-only with AMP disabled."
+        : `CSSLab maia-chess maia_weights (bands ${report.model.networks.map((n) => n.band).join(", ")}), executed through Lc0 at one node with policy softmax temperature 1.0.`,
     });
     console.log(`model      ${model.componentVersionId}`);
 

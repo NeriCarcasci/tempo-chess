@@ -17,6 +17,7 @@ import {
   type HoldoutPosition,
 } from "./holdout.js";
 import { MaiaEngine, MaiaUnavailableError, fileSha256, type MaiaNetwork } from "./maia.js";
+import { Maia3Engine, Maia3UnavailableError } from "./maia3.js";
 
 /**
  * Run a candidate human model against a frozen holdout and ask the gate.
@@ -30,9 +31,12 @@ import { MaiaEngine, MaiaUnavailableError, fileSha256, type MaiaNetwork } from "
  */
 
 interface Args {
+  adapter: "maia1" | "maia3";
   corpus: string;
   enginePath: string;
   weightsDir: string;
+  bridgePath: string;
+  checkpointPath: string;
   out: string;
   limit: number;
   trainingWindowEnd: string;
@@ -45,13 +49,19 @@ function parseArgs(argv: readonly string[]): Args {
       return [key, value] as const;
     }),
   );
+  const adapter = map.get("adapter") === "maia3" ? "maia3" : "maia1";
   return {
+    adapter,
     corpus: map.get("corpus") ?? "holdout.jsonl",
-    enginePath: map.get("engine") ?? "lc0",
+    enginePath: map.get("engine") ?? (adapter === "maia3" ? "python3" : "lc0"),
     weightsDir: map.get("weights") ?? ".",
+    bridgePath: map.get("bridge") ?? "maia3/bridge.py",
+    checkpointPath: map.get("checkpoint") ?? "/opt/forma/maia3/maia3-5m.pt",
     out: map.get("out") ?? "benchmark-result.json",
     limit: Number(map.get("limit") ?? Number.POSITIVE_INFINITY),
-    trainingWindowEnd: map.get("training-window-end") ?? "2020-01-01T00:00:00Z",
+    trainingWindowEnd:
+      map.get("training-window-end") ??
+      (adapter === "maia3" ? "2025-08-01T00:00:00Z" : "2020-01-01T00:00:00Z"),
   };
 }
 
@@ -78,9 +88,12 @@ export interface BenchmarkReport {
     earliestPlayedAt: string | null;
   };
   model: {
+    family?: "maia1" | "maia3";
     networks: { band: number; sha256: string; byteSize: number }[];
     engineSha256: string;
     engineByteSize: number;
+    checkpoint?: { sha256: string; byteSize: number };
+    bridge?: { sha256: string; byteSize: number };
   };
   verdict: PromotionVerdict;
   thresholds: typeof PROMOTION_THRESHOLDS;
@@ -102,16 +115,29 @@ async function main(): Promise<void> {
   const hash = manifestHash(positions);
 
   const { readdir } = await import("node:fs/promises");
-  const files = (await readdir(args.weightsDir)).map((name) => `${args.weightsDir}/${name}`);
-  const networks = networksFrom(files);
-  if (networks.length === 0) throw new Error(`no maia-*.pb.gz weights in ${args.weightsDir}`);
+  const networks = args.adapter === "maia1"
+    ? networksFrom((await readdir(args.weightsDir)).map((name) => `${args.weightsDir}/${name}`))
+    : [];
+  if (args.adapter === "maia1" && networks.length === 0) {
+    throw new Error(`no maia-*.pb.gz weights in ${args.weightsDir}`);
+  }
 
   console.log(`corpus     ${positions.length} positions, manifest ${hash.slice(0, 16)}`);
-  console.log(`networks   ${networks.map((n) => n.band).join(", ")}`);
+  console.log(
+    args.adapter === "maia1"
+      ? `networks   ${networks.map((n) => n.band).join(", ")}`
+      : `model      Maia-3 5M (${args.checkpointPath})`,
+  );
   console.log(`disjoint   ${rules.accountDisjoint}   chronological ${rules.chronologicalSplit}`);
   console.log("");
 
-  const engine = new MaiaEngine({ enginePath: args.enginePath, networks });
+  const engine = args.adapter === "maia3"
+    ? new Maia3Engine({
+        pythonPath: args.enginePath,
+        bridgePath: args.bridgePath,
+        checkpointPath: args.checkpointPath,
+      })
+    : new MaiaEngine({ enginePath: args.enginePath, networks });
   const outcomes = new Map<string, HoldoutOutcome[]>();
   let done = 0;
   let failures = 0;
@@ -135,7 +161,9 @@ async function main(): Promise<void> {
           latencyMs = inference.latencyMs;
         } catch (error) {
           failures += 1;
-          if (!(error instanceof MaiaUnavailableError)) throw error;
+          if (!(error instanceof MaiaUnavailableError) && !(error instanceof Maia3UnavailableError)) {
+            throw error;
+          }
         }
         list.push({
           accountKey: position.moverAccountKey,
@@ -152,7 +180,8 @@ async function main(): Promise<void> {
       outcomes.set(key, list);
     }
   } finally {
-    engine.close();
+    if (engine instanceof MaiaEngine) engine.close();
+    else engine.stop();
   }
 
   const sliceInputs = [...groupBySlice(positions).entries()]
@@ -190,6 +219,7 @@ async function main(): Promise<void> {
       earliestPlayedAt: rules.earliestPlayedAt,
     },
     model: {
+      family: args.adapter,
       networks: await Promise.all(
         networks.map(async (n) => ({
           band: n.band,
@@ -199,6 +229,18 @@ async function main(): Promise<void> {
       ),
       engineSha256: await fileSha256(args.enginePath),
       engineByteSize: (await stat(args.enginePath)).size,
+      checkpoint: args.adapter === "maia3"
+        ? {
+            sha256: await fileSha256(args.checkpointPath),
+            byteSize: (await stat(args.checkpointPath)).size,
+          }
+        : undefined,
+      bridge: args.adapter === "maia3"
+        ? {
+            sha256: await fileSha256(args.bridgePath),
+            byteSize: (await stat(args.bridgePath)).size,
+          }
+        : undefined,
     },
     verdict,
     thresholds: PROMOTION_THRESHOLDS,

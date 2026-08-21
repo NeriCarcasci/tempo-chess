@@ -82,7 +82,7 @@ check("no two deployments share an identity, a database role, or a database secr
   }
   const shared = inspectTopology(mutate("forma-ops", { databaseSecret: "forma-api-db-url" }));
   assert.ok(shared.some((finding) => finding.includes("shared by more than one deployment")));
-  return "4 identity fields unique across 5 deployments; a shared secret is refused";
+  return `4 identity fields unique across ${DEPLOYMENTS.length} deployments; a shared secret is refused`;
 });
 
 check("engine and provider work belong to one deployment each, and not to the API", () => {
@@ -106,7 +106,7 @@ check("no deployed unit can run the prototype in-process pipeline", () => {
     mutate("forma-analysis", { capabilities: ["model_inference", "prototype_pipeline"] }),
   );
   assert.ok(smuggled.some((finding) => finding.includes("prototype in-process pipeline")));
-  return "0 of 5 deployments hold it; granting it to one is refused";
+  return `0 of ${DEPLOYMENTS.length} deployments hold it; granting it to one is refused`;
 });
 
 check("every resource class has exactly one executor, except the one v1 does not schedule", () => {
@@ -141,11 +141,10 @@ check("a queue may not dispatch more work than its target can run", () => {
   return "every target absorbs its queues at peak; an oversubscribed queue is refused";
 });
 
-check("migration 0015 sets exactly the connection budget's peaks", () => {
-  const sql = readFileSync(
-    join(process.cwd(), "drizzle", "0015_e05_service_topology.sql"),
-    "utf8",
-  );
+check("migrations set exactly the current connection budget's peaks", () => {
+  const sql = ["0015_e05_service_topology.sql", "0038_maia3_position_continuations.sql"]
+    .map((file) => readFileSync(join(process.cwd(), "drizzle", file), "utf8"))
+    .join("\n");
   const peaks: string[] = [];
   for (const budget of SERVICE_BUDGETS) {
     const deployment = deploymentByName(budget.service)!;

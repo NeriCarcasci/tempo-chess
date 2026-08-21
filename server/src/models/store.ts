@@ -41,6 +41,8 @@ export interface ModelAsset {
 export interface HumanModelRegistration {
   /** Version string for this model build, e.g. "maia-1.0". */
   version: string;
+  /** Stable family discriminator used by runtime selection. Defaults to maia1. */
+  family?: "maia1" | "maia3";
   /** Networks and binary, by content hash. */
   assets: readonly ModelAsset[];
   licence: {
@@ -102,6 +104,8 @@ export async function registerHumanModel(
     implementationSha256: assetDigest.digest("hex"),
     configuration: { retainedMoveLimit: RETAINED_MOVE_LIMIT, policySoftmaxTemp: 1 },
     modelIdentity: {
+      family: input.family ?? "maia1",
+      version: input.version,
       assets: input.assets.map((a) => ({ kind: a.kind, sha256: a.sha256 })),
     },
     licence: input.licence.spdx,
@@ -351,16 +355,18 @@ export async function recordLifecycle(
  */
 export async function resolvePromotedHumanModel(sql: Queryable): Promise<string | null> {
   const [row] = await sql<{ component_version_id: string }[]>`
-    select distinct on (e.component_version_id) e.component_version_id, e.to_state
-    from analysis.component_lifecycle_events e
-    join analysis.model_profiles p on p.component_version_id = e.component_version_id
+    select cv.id as component_version_id
+    from analysis.component_versions cv
+    join analysis.model_profiles p on p.component_version_id = cv.id
+    join lateral (
+      select e.to_state from analysis.component_lifecycle_events e
+      where e.component_version_id = cv.id order by e.id desc limit 1
+    ) lifecycle on true
     where p.role = 'human_policy' and p.licence_review_status = 'cleared'
-    order by e.component_version_id, e.id desc
-  `.then((rows) =>
-    (rows as unknown as { component_version_id: string; to_state: string }[]).filter(
-      (r) => r.to_state === "production",
-    ),
-  );
+      and lifecycle.to_state = 'production'
+    order by cv.created_at desc, cv.id desc
+    limit 1
+  `;
   return row?.component_version_id ?? null;
 }
 

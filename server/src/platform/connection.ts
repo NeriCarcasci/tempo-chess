@@ -41,7 +41,8 @@ export const SERVICE_BUDGETS: readonly ServiceBudget[] = [
   { service: "forma-ops", role: "forma_ops", endpoint: "transaction_pooler", maxInstances: 2, poolPerInstance: 2 },
   { service: "forma-ingestion", role: "forma_ingestion", endpoint: "transaction_pooler", maxInstances: 4, poolPerInstance: 2 },
   { service: "forma-stockfish", role: "forma_stockfish", endpoint: "transaction_pooler", maxInstances: 6, poolPerInstance: 1 },
-  { service: "forma-analysis", role: "forma_analysis", endpoint: "transaction_pooler", maxInstances: 3, poolPerInstance: 2 },
+  { service: "forma-analysis", role: "forma_analysis", endpoint: "transaction_pooler", maxInstances: 2, poolPerInstance: 2 },
+  { service: "forma-maia", role: "forma_maia", endpoint: "transaction_pooler", maxInstances: 2, poolPerInstance: 1 },
 ];
 
 /** Connections a service can hold when it is scaled all the way out. */

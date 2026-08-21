@@ -56,6 +56,9 @@ alter table analysis.position_evaluations
 -- A position with no legal move has no best move, and a row that named one
 -- would be describing a search that never ran.
 alter table analysis.position_evaluations
+  drop constraint if exists position_evaluations_terminal_has_no_move
+--> statement-breakpoint
+alter table analysis.position_evaluations
   add constraint position_evaluations_terminal_has_no_move
   check (expected_score_method <> 'terminal' or best_move_uci is null)
 --> statement-breakpoint
