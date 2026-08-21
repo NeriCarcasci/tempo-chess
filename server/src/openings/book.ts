@@ -634,7 +634,21 @@ export async function readOpeningBook(
   };
 }
 
+/**
+ * The catalogue's own representative line, as moves.
+ *
+ * Whole or nothing, the same rule `parseLine` applies to a caller's line and
+ * for the same reason: dropping one malformed move would shift every move after
+ * it onto the wrong position, and the walk would then answer confidently about
+ * a line that does not exist. A catalogue row is machine-generated and should
+ * never fail this, so a failure means the import wrote something wrong and the
+ * honest response is to name no line rather than half of one.
+ */
 function splitUci(line: string | null): string[] {
   if (!line) return [];
-  return line.split(/\s+/).filter((move) => UCI.test(move));
+  try {
+    return parseLine(line);
+  } catch {
+    return [];
+  }
 }
