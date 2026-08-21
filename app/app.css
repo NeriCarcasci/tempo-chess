@@ -926,6 +926,10 @@
   }
   .line-count[data-kind="tears"] strong { color: var(--color-ink); font-weight: 680; }
   .line-count[data-kind="shaky"] strong { color: var(--color-ink); font-weight: 600; }
+  /* A line nobody has analysed is the quietest thing on the page. It is not a
+     finding, and giving it the weight of one would put the least informative
+     row in the loudest type. */
+  .line-count[data-kind="unjudged"] strong { color: var(--color-ink-faint); font-weight: 500; }
 
   /* -- the depth strip --------------------------------------------------
      The row's own picture of where its book gives out. Squares are the same
@@ -956,6 +960,19 @@
     box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-ink) 9%, transparent);
   }
   .line-sq[data-state="thin"] { background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-2)); }
+  /* Played, unjudged. Deliberately off the ramp and not empty either: hatching
+     says "there is something here and it has not been read", which is the one
+     thing neither an empty square nor a coloured one can say. Ink at low alpha,
+     so it cannot be mistaken for a faint step of the accent. */
+  .line-sq[data-state="unjudged"] {
+    background:
+      repeating-linear-gradient(
+        -45deg,
+        color-mix(in srgb, var(--color-ink) 13%, transparent) 0 2px,
+        transparent 2px 5px
+      ),
+      var(--color-surface-2);
+  }
   .line-sq[data-heat="holds"] { background: color-mix(in srgb, var(--color-accent) 24%, var(--color-surface)); }
   .line-sq[data-heat="shaky"] { background: color-mix(in srgb, var(--color-accent) 60%, var(--color-surface)); }
   .line-sq[data-heat="tears"] { background: color-mix(in srgb, var(--color-accent) 88%, var(--color-ink)); }
@@ -1036,6 +1053,22 @@
   .line-row.is-next .line-practice:hover {
     background: color-mix(in srgb, var(--color-accent) 92%, #fff);
   }
+  /* Kept for the day a control here has nothing to point at. Written last and
+     specific enough to beat the row-hover and marked-row fills above, which
+     would otherwise light up something that does nothing. */
+  .line-practice:disabled,
+  .line-row:hover .line-practice:disabled,
+  .line-row.is-open .line-practice:disabled,
+  .line-row.is-next .line-practice:disabled {
+    color: var(--color-ink-faint);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-ink) 8%, transparent);
+    transform: none;
+    cursor: not-allowed;
+  }
+  /* Meaning is never colour-only: the strike says "off" without relying on the
+     grey being read as one. */
+  .line-practice:disabled { text-decoration: line-through; text-decoration-thickness: 1px; }
 
   /* -- what is inside a line --------------------------------------------- */
   .line-panel { padding: 0 0.8rem 0.8rem; }
@@ -1048,6 +1081,7 @@
     grid-template-areas:
       "claim      boards"
       "instrument boards"
+      "book       book"
       "variations variations"
       "walk       walk";
     align-content: start;
@@ -1069,7 +1103,75 @@
     grid-area: boards; align-self: start;
     display: flex; flex-wrap: wrap; gap: 0.6rem;
   }
-  .line-explore { grid-area: walk; justify-self: start; margin-top: -0.15rem; }
+  /* The panel's own way out: the walk, and the written lesson when the line
+     has one. Two quiet buttons on one row, never competing with the accented
+     Practice pill in the row header above them. */
+  .line-panel-actions {
+    grid-area: walk; justify-self: start; margin-top: -0.15rem;
+    display: flex; flex-wrap: wrap; gap: 0.5rem;
+  }
+
+  /* -- the book ----------------------------------------------------------
+     What the line is called, what the catalogue plays from the square the
+     sheet is pointing at, and which of the reader's own moves left it. The
+     diagnosis above it is only worth having if the treatment is in reach, so
+     it sits inside the same well rather than a click away.
+
+     It sits on the panel's own ground with no card of its own: the well is
+     already a surface change, and a second one inside it would read as a
+     dialog dropped into a row. */
+  .line-book { grid-area: book; min-width: 0; }
+  .line-book-name {
+    margin-top: 0.35rem;
+    display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap;
+    font-size: 0.98rem; font-weight: 620; letter-spacing: -0.018em; color: var(--color-ink);
+  }
+  .line-book-eco {
+    font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600;
+    color: var(--color-ink-faint); letter-spacing: 0.02em;
+  }
+  .line-book-note {
+    max-width: 60ch; margin-top: 0.4rem;
+    font-size: 0.82rem; line-height: 1.55; color: var(--color-ink-muted);
+  }
+  .line-book-sub { margin-top: 1rem; }
+  /* Three columns so the eye can run down the move, then down what it leads
+     to, then down the counts, instead of re-parsing a sentence per row. */
+  .line-book-moves {
+    margin-top: 0.5rem; display: flex; flex-direction: column; gap: 1px;
+  }
+  .line-book-moves li {
+    display: grid; align-items: baseline;
+    grid-template-columns: minmax(3.5rem, auto) minmax(0, 1fr) minmax(0, auto);
+    gap: 0.4rem clamp(0.6rem, 1.6vw, 1.25rem);
+    padding: 0.32rem 0.5rem; border-radius: var(--radius-control);
+  }
+  .line-book-moves li:nth-child(odd) { background: color-mix(in srgb, var(--color-ink) 3%, transparent); }
+  .line-book-san {
+    font-family: var(--font-mono); font-size: 0.82rem; font-weight: 650; color: var(--color-ink);
+  }
+  .line-book-leads {
+    font-size: 0.8rem; color: var(--color-ink-muted); min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .line-book-yours {
+    text-align: right; font-family: var(--font-mono); font-size: 0.7rem;
+    color: var(--color-ink-muted); font-variant-numeric: tabular-nums;
+  }
+
+  /* -- the sheet's own filter row, and the walk under a named line ------- */
+  .lsheet-filter {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem;
+    padding-bottom: clamp(1.25rem, 3vw, 2rem); font-size: 0.8rem;
+  }
+  .lsheet-walk { margin-top: clamp(2.5rem, 5vw, 4rem); }
+  .lsheet-walk h2 {
+    font-size: 1.35rem; font-weight: 640; letter-spacing: -0.022em; color: var(--color-ink);
+  }
+  .lsheet-walk > p {
+    max-width: 62ch; margin-top: 0.6rem; margin-bottom: 1.25rem;
+    font-size: 0.9rem; line-height: 1.6; color: var(--color-ink-muted);
+  }
 
   .line-variations { grid-area: variations; margin-top: 0.35rem; }
   .line-variations .cap { margin-bottom: 0.45rem; }
@@ -1357,7 +1459,7 @@
     .line-count { grid-area: verdict; text-align: right; }
     .line-panel-inner {
       grid-template-columns: minmax(0, 1fr);
-      grid-template-areas: "claim" "instrument" "boards" "variations" "walk";
+      grid-template-areas: "claim" "instrument" "boards" "book" "variations" "walk";
     }
     .line-variation {
       grid-template-columns: minmax(0, 1fr) auto;
@@ -1382,6 +1484,11 @@
     }
     .line-count { text-align: left; }
     .line-practice { justify-self: stretch; }
+    /* Three columns of book data in a phone's width leaves each of them two
+       words wide. Stacked, the move still leads and the counts still line up
+       under it. */
+    .line-book-moves li { grid-template-columns: minmax(0, 1fr); gap: 0.1rem; }
+    .line-book-yours { text-align: left; }
   }
 
   @media (prefers-reduced-motion: reduce) {

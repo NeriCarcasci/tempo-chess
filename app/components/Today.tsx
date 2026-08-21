@@ -217,8 +217,10 @@ function Shape({
             one counts a move outside the engine's stated tolerance, which is
             0.02 of expected score against the best line the same search found.
             Two different rules wearing the same word is exactly the kind of
-            quiet reclassification the tolerance is versioned to prevent, and
-            /openings still reads the old graph and still says 90cp. */}
+            quiet reclassification the tolerance is versioned to prevent. Both
+            surfaces now read the canonical graph — /openings moved onto it with
+            the sheet — so the two figures agree, and each still names the rule
+            it was counted by. */}
         <figcaption>
           Your own move number. {shape.total} mistakes in total, counted where the
           move played cost more than 0.02 of expected score against the engine's

@@ -161,8 +161,18 @@ Product:
   private vocabulary for things chess already names. See the vocabulary rule in
   the component header: **never invent a word for something chess already
   names, and never write a sentence where a measurement will do.** A `failure`
-  in the model is a move outside book and repertoire that lost 90cp or more,
-  which is a *mistake*, so the page says mistake and states the threshold.
+  in the model is a move Forma's published analysis judged outside the
+  versioned tolerance, which is a *mistake*, so the page says mistake and
+  states the threshold it was counted by.
+
+  **A fourth square state: unjudged.** A move played in a game nothing has
+  analysed is drawn hatched, off the heat ramp. Blank would say the player
+  never went that deep and a colour would put a failure rate on a sample of
+  zero, so it gets its own mark, and a row where nothing is judged says "Not
+  analysed yet" instead of "No mistakes". The account-wide figure — how many of
+  the player's opening moves have been analysed against how many they played —
+  is stated once, under the key, because it is the denominator behind every
+  number above it.
 
   **Exactly one Practice button is accented at a time** — the marked line's.
   Every other row carries the same control in the same slot as a quiet ghost
@@ -171,6 +181,29 @@ Product:
   gamification device here: an active node and a quiet path, in the sense
   Duolingo means it and not in the sense PRODUCT.md's anti-reference refuses.
   No badges, no streaks, no coins, no confetti.
+
+  Practice goes to `/train`, which is not a `/v1` surface: it builds its lines
+  from the prototype opening graph and therefore selects them by the older
+  90-centipawn rule. The sheet says so, once under the key and again in the
+  control's accessible name, because a reader who tabs to the button never
+  passes the note. Silently handing somebody from a number counted one way into
+  a drill chosen another way is the exact confusion the threshold line exists
+  to prevent. `/v1` has a practice queue, an attempt and a refill and none of
+  them takes an opening, so there is nothing yet to repoint it at; when there
+  is, the note goes and nothing else about the row changes.
+
+  **A written lesson, when one exists, sits in the open panel** beside "Walk
+  this line" — not in the row header. Thirteen openings have authored prose and
+  the rest do not, and a control that appears on some rows and not others turns
+  the header from something you scan into something you read.
+
+  **The book sits inside the open row.** Under the strip and the boards: what
+  the line is called and its ECO code, the catalogue's moves from the selected
+  square with how often the player takes each, and the move where the player's
+  own line left the book. The sheet says which square costs the most; the book
+  is what there is to study about it, and putting it a click away would leave
+  the page as a diagnosis with no treatment in reach. It is fetched when a row
+  opens, never per row on the list.
 
   The strip is a **picture when the row is closed and an instrument when it is
   open**: presentational spans become buttons, grow, and take move numbers on
@@ -214,11 +247,12 @@ Product:
   Same for the import control the "Then" list used to offer: `/v1` has no
   importer, because games arrive with an examination run.
 
-  Note the threshold drift while both surfaces are live. Today counts a mistake
-  against the canonical tolerance — 0.02 of expected score against the best
-  line the same search found — and `/openings` still reads the prototype graph
-  and still counts 90cp. Both pages state their own threshold under the figure,
-  which is the only thing that makes two numbers under one word survivable.
+  The threshold drift is over. Today and `/openings` both read
+  `GET /v1/openings/explorer` and both count a mistake against the canonical
+  tolerance — 0.02 of expected score against the best line the same search
+  found. Each still states that threshold under its own figure: a stated
+  measurement is worth keeping even when there is no longer a second one to
+  tell it apart from.
 
 The landing is exactly six beats: hero, statement, scale, showcase, beta note,
 closer.

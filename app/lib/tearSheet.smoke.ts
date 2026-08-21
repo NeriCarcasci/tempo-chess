@@ -17,6 +17,16 @@ const node = (
   nm?: string,
 ): OpeningGraphNode => ({ k, p, g, o: 0, f: 0, t: 0, x: 0, nm });
 
+/**
+ * The actor is now load-bearing and is stated per edge.
+ *
+ * Every edge in this fixture used to be `mixed`, which was harmless while the
+ * sheet only pooled edges that already carried a verdict. It stopped being
+ * harmless when unjudged player decisions started being pooled too: an
+ * opponent's choice marked `mixed` would be counted as the player's own
+ * unanalysed move, and the Sicilian would appear to start a move earlier than
+ * the player has any decision in it.
+ */
 const edge = (
   a: number,
   b: number,
@@ -24,8 +34,9 @@ const edge = (
   g: number,
   op = 0,
   fa = 0,
+  ac: OpeningGraphEdge["ac"] = "p",
   lb?: string,
-): OpeningGraphEdge => ({ a, b, u: "0000", s, g, sh: 0, ac: "m", op, fa, lb });
+): OpeningGraphEdge => ({ a, b, u: "0000", s, g, sh: 0, ac, op, fa, lb });
 
 // -- as White ---------------------------------------------------------------
 // root -e4-> n1 -c5-> n2(Sicilian) -Nf3-> n3 -d6-> n4(Najdorf) -d4-> n6
@@ -44,15 +55,15 @@ const whiteNodes = [
   node("it3", 3, 3),                                         // 9
 ];
 const whiteEdges = [
-  edge(0, 1, "e4", 70, 30, 2),   // White move 1 — before any family is known
-  edge(1, 2, "c5", 45),          // opponent enters the Sicilian
-  edge(2, 3, "Nf3", 44, 20, 1),  // White move 2, family known, no variation yet
-  edge(3, 4, "d6", 12),
-  edge(3, 5, "g6", 30),
-  edge(4, 6, "d4", 11, 10, 5),   // White move 3 — the tear
-  edge(5, 7, "d4", 29, 50, 2),   // White move 3 — solid, and much bigger
-  edge(1, 8, "e5", 4),
-  edge(8, 9, "Nf3", 3, 3, 1),    // White move 2 — only 3 decisions: thin
+  edge(0, 1, "e4", 70, 30, 2),        // White move 1 — before any family is known
+  edge(1, 2, "c5", 45, 0, 0, "o"),    // opponent enters the Sicilian
+  edge(2, 3, "Nf3", 44, 20, 1),       // White move 2, family known, no variation yet
+  edge(3, 4, "d6", 12, 0, 0, "o"),
+  edge(3, 5, "g6", 30, 0, 0, "o"),
+  edge(4, 6, "d4", 11, 10, 5),        // White move 3 — the tear
+  edge(5, 7, "d4", 29, 50, 2),        // White move 3 — solid, and much bigger
+  edge(1, 8, "e5", 4, 0, 0, "o"),
+  edge(8, 9, "Nf3", 3, 3, 1),         // White move 2 — only 3 decisions: thin
 ];
 const white: OpeningGraph = { games: 90, root: 0, nodes: whiteNodes, edges: whiteEdges };
 
@@ -64,7 +75,7 @@ const blackNodes = [
   node("c6", 2, 25, "Caro-Kann Defense"),
 ];
 const blackEdges = [
-  edge(0, 1, "e4", 38),
+  edge(0, 1, "e4", 38, 0, 0, "o"),
   edge(1, 2, "c6", 25, 15, 1), // Black move 1 — choosing the Caro-Kann
 ];
 const black: OpeningGraph = { games: 40, root: 0, nodes: blackNodes, edges: blackEdges };

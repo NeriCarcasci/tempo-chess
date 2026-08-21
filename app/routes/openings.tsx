@@ -1,43 +1,65 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Form, Link, useFetcher, useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import type { ShouldRevalidateFunctionArgs } from "react-router";
 import type { Route } from "./+types/openings";
-import { requireSession, peekSession } from "../lib/session";
-import { api, apiFetch, apiMaybe } from "../lib/api";
-import { fetchRepertoire, toggleRepertoireOpening } from "../lib/account";
-import { lessonForFamily } from "../lib/lessons";
-import { InfoTip } from "../components/InfoTip";
-import { OpeningExplorer } from "../components/OpeningExplorer";
+import { requireSession } from "../lib/session";
+import { RouteError } from "../components/RouteError";
 import { TearSheet } from "../components/TearSheet";
-import { deriveTearSheet, type TearSheet as TearSheetModel } from "../lib/tearSheet";
 import { TopNav } from "../components/TopNav";
-import { loadBoardTheme } from "../lib/boardThemes";
-import { loadPieceSet } from "../lib/pieceSets";
+import { EmptyState } from "../components/v1/Honesty";
+import { OpeningExplorer } from "../components/v1/OpeningExplorer";
+import { deriveTearSheet, type TearSheet as TearSheetModel } from "../lib/tearSheet";
 import { openingSlug } from "../lib/openingContent";
-import { getCached, setCached, invalidateCache } from "../lib/loaderCache";
+import { getCached, setCached } from "../lib/loaderCache";
 import {
-  type OpeningExplorerData,
-  type OpeningFamily,
-  type PlayerCoverage,
-} from "../lib/openings";
+  explorerEmptyCopy,
+  explorerEmptyReason,
+  getOpeningExplorer,
+  walkable,
+  type ExplorerEmptyReason,
+} from "../lib/v1/openings";
+import type { OpeningExplorerCoverage, OpeningGraphV1 } from "../lib/v1/types";
 
-interface ExplorerData {
-  needsSide: false;
-  kind: "explorer";
-  explorer: OpeningExplorerData & { error?: string };
-  coverage: PlayerCoverage | null;
-  initialFamily: string | null;
-  color: "white" | "black";
-}
-
-interface SheetData {
-  needsSide: false;
-  /** The sheet stands alone: pick a side, then read that side's grid. */
-  kind: "sheet";
-  sheet: TearSheetModel;
-  username: string;
-  color: "white" | "black";
-}
+/**
+ * `/openings` — the opening sheet, on the canonical system.
+ *
+ * This screen and `/explorer` were the same product idea built twice against
+ * two different APIs. `/openings` read the prototype's `GET /opening-explorer`,
+ * `POST /analyze` and `POST /opening-explorer/drills`, all of which are being
+ * deleted; `/explorer` read `GET /v1/openings/explorer` and rendered a walk with
+ * none of the sheet the tear-sheet layout gives. There is now one screen, and it
+ * reads `/v1`.
+ *
+ * ## What changed with the source, and where the page says so
+ *
+ * **A mistake is measured differently.** The prototype graph called a move a
+ * mistake when it lost 90 centipawns against a stored evaluation. The canonical
+ * system calls it a mistake when a published analysis judged it outside a
+ * versioned tolerance — more than 0.02 of expected score against the best line
+ * the *same search* found (`server/src/engine/contract.ts`). Same word, a
+ * different measurement, so `TearSheet` prints the rule under the figures
+ * rather than carrying the old sentence across.
+ *
+ * **"Too few games" is gone.** It was a threshold guess with no number behind
+ * it, and it fired for two unrelated situations at once. `/v1` returns real
+ * coverage instead: `coverage.playerDecisions` against
+ * `coverage.scoredDecisions`, whose difference is the caller's own opening moves
+ * that nobody has judged. The sheet states that gap at the top and never says
+ * "no mistakes" about a line where nothing was judged.
+ *
+ * ## Both sides at once
+ *
+ * The old screen opened on a door — pick White or Black, then see anything. The
+ * sheet already labels its two sections and `/today` already pools both, so the
+ * gate was a choice a reader was asked to make before there was anything to
+ * base it on. Side is now a filter, in the query string, and it starts off.
+ *
+ * ## Route shape
+ *
+ * `/openings/:familySlug` is this same screen with that line's row open, and it
+ * additionally fetches the family-focused graph so the walk that used to live at
+ * `/explorer` appears under the sheet. One screen, one layout, one API; the
+ * deeper route adds a section rather than a second page.
+ */
 
 export function meta() {
   return [
@@ -46,537 +68,258 @@ export function meta() {
   ];
 }
 
-export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const session = await requireSession();
-  const url = new URL(request.url);
-  const color = url.searchParams.get("color");
-  const familySlug = url.pathname.startsWith("/openings/")
-    ? url.pathname.split("/").filter(Boolean).at(-1)
-    : null;
-
-  // Side first, as it always was — you study one repertoire at a time, and the
-  // sheet needs the whole page once you have chosen.
-  if (color !== "white" && color !== "black" && !familySlug) {
-    return { needsSide: true as const };
-  }
-  const side: "white" | "black" = color === "black" ? "black" : "white";
-
-  // A chosen side with no family yet: the sheet is the page. Drilling into a
-  // line goes to /openings/:slug, which is where the explorer lives.
-  if (!familySlug) {
-    const sheetKey = `openings:sheet:${session.username}:${side}`;
-    const cachedSheet = getCached<SheetData>(sheetKey, 60_000);
-    if (cachedSheet) return cachedSheet;
-
-    const query = new URLSearchParams({ username: session.username, color: side });
-    const data = await apiMaybe<OpeningExplorerData>(`/opening-explorer?${query}`);
-    const graph = data?.graph ?? null;
-    const result: SheetData = {
-      needsSide: false,
-      kind: "sheet",
-      sheet: deriveTearSheet(side === "white" ? graph : null, side === "black" ? graph : null),
-      username: session.username,
-      color: side,
-    };
-    setCached(sheetKey, result);
-    return result;
-  }
-
-  const query = new URLSearchParams(url.search);
-  query.set("username", session.username);
-  query.set("color", side);
-  const username = session.username;
-
-  const cacheKey = `openings:${username}:${url.pathname}${url.search}`;
-  const cached = getCached<ExplorerData>(cacheKey, 60_000);
-  if (cached) return cached;
-
-  // Coverage hits the live Lichess API for the total game count, which
-  // rate-limits; it's non-critical, so degrade rather than break the explorer.
-  const [explorer, coverage] = await Promise.all([
-    api<OpeningExplorerData & { error?: string }>(`/opening-explorer?${query}`),
-    apiMaybe<PlayerCoverage>(`/players/${encodeURIComponent(username)}/coverage`),
-  ]);
-
-  // Resolve a deep-linked family (either ?family= or the /openings/:slug route)
-  // to a name the explorer can focus. The graph already carries every family.
-  let initialFamily = query.get("family") ?? null;
-  if (!initialFamily && familySlug) {
-    const matched = explorer.families.find((family) => openingSlug(family.family) === familySlug);
-    if (matched) initialFamily = matched.family;
-  }
-
-  const result: ExplorerData = { needsSide: false, kind: "explorer", explorer, coverage, initialFamily, color: side };
-  setCached(cacheKey, result);
-  return result;
+interface SheetData {
+  sheet: TearSheetModel;
+  /** Both colours pooled: a game has one subject colour, so nothing double counts. */
+  coverage: OpeningExplorerCoverage;
+  /**
+   * Why there is nothing to read.
+   *
+   * `no_graph` carries the API's own reason for having no positions at all.
+   * `no_lines` is the different case where positions exist but none of them
+   * belongs to a named opening the player has a decision in — a handful of
+   * games that ended before move two, most often. Collapsing the two would
+   * tell a player with games that Forma has not received their games.
+   */
+  empty:
+    | { kind: "no_graph"; reason: ExplorerEmptyReason }
+    | { kind: "no_lines" }
+    | null;
+  /** The family named by the URL, resolved to the row it opens. */
+  openFamily: string | null;
+  /** The family-focused graph, present only on `/openings/:familySlug`. */
+  walk: { graph: OpeningGraphV1; coverage: OpeningExplorerCoverage; playingAs: "white" | "black" } | null;
+  /** The side filter as the query string set it, or null for both. */
+  side: "white" | "black" | null;
 }
 
-export async function clientAction({ request }: Route.ClientActionArgs) {
-  const form = await request.formData();
-  const intent = form.get("intent");
-  // Any opening mutation (sync import or new drill) can change cached hub/explorer
-  // data — clear the client loader cache so the next navigation reflects it.
-  invalidateCache();
-  if (intent === "sync") {
-    const response = await apiFetch("/imports/lichess", {
-      json: { username: form.get("username"), games: "all" },
-    });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) return { ok: false, intent, message: data?.error ?? "Could not sync games." };
-    return { ok: true, intent, message: `Syncing ${data.import.requestedGames} games from Lichess.` };
-  }
+const SIDES = new Set(["white", "black"]);
 
-  const response = await apiFetch("/opening-explorer/drills", {
-    json: {
-      username: form.get("username"),
-      positionKey: form.get("positionKey"),
-    },
-  });
-  const data = await response.json().catch(() => null);
-  if (!response.ok) return { ok: false, intent: "drill", message: data?.error ?? "Could not create practice." };
-  return { ok: true, intent: "drill", message: "Position added to your practice queue." };
+/**
+ * Both colours, then the sheet.
+ *
+ * Two requests rather than one unfiltered request, because the sheet's sections
+ * are per colour and a pooled graph cannot say which side a line belongs to —
+ * the same position occurs in a White repertoire and a Black one and the
+ * verdicts are about different players' decisions. `walkable` is the whole
+ * adapter between the v1 and legacy encodings: they differ only in a loss field
+ * the sheet never reads.
+ */
+export async function clientLoader({ request }: Route.ClientLoaderArgs): Promise<SheetData> {
+  const session = await requireSession();
+  const url = new URL(request.url);
+  const colour = url.searchParams.get("color");
+  const side = colour && SIDES.has(colour) ? (colour as "white" | "black") : null;
+  // Read off the path rather than `params`. This module serves both `/openings`
+  // and `/openings/:familySlug`, and the generated types for the index route
+  // know nothing about the parameter the deeper one carries.
+  const familySlug = url.pathname.startsWith("/openings/")
+    ? url.pathname.split("/").filter(Boolean).at(-1) ?? null
+    : null;
+
+  // Keyed by the profile, not a handle. The server resolves the subject from
+  // the token, so a username in the key would collide two accounts that happen
+  // to share one.
+  const cacheKey = `openings:${session.userId}:${side ?? "both"}:${familySlug ?? ""}`;
+  const cached = getCached<SheetData>(cacheKey, 60_000);
+  if (cached) return cached;
+
+  const [white, black] = await Promise.all([
+    side === "black" ? null : getOpeningExplorer({ color: "white" }),
+    side === "white" ? null : getOpeningExplorer({ color: "black" }),
+  ]);
+
+  const sheet = deriveTearSheet(
+    white?.graph ? walkable(white.graph) : null,
+    black?.graph ? walkable(black.graph) : null,
+  );
+
+  const coverage: OpeningExplorerCoverage = {
+    games: (white?.coverage.games ?? 0) + (black?.coverage.games ?? 0),
+    observations: (white?.coverage.observations ?? 0) + (black?.coverage.observations ?? 0),
+    scoredDecisions:
+      (white?.coverage.scoredDecisions ?? 0) + (black?.coverage.scoredDecisions ?? 0),
+    playerDecisions:
+      (white?.coverage.playerDecisions ?? 0) + (black?.coverage.playerDecisions ?? 0),
+    unanalysedGames:
+      (white?.coverage.unanalysedGames ?? 0) + (black?.coverage.unanalysedGames ?? 0),
+  };
+
+  // The slug is resolved against the sheet's own rows rather than against the
+  // API's family list. They can differ: the sheet folds catalogue waypoints
+  // like "Queen's Pawn Game" into the line that grew out of them, so a row
+  // exists under a name no family summary carries.
+  //
+  // The section is kept along with the row, not re-derived. The walk is fetched
+  // per colour, and guessing the colour from the filter would fetch the White
+  // graph for a Black defence whenever no side filter is set — a page whose
+  // heading named one line and whose board walked another.
+  const found =
+    familySlug === null
+      ? null
+      : sheet.sections
+          .flatMap((section) => section.rows.map((row) => ({ row, color: section.color })))
+          .find(({ row }) => openingSlug(row.family) === familySlug) ?? null;
+  const openFamily = found?.row.family ?? null;
+
+  // The walk, fetched only when a family names one. Asking for it on the index
+  // would spend a request per visit on a section nobody has opened.
+  const walk =
+    found === null
+      ? null
+      : await getOpeningExplorer({ color: found.color, family: found.row.family })
+          .then((data) =>
+            data.graph
+              ? { graph: data.graph, coverage: data.coverage, playingAs: found.color }
+              : null,
+          )
+          // A missing walk is a missing section, not a failed page: the sheet
+          // above it came from a different read and is still true.
+          .catch(() => null);
+
+  const data: SheetData = {
+    sheet,
+    coverage,
+    empty:
+      sheet.sections.length > 0
+        ? null
+        : white?.graph || black?.graph
+          ? { kind: "no_lines" as const }
+          : {
+              kind: "no_graph" as const,
+              reason: explorerEmptyReason({
+                coverage: { games: coverage.games },
+                // Asked against the pooled view. Passing the side filter
+                // through would report "no games match these filters" to a
+                // reader who set no filter and has no games.
+                filters: { color: null, speed: null, provider: null, family: null },
+              }),
+            },
+    openFamily,
+    walk,
+    side,
+  };
+  setCached(cacheKey, data);
+  return data;
 }
 
 /**
- * The whole opening graph ships with the loader, so walking branches is pure
- * client state. Only a genuinely different dataset (a new player or a changed
- * filter) or a mutation needs a refetch.
+ * The whole sheet ships with the loader, so opening a row is pure client state.
+ * Only a different dataset — a new side, or a different family — needs a
+ * refetch.
  */
 export function shouldRevalidate({
   currentUrl,
   nextUrl,
-  formMethod,
   defaultShouldRevalidate,
 }: ShouldRevalidateFunctionArgs) {
-  if (formMethod && formMethod.toUpperCase() !== "GET") return true;
-  const keys = ["username", "platform", "speed", "color", "since"];
-  if (keys.some((key) => currentUrl.searchParams.get(key) !== nextUrl.searchParams.get(key))) {
-    return true;
-  }
-  if (currentUrl.pathname === nextUrl.pathname) return defaultShouldRevalidate;
-  // Navigating between /openings and /openings/:slug never needs new data.
-  return false;
+  if (currentUrl.searchParams.get("color") !== nextUrl.searchParams.get("color")) return true;
+  if (currentUrl.pathname !== nextUrl.pathname) return true;
+  return defaultShouldRevalidate;
 }
 
-function CoverageBar({ coverage, username }: { coverage: PlayerCoverage | null; username: string }) {
-  const sync = useFetcher<typeof clientAction>();
-  if (!coverage) return null;
-  const busy = sync.state !== "idle" || coverage.activeImport != null;
-  const complete = coverage.historyComplete;
-  const percent = coverage.availableGames
-    ? Math.min(100, Math.round((coverage.importedGames / coverage.availableGames) * 100))
-    : 0;
-
-  return (
-    <section className="coverage-bar" aria-label="Game history coverage">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <strong>{coverage.importedGames} of {coverage.availableGames} Lichess games imported</strong>
-          <InfoTip label="game coverage">
-            Opening patterns sharpen as more of your history is added. Non-standard variants are skipped.
-          </InfoTip>
-        </div>
-        <div className="coverage-track" aria-hidden="true">
-          <span style={{ width: `${percent}%` }} />
-        </div>
-        <p>
-          {complete
-            ? coverage.skippedGames > 0
-              ? `${coverage.analyzedGames} games have engine analysis. ${coverage.skippedGames} non-standard ${coverage.skippedGames === 1 ? "game was" : "games were"} skipped.`
-              : `${coverage.analyzedGames} games have engine analysis.`
-            : `${coverage.availableGames - coverage.importedGames} ${coverage.availableGames - coverage.importedGames === 1 ? "game is" : "games are"} still missing from this map.`}
-        </p>
-      </div>
-      {!complete ? (
-        <sync.Form method="post">
-          <input type="hidden" name="intent" value="sync" />
-          <input type="hidden" name="username" value={username} />
-          <button className="secondary-button" disabled={busy}>
-            {busy ? "Syncing games…" : "Import all games"}
-          </button>
-        </sync.Form>
-      ) : null}
-      {sync.data ? <p className="sr-only" aria-live="polite">{sync.data.message}</p> : null}
-    </section>
-  );
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  return <RouteError title="Could not load your openings" error={error} />;
 }
 
-function Filters({ username, params }: { username: string; params: URLSearchParams }) {
-  const today = new Date();
-  const since = (days: number) => {
-    const date = new Date(today);
-    date.setDate(date.getDate() - days);
-    return date.toISOString().slice(0, 10);
-  };
-  const filters = [
-    { name: "platform", label: "Site", options: [["all", "All sites"], ["lichess", "Lichess"], ["chesscom", "Chess.com"]] },
-    { name: "speed", label: "Time control", options: [["all", "All speeds"], ["bullet", "Bullet"], ["blitz", "Blitz"], ["rapid", "Rapid"], ["classical", "Classical"]] },
-    { name: "since", label: "Games played", options: [["", "All time"], [since(90), "Last 90 days"], [since(180), "Last 6 months"], [since(365), "Last year"]] },
-  ];
+export default function OpeningsRoute({ loaderData }: Route.ComponentProps) {
+  const { sheet, coverage, empty, openFamily, walk, side } = loaderData as SheetData;
 
-  return (
-    <details className="opening-filters">
-      <summary>Narrow the games</summary>
-      <Form method="get" className="opening-filter-grid">
-        <input type="hidden" name="username" value={username} />
-        <input type="hidden" name="color" value={params.get("color") ?? "white"} />
-        {filters.map(({ name, label, options }) => (
-          <label key={name}>
-            <span>{label}</span>
-            <select name={name} defaultValue={params.get(name) ?? options[0]![0]}>
-              {options.map(([value, copy]) => <option key={value} value={value}>{copy}</option>)}
-            </select>
-          </label>
-        ))}
-        <button className="secondary-button">Apply</button>
-      </Form>
-    </details>
-  );
-}
-
-function KingTile({ color, label, blurb }: { color: "white" | "black"; label: string; blurb: string }) {
-  const theme = loadBoardTheme();
-  const pieces = loadPieceSet();
-  const white = color === "white";
-  return (
-    <Link to={`/openings?color=${color}`} className="side-tile">
-      <span className="side-tile-king" style={{ background: theme.dark }} aria-hidden="true">
-        {pieces.svg ? (
-          <svg
-            viewBox="0 0 45 45"
-            style={{
-              ["--pc-fill" as string]: white ? pieces.whiteFill : pieces.blackFill,
-              ["--pc-line" as string]: white ? pieces.whiteStroke : pieces.blackStroke,
-            }}
-          >
-            <g
-              fill="var(--pc-fill)"
-              stroke="var(--pc-line)"
-              strokeWidth={1.5}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              dangerouslySetInnerHTML={{ __html: pieces.svg.k }}
-            />
-          </svg>
-        ) : (
-          <span className="side-king-glyph" style={{ color: white ? pieces.whiteFill : pieces.blackFill }}>
-            {white ? "♔" : "♚"}
-          </span>
-        )}
-      </span>
-      <span className="side-tile-label">
-        <strong>{label}</strong>
-        <small>{blurb}</small>
-      </span>
-    </Link>
-  );
-}
-
-/** The start gate: choosing a side is the only thing on the page. */
-/**
- * The page's instrument. Every line the player walks, how deep their book
- * runs, and the single square worth starting from — with the two sides shown
- * together rather than behind a choice made before there was anything to see.
- *
- * Falls back to the old side tiles when there is nothing to draw yet: a sheet
- * of entirely empty squares tells a new player less than a door does.
- */
-function SideGate() {
-  return (
-    <div className="relative z-10 min-h-dvh">
-      <TopNav current="openings" />
-      <main className="side-gate">
-        <div className="side-gate-inner">
-          <p className="eyebrow">Opening explorer</p>
-          <h1>Which side do you want to study?</h1>
-          <p className="side-gate-sub">
-            Pick a side and Forma shows the openings you actually play from there. You can switch any time.
-          </p>
-          <div className="side-tiles">
-            <KingTile color="white" label="As White" blurb="Your 1.e4 / 1.d4 repertoire" />
-            <KingTile color="black" label="As Black" blurb="Your defences to 1.e4 / 1.d4" />
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-/**
- * One side's repertoire as the whole page: every line it walks, and how far
- * the book runs before it gives out.
- */
-function SheetView({ sheet, username, color }: SheetData) {
-  const [params] = useSearchParams();
-  const empty = sheet.sections.length === 0;
   return (
     <div className="relative z-10 min-h-dvh">
       <TopNav current="openings" />
       <main className="tsheet-page">
-        <SideBreadcrumb playingAs={color} params={params} />
-        {/* No heading, no lede. The sheet opens on the task the way a game
-            opens on the next lesson — chrome would only push it down. */}
-        {empty ? (
-          <header className="tsheet-page-head">
-            <h1>Nothing to read yet</h1>
-            <p>Your first rows appear once Forma has read about ten games from this side.</p>
-          </header>
-        ) : (
-          <TearSheet sheet={sheet} username={username} />
-        )}
+        <SideFilter side={side} family={openFamily} />
+        {empty ? <NothingToRead empty={empty} games={coverage.games} /> : null}
+        {sheet.sections.length ? (
+          <TearSheet
+            key={openFamily ?? "all"}
+            sheet={sheet}
+            coverage={coverage}
+            openFamily={openFamily}
+          />
+        ) : null}
+        {walk && openFamily ? (
+          <section className="lsheet-walk" aria-labelledby="lsheet-walk-head">
+            <h2 id="lsheet-walk-head">Walk the {openFamily}</h2>
+            <p>
+              Every branch below is a move played in one of your own games. Positions reached
+              by different move orders are the same position here, so a transposition is
+              counted once.
+            </p>
+            <OpeningExplorer
+              graph={walk.graph}
+              coverage={walk.coverage}
+              playingAs={walk.playingAs}
+            />
+          </section>
+        ) : null}
       </main>
     </div>
   );
 }
 
-function SideBreadcrumb({ playingAs, params }: { playingAs: "white" | "black"; params: URLSearchParams }) {
-  const other = playingAs === "white" ? "black" : "white";
-  const otherHref = (() => {
-    const next = new URLSearchParams(params);
-    next.set("color", other);
-    return `/openings?${next}`;
-  })();
+/**
+ * Side as a filter, not a gate.
+ *
+ * "Both" is the default and the first control, because it is the state the
+ * sheet is designed for: two labelled sections, sorted worst first across the
+ * whole repertoire.
+ */
+function SideFilter({ side, family }: { side: "white" | "black" | null; family: string | null }) {
+  const [params, setParams] = useSearchParams();
+  const choose = (next: "white" | "black" | null) => {
+    const query = new URLSearchParams(params);
+    if (next === null) query.delete("color");
+    else query.set("color", next);
+    setParams(query, { replace: true, preventScrollReset: true });
+  };
+
   return (
-    <nav className="side-breadcrumb" aria-label="Breadcrumb">
-      <Link to="/openings" className="side-crumb-back">
-        <span aria-hidden="true">‹</span> Choose side
-      </Link>
-      <span className="side-crumb-sep" aria-hidden="true">/</span>
-      <span className="side-crumb-current">Studying as <b>{playingAs}</b></span>
-      <Link to={otherHref} preventScrollReset className="side-crumb-switch">
-        Switch to {other} <span aria-hidden="true">⇆</span>
-      </Link>
+    <nav className="lsheet-filter" aria-label="Openings">
+      {family ? (
+        <>
+          <Link to="/openings" className="side-crumb-back">
+            <span aria-hidden="true">‹</span> All lines
+          </Link>
+          <span className="side-crumb-sep" aria-hidden="true">/</span>
+          <span className="side-crumb-current">{family}</span>
+        </>
+      ) : (
+        <div className="explorer-chips">
+          <span className="cap">Playing as</span>
+          {([null, "white", "black"] as const).map((value) => (
+            <button
+              key={value ?? "both"}
+              type="button"
+              className={`explorer-chip${side === value ? " is-active" : ""}`}
+              aria-pressed={side === value}
+              onClick={() => choose(value)}
+            >
+              {value === null ? "Both" : value === "white" ? "White" : "Black"}
+            </button>
+          ))}
+        </div>
+      )}
     </nav>
   );
 }
 
-const INITIAL_OPENINGS = 7;
-
-function FamilyChips({
-  families,
-  active,
-  onSelect,
-  repertoire,
-  onToggleRepertoire,
+function NothingToRead({
+  empty,
+  games,
 }: {
-  families: OpeningFamily[];
-  active: string | null;
-  onSelect: (family: string | null) => void;
-  repertoire: Set<string>;
-  onToggleRepertoire: (family: string) => void;
+  empty: NonNullable<SheetData["empty"]>;
+  games: number;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const byGames = useMemo(
-    () => [...families].sort((left, right) => right.games - left.games || left.family.localeCompare(right.family)),
-    [families],
-  );
-  const shown = expanded ? byGames : byGames.slice(0, INITIAL_OPENINGS);
-  const remaining = byGames.length - shown.length;
-
-  return (
-    <section className="explorer-openings" aria-label="Your openings">
-      <div className="explorer-openings-head">
-        <p className="cap">Jump into an opening</p>
-        <InfoTip label="your openings">
-          The openings you reach most from this side. Star the ones you want to own — they
-          show up on your account page to track how well you know them.
-        </InfoTip>
-      </div>
-      <div className="explorer-opening-grid">
-        <button
-          type="button"
-          className={`opening-chip is-repertoire ${active === null ? "is-active" : ""}`}
-          onClick={() => onSelect(null)}
-          aria-pressed={active === null}
-        >
-          <strong>Whole repertoire</strong>
-          <small>from move 1</small>
-        </button>
-        {shown.map((family) => {
-          const starred = repertoire.has(family.family);
-          return (
-            <div
-              key={family.family}
-              className={`opening-chip ${active === family.family ? "is-active" : ""} ${starred ? "is-starred" : ""}`}
-            >
-              <button
-                type="button"
-                className="opening-chip-select"
-                onClick={() => onSelect(family.family)}
-                aria-pressed={active === family.family}
-              >
-                <strong>{family.family}</strong>
-                <small>{family.games} game{family.games === 1 ? "" : "s"}</small>
-              </button>
-              <button
-                type="button"
-                className={`opening-chip-star ${starred ? "is-on" : ""}`}
-                onClick={() => onToggleRepertoire(family.family)}
-                aria-pressed={starred}
-                aria-label={starred ? `Remove ${family.family} from your repertoire` : `Add ${family.family} to your repertoire`}
-                title={starred ? "In your repertoire" : "Add to your repertoire"}
-              >
-                {starred ? "★" : "☆"}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-      {byGames.length > INITIAL_OPENINGS ? (
-        <button type="button" className="explorer-showmore" onClick={() => setExpanded((e) => !e)}>
-          {expanded ? "Show fewer" : `Show ${remaining} more opening${remaining === 1 ? "" : "s"}`}
-        </button>
-      ) : null}
-    </section>
-  );
-}
-
-type ExplorerLoaderData = Extract<Awaited<ReturnType<typeof clientLoader>>, { kind: "explorer" }>;
-
-export default function OpeningReview({ loaderData }: Route.ComponentProps) {
-  if (loaderData.needsSide) return <SideGate />;
-  if ("kind" in loaderData && loaderData.kind === "sheet") {
-    return <SheetView {...loaderData} />;
+  if (empty.kind === "no_lines") {
+    return (
+      <EmptyState
+        title="No opening lines to read yet"
+        detail={`Forma has the positions from ${games} ${games === 1 ? "game" : "games"}, but none of them reaches an opening you have a decision in yet. A line needs to be named and played past the first move before it becomes a row.`}
+      />
+    );
   }
-  return <ExplorerView loaderData={loaderData} />;
-}
-
-function ExplorerView({ loaderData }: { loaderData: ExplorerLoaderData }) {
-  const { explorer: data, coverage, initialFamily, color: playingAs } = loaderData;
-  const [params] = useSearchParams();
-  const [focus, setFocus] = useState<{ family: string | null; nonce: number }>(() => ({
-    family: initialFamily ?? null,
-    nonce: 0,
-  }));
-
-  const selectFamily = useCallback((family: string | null) => {
-    setFocus((prev) => ({ family, nonce: prev.nonce + 1 }));
-  }, []);
-
-  // The user's chosen repertoire (families) for this side — starred from the chips.
-  const [repertoire, setRepertoire] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    const session = peekSession();
-    if (!session) return;
-    let live = true;
-    fetchRepertoire(session.username)
-      .then((data) => {
-        if (!live) return;
-        setRepertoire(new Set(data.openings.filter((o) => o.color === playingAs).map((o) => o.family)));
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [playingAs]);
-
-  const toggleRepertoire = useCallback(
-    (family: string) => {
-      const session = peekSession();
-      if (!session) return;
-      const enabled = !repertoire.has(family);
-      const apply = (on: boolean) =>
-        setRepertoire((prev) => {
-          const next = new Set(prev);
-          if (on) next.add(family);
-          else next.delete(family);
-          return next;
-        });
-      apply(enabled); // optimistic
-      toggleRepertoireOpening(session.username, playingAs, family, enabled).catch(() => apply(!enabled)); // rollback on failure
-    },
-    [playingAs, repertoire],
-  );
-
-  const weakestKey = useMemo(() => {
-    if (!focus.family) return null;
-    return data.families.find((family) => family.family === focus.family)?.weakestNodeKey ?? null;
-  }, [focus.family, data.families]);
-
-  const filterQuery = useMemo(() => {
-    const query = new URLSearchParams();
-    for (const key of ["platform", "speed", "color", "since"]) {
-      const value = params.get(key);
-      if (value) query.set(key, value);
-    }
-    return query.toString();
-  }, [params]);
-
-  const trainHref = `/train?color=${playingAs}${focus.family ? `&family=${encodeURIComponent(focus.family)}` : ""}`;
-
-  return (
-    <div className="relative z-10 min-h-dvh">
-      <TopNav current="openings" />
-
-      <main id="opening-explorer-main" className="opening-review-shell">
-        <SideBreadcrumb playingAs={playingAs} params={params} />
-        <header className="opening-review-header">
-          <div>
-            <p className="eyebrow">Opening explorer</p>
-            <h1>{focus.family ?? `Your ${playingAs} openings`}</h1>
-            <p>
-              {focus.family
-                ? `Walk every ${focus.family} line you have actually played, follow how the games split, and open the exact moment a move went wrong.`
-                : "Start at move one and follow the paths you play most. Every branch is built from your own games, no reload between clicks."}
-            </p>
-          </div>
-          <div className="explorer-header-actions">
-            <Link to={trainHref} className="primary-button self-start">
-              Train {focus.family ? "this line" : "your repertoire"}
-            </Link>
-            {focus.family && lessonForFamily(focus.family, playingAs) ? (
-              <Link
-                to={`/lessons/${lessonForFamily(focus.family, playingAs)!.slug}`}
-                className="secondary-button self-start inline-flex items-center"
-              >
-                Lesson
-              </Link>
-            ) : null}
-          </div>
-        </header>
-
-        <CoverageBar coverage={coverage} username={data.username} />
-        <Filters username={data.username} params={params} />
-
-        {data.graph ? (
-          <>
-            <FamilyChips
-              families={data.families}
-              active={focus.family}
-              onSelect={selectFamily}
-              repertoire={repertoire}
-              onToggleRepertoire={toggleRepertoire}
-            />
-            <OpeningExplorer
-              graph={data.graph}
-              username={data.username}
-              filterQuery={filterQuery}
-              focusFamily={focus.family}
-              focusWeakestKey={weakestKey}
-              focusNonce={focus.nonce}
-              playingAs={playingAs}
-            />
-          </>
-        ) : (
-          <section className="empty-opening-review">
-            <h2>No opening map yet</h2>
-            <p>Import and analyse games first so Forma can build your position tree.</p>
-          </section>
-        )}
-      </main>
-    </div>
-  );
-}
-
-export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const message = error instanceof Error ? error.message : "Could not load your opening explorer.";
-  return (
-    <main className="grid min-h-dvh place-items-center p-6">
-      <div className="panel max-w-lg p-8 text-center">
-        <h1 className="text-2xl font-black">Opening explorer unavailable</h1>
-        <p className="mt-3 text-sm leading-relaxed text-ink-muted">{message}</p>
-        <Link to="/" className="primary-button mt-6 inline-flex">Return to overview</Link>
-      </div>
-    </main>
-  );
+  const copy = explorerEmptyCopy(empty.reason, games);
+  return <EmptyState title={copy.title} detail={copy.detail} />;
 }

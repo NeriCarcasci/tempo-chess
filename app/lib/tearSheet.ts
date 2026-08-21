@@ -28,20 +28,40 @@ const MIN_MOVE_SPAN = 8;
 /** Positions kept per cell for the detail panel. */
 const MAX_CELL_POSITIONS = 3;
 
-export type CellState = "scored" | "thin" | "blank" | "pre";
+export type CellState = "scored" | "thin" | "unjudged" | "blank" | "pre";
 export type CellHeat = "holds" | "shaky" | "tears";
 
 export interface SheetCell {
   moveNo: number;
-  /** Engine-scored player decisions pooled here. */
+  /** Player decisions here that a published analysis judged. */
   decisions: number;
   /** How many of them cost something. */
   failures: number;
+  /**
+   * Player decisions here that nobody has judged, because the game they came
+   * from has no published analysis.
+   *
+   * Kept apart from `decisions` because it is the difference between "you were
+   * fine here" and "nobody has looked". Before this existed the pooling skipped
+   * an unjudged move entirely, so an opening whose games were all unanalysed
+   * had no row on the sheet at all, and one with a few analysed games reported
+   * "no mistakes" over a sample it was not describing.
+   */
+  unjudged: number;
   state: CellState;
   /** Only set when the cell cleared the sample floor. */
   heat?: CellHeat;
   /** Positions behind the cell, worst first — what the detail panel shows. */
   nodeKeys: string[];
+  /**
+   * The UCI moves that reach each of `nodeKeys`, same order, space separated.
+   *
+   * Carried because the book endpoint cannot say where a line left the book
+   * from a position alone — it needs the move order that got there, since a
+   * position reached by a transposition left the book somewhere else than the
+   * same position reached down the main line.
+   */
+  nodeLines: string[];
 }
 
 export interface SheetVariationRow {
@@ -49,6 +69,22 @@ export interface SheetVariationRow {
   label: string;
   games: number;
   cells: SheetCell[];
+}
+
+/**
+ * Player decisions on an edge that no published analysis judged.
+ *
+ * `g` is games that played the move; `op` is the ones carrying a verdict. An
+ * opponent move is excluded because Forma does not judge those, so the gap
+ * there is not a coverage gap. A `mixed` edge — the player in some games, the
+ * opponent in others — is counted as if it were all the player's, which is the
+ * same rule `unjudgedOn` in the v1 explorer applies. Overstating an unknown is
+ * the safe direction, and the two surfaces agreeing matters more than a
+ * correction the wire encoding does not carry the numbers for.
+ */
+function unjudgedOn(edge: { ac: "p" | "o" | "m"; g: number; op: number }): number {
+  if (edge.ac === "o") return 0;
+  return Math.max(0, edge.g - edge.op);
 }
 
 export interface SheetRow {
@@ -63,6 +99,22 @@ export interface SheetRow {
   bookDepth: number;
   cells: SheetCell[];
   variations: SheetVariationRow[];
+}
+
+/** Judged decisions, mistakes and unjudged decisions across a row of cells. */
+export function tallyCells(cells: readonly SheetCell[]): {
+  decisions: number;
+  mistakes: number;
+  unjudged: number;
+} {
+  return cells.reduce(
+    (total, cell) => ({
+      decisions: total.decisions + cell.decisions,
+      mistakes: total.mistakes + cell.failures,
+      unjudged: total.unjudged + cell.unjudged,
+    }),
+    { decisions: 0, mistakes: 0, unjudged: 0 },
+  );
 }
 
 export interface SheetMarker {
@@ -142,12 +194,19 @@ function heatOf(decisions: number, failures: number): CellHeat | undefined {
 interface Bucket {
   decisions: number;
   failures: number;
-  /** Parent position keys, with the failures each contributed. */
-  positions: Map<string, number>;
+  unjudged: number;
+  /** Parent position keys, with the failures each contributed and how it is reached. */
+  positions: Map<string, { failures: number; line: string }>;
   games: number;
 }
 
-const emptyBucket = (): Bucket => ({ decisions: 0, failures: 0, positions: new Map(), games: 0 });
+const emptyBucket = (): Bucket => ({
+  decisions: 0,
+  failures: 0,
+  unjudged: 0,
+  positions: new Map(),
+  games: 0,
+});
 
 /**
  * The variation a name introduces, if it names one.
@@ -181,8 +240,15 @@ function poolByLine(graph: OpeningGraph) {
     else outgoing.set(edge.a, [i]);
   });
 
-  const naming = new Map<number, { family: string | null; variation: string | null }>();
-  naming.set(graph.root, { family: null, variation: null });
+  // `line` is the UCI move order the breadth-first walk used to reach the node,
+  // which is the same shortest telling of the line the family naming uses. It
+  // travels with the naming so a cell can hand the book a move order rather
+  // than a bare position.
+  const naming = new Map<
+    number,
+    { family: string | null; variation: string | null; line: string[] }
+  >();
+  naming.set(graph.root, { family: null, variation: null, line: [] });
 
   const familyBuckets = new Map<string, Map<number, Bucket>>();
   const variationBuckets = new Map<string, Map<number, Bucket>>();
@@ -221,7 +287,7 @@ function poolByLine(graph: OpeningGraph) {
 
       if (!seen.has(edge.b)) {
         seen.add(edge.b);
-        naming.set(edge.b, { family, variation });
+        naming.set(edge.b, { family, variation, line: [...here.line, edge.u] });
         queue.push(edge.b);
       }
 
@@ -234,7 +300,14 @@ function poolByLine(graph: OpeningGraph) {
       // and since every game shares that one node, whichever name the walk
       // meets first would claim the opening move of the entire repertoire.
       // Playing 1.e4 is not a line anyway; it is the thing lines branch from.
-      if (edge.op > 0 && family && target.p >= 2) {
+      // An unjudged player move is pooled too. Requiring `op > 0` here — which
+      // this did — made an unanalysed game invisible rather than uncounted: a
+      // family whose games had no published analysis produced no bucket, so it
+      // had no row on the sheet at all, and a family with a handful of analysed
+      // games reported "no mistakes" over a sample several times larger than
+      // the one it had looked at.
+      const unjudged = unjudgedOn(edge);
+      if ((edge.op > 0 || unjudged > 0) && family && target.p >= 2) {
         const moveNo = moveNoOf(graph.nodes[edge.a]!.p);
         if (moveNo > MAX_MOVE) continue;
 
@@ -242,10 +315,15 @@ function poolByLine(graph: OpeningGraph) {
         const cell = fam.get(moveNo) ?? emptyBucket();
         cell.decisions += edge.op;
         cell.failures += edge.fa;
+        cell.unjudged += unjudged;
         cell.games += edge.g;
         if (edge.fa > 0 || cell.positions.size < MAX_CELL_POSITIONS) {
           const node = graph.nodes[edge.a]!;
-          cell.positions.set(node.k, (cell.positions.get(node.k) ?? 0) + edge.fa);
+          const seenAt = cell.positions.get(node.k);
+          cell.positions.set(node.k, {
+            failures: (seenAt?.failures ?? 0) + edge.fa,
+            line: seenAt?.line ?? here.line.join(" "),
+          });
         }
         fam.set(moveNo, cell);
         familyBuckets.set(family, fam);
@@ -261,10 +339,15 @@ function poolByLine(graph: OpeningGraph) {
         const vcell = vari.get(moveNo) ?? emptyBucket();
         vcell.decisions += edge.op;
         vcell.failures += edge.fa;
+        vcell.unjudged += unjudged;
         vcell.games += edge.g;
         if (edge.fa > 0 || vcell.positions.size < MAX_CELL_POSITIONS) {
           const node = graph.nodes[edge.a]!;
-          vcell.positions.set(node.k, (vcell.positions.get(node.k) ?? 0) + edge.fa);
+          const seenAt = vcell.positions.get(node.k);
+          vcell.positions.set(node.k, {
+            failures: (seenAt?.failures ?? 0) + edge.fa,
+            line: seenAt?.line ?? here.line.join(" "),
+          });
         }
         vari.set(moveNo, vcell);
         variationBuckets.set(vkey, vari);
@@ -298,21 +381,47 @@ function buildCells(
     const bucket = buckets.get(moveNo);
     const decisions = bucket?.decisions ?? 0;
     const failures = bucket?.failures ?? 0;
+    const unjudged = bucket?.unjudged ?? 0;
     if (decisions > 0) bookDepth = moveNo;
 
     // A cell before the line even exists is empty space, not fog. Only the
     // right-hand edge means "past your book", so the dashes keep one meaning.
+    //
+    // `unjudged` sits between `blank` and `thin`: moves were played here and
+    // none of them has a verdict. Drawing it as `blank` would say the player
+    // never went this deep, and drawing it on the heat ramp would put a colour
+    // on a failure rate computed from nothing.
     const state: CellState =
-      moveNo < startMove ? "pre" : decisions === 0 ? "blank" : decisions < FLOOR_COLOR ? "thin" : "scored";
+      moveNo < startMove
+        ? "pre"
+        : decisions === 0
+          ? unjudged > 0
+            ? "unjudged"
+            : "blank"
+          : decisions < FLOOR_COLOR
+            ? "thin"
+            : "scored";
 
-    const nodeKeys = bucket
+    // Worst first, and the line to each kept alongside its key. The two arrays
+    // are built from one sort so they can never fall out of step: a position
+    // paired with the move order of a different one would send the book looking
+    // for a departure on a line nobody played.
+    const positions = bucket
       ? [...bucket.positions.entries()]
-          .sort((a, b) => b[1] - a[1])
+          .sort((a, b) => b[1].failures - a[1].failures)
           .slice(0, MAX_CELL_POSITIONS)
-          .map(([key]) => key)
       : [];
 
-    cells.push({ moveNo, decisions, failures, state, heat: heatOf(decisions, failures), nodeKeys });
+    cells.push({
+      moveNo,
+      decisions,
+      failures,
+      unjudged,
+      state,
+      heat: heatOf(decisions, failures),
+      nodeKeys: positions.map(([key]) => key),
+      nodeLines: positions.map(([, at]) => at.line),
+    });
   }
   return { cells, bookDepth };
 }
@@ -371,9 +480,14 @@ function buildSection(graph: OpeningGraph | null, color: "white" | "black") {
         const cell = merged.get(moveNo) ?? emptyBucket();
         cell.decisions += bucket.decisions;
         cell.failures += bucket.failures;
+        cell.unjudged += bucket.unjudged;
         cell.games += bucket.games;
-        for (const [key, fa] of bucket.positions) {
-          cell.positions.set(key, (cell.positions.get(key) ?? 0) + fa);
+        for (const [key, at] of bucket.positions) {
+          const seenAt = cell.positions.get(key);
+          cell.positions.set(key, {
+            failures: (seenAt?.failures ?? 0) + at.failures,
+            line: seenAt?.line ?? at.line,
+          });
         }
         merged.set(moveNo, cell);
       }
@@ -416,6 +530,10 @@ function pickMarker(sections: TearSheet["sections"]): SheetMarker | null {
     variationKey: string | null,
     cell: SheetCell,
   ) => {
+    // Judged decisions only. An unjudged cell has no failure rate to rank, and
+    // nominating "the line to start with" from moves nobody has looked at would
+    // be the page's single loudest claim resting on the one thing it does not
+    // know.
     if (cell.decisions < FLOOR_COLOR || cell.failures === 0) return;
     const rate = cell.failures / cell.decisions;
     if (

@@ -1,9 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { Board } from "./Board";
+import { InfoTip } from "./InfoTip";
+import { OpeningBookPanel } from "./OpeningBookPanel";
+import { lessonForFamily } from "../lib/lessons";
 import { openingSlug } from "../lib/openingContent";
-import { OTHER_ROW } from "../lib/tearSheet";
+import { OTHER_ROW, tallyCells } from "../lib/tearSheet";
 import type { SheetCell, SheetRow, TearSheet as Sheet } from "../lib/tearSheet";
+import type { OpeningExplorerCoverage } from "../lib/v1/types";
 
 /**
  * The opening sheet: one row per line in the player's repertoire.
@@ -13,11 +17,27 @@ import type { SheetCell, SheetRow, TearSheet as Sheet } from "../lib/tearSheet";
  * the page is reading a to-do list.
  *
  * **Vocabulary rule.** Nothing here invents a word for something chess already
- * names. A `failure` in the model is a player move outside book and repertoire
- * that lost 90 centipawns or more, which is a *mistake*, so the page says
- * mistake. Earlier copy called them "decisions that cost you the thread" and
- * described lines that "hold", "tear" and can be "walked": three metaphors and
- * a private vocabulary, none of which a player could check against anything.
+ * names. A `failure` in the model is a player move a published analysis judged
+ * outside the versioned tolerance, which is a *mistake*, so the page says
+ * mistake and states the threshold. Earlier copy called them "decisions that
+ * cost you the thread" and described lines that "hold", "tear" and can be
+ * "walked": three metaphors and a private vocabulary, none of which a player
+ * could check against anything.
+ *
+ * **The threshold changed with the source, and the page says the new one.**
+ * The sheet used to read the prototype graph, which called a move a mistake
+ * when it lost 90 centipawns against a stored evaluation. It now reads
+ * `GET /v1/openings/explorer`, and the canonical rule is different: a move is
+ * outside tolerance when it gives up more than 0.02 of expected score against
+ * the best line the *same search* found (`server/src/engine/contract.ts`,
+ * `TOLERANCE_RULE`). Different measurement, same word — so the number under the
+ * heading names the rule it was counted by. That tolerance is versioned
+ * precisely so a change of method cannot pass as a change in the player.
+ *
+ * **Unanalysed is not clean.** `coverage.playerDecisions` minus
+ * `coverage.scoredDecisions` is how many of the player's own opening moves
+ * nobody has judged. The sheet states that gap once, at the top, and no row
+ * says "no mistakes" unless something was actually judged in it.
  *
  * **One fact per line.** Every row states its count and its move in the same
  * two-part shape, so only the numbers change between rows. The panel headline
@@ -33,7 +53,7 @@ const SECTION_LABEL = {
 /** Rows shown before the rest fold away. A screen of rows is a spreadsheet. */
 const VISIBLE_ROWS = 6;
 
-type VerdictKind = "tears" | "shaky" | "holds" | "thin";
+type VerdictKind = "tears" | "shaky" | "holds" | "thin" | "unjudged";
 
 interface Verdict {
   kind: VerdictKind;
@@ -47,8 +67,14 @@ interface Verdict {
   detail: string;
 }
 
-/** Worst first. The product's own rule, applied to the order of the page. */
-const RANK: Record<VerdictKind, number> = { tears: 0, shaky: 1, holds: 2, thin: 3 };
+/**
+ * Worst first. The product's own rule, applied to the order of the page.
+ *
+ * A line nobody has analysed sorts last rather than first. It is not evidence
+ * of anything yet, and floating an unknown above a measured problem would make
+ * the top of the page the least informative part of it.
+ */
+const RANK: Record<VerdictKind, number> = { tears: 0, shaky: 1, holds: 2, thin: 3, unjudged: 4 };
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
@@ -57,11 +83,31 @@ function depthOf(cells: SheetCell[]): number {
   return cells.reduce((deepest, cell) => (cell.decisions > 0 ? cell.moveNo : deepest), 0);
 }
 
-/** What a line amounts to: a count, and the move it applies from. */
+/**
+ * What a line amounts to: a count, and the move it applies from.
+ *
+ * The last branch used to read "Too few games" with nothing under it, which was
+ * a threshold guess wearing the voice of a finding — and it fired for two
+ * unrelated situations. A line with four judged moves and a line with forty
+ * moves nobody has looked at both landed there, and a reader could not tell
+ * which they were being shown. Both now state the number they actually have.
+ */
 function readLine(cells: SheetCell[]): Verdict {
   const depth = depthOf(cells);
-  const mistakes = cells.reduce((n, cell) => n + cell.failures, 0);
+  const { decisions, mistakes, unjudged } = tallyCells(cells);
   const count = `${mistakes} ${plural(mistakes, "mistake", "mistakes")}`;
+
+  // Nothing here carries a verdict. "No mistakes" would be a claim about moves
+  // nobody has judged, which is the one sentence this sheet must never print.
+  if (decisions === 0) {
+    return {
+      kind: "unjudged",
+      mistakes: 0,
+      moveNo: depth,
+      headline: "Not analysed yet",
+      detail: `${unjudged} ${plural(unjudged, "move", "moves")} waiting`,
+    };
+  }
 
   const breaks = cells.find((cell) => cell.heat === "tears" || cell.heat === "shaky");
   if (breaks) {
@@ -82,7 +128,15 @@ function readLine(cells: SheetCell[]): Verdict {
       detail: `through move ${depth}`,
     };
   }
-  return { kind: "thin", mistakes, moveNo: depth, headline: "Too few games", detail: "" };
+  // Judged, but no column reached the sample floor. The count is real and the
+  // sample is small, so both are printed rather than replaced by an adjective.
+  return {
+    kind: "thin",
+    mistakes,
+    moveNo: depth,
+    headline: count,
+    detail: `in ${decisions} judged ${plural(decisions, "move", "moves")}`,
+  };
 }
 
 /** The square a line opens on: the one with the most mistakes, deepest to break ties. */
@@ -109,11 +163,20 @@ function readCell(where: string, cell: SheetCell | null): string {
   if (!cell) return `${where}. No moves analysed yet.`;
   const at = `${where}, move ${cell.moveNo}.`;
   if (cell.state === "pre") return `${at} The line has not started yet.`;
+  // Played but unjudged, and unplayed, are opposite facts that both used to
+  // render as "you have never played this deep here".
+  if (cell.decisions === 0 && cell.unjudged > 0) {
+    const waiting = `${cell.unjudged} ${plural(cell.unjudged, "move", "moves")}`;
+    return `${at} You have played ${waiting} here and none of them has been analysed yet.`;
+  }
   if (cell.decisions === 0) return `${at} You have never played this deep here.`;
-  const moves = `${cell.decisions} ${plural(cell.decisions, "move", "moves")}`;
-  if (cell.failures === 0) return `${at} None of your ${moves} here were mistakes.`;
+  const moves = `${cell.decisions} judged ${plural(cell.decisions, "move", "moves")}`;
+  // The unjudged tail rides on every sentence that quotes a sample, because the
+  // sample is the thing the reader is being asked to trust.
+  const waiting = cell.unjudged > 0 ? ` ${cell.unjudged} more here ${plural(cell.unjudged, "is", "are")} not analysed.` : "";
+  if (cell.failures === 0) return `${at} None of your ${moves} here were mistakes.${waiting}`;
   const thin = cell.state === "thin" ? " Too few to read yet." : "";
-  return `${at} ${cell.failures} of your ${moves} here ${plural(cell.failures, "was a mistake", "were mistakes")}.${thin}`;
+  return `${at} ${cell.failures} of your ${moves} here ${plural(cell.failures, "was a mistake", "were mistakes")}.${thin}${waiting}`;
 }
 
 /**
@@ -190,21 +253,59 @@ export function MoveStrip({
   );
 }
 
+/**
+ * Practice, and the one thing the reader has to be told about it.
+ *
+ * The control still goes to `/train`, which is a working screen and the only
+ * per-line drill the product has. What it is *not* is a `/v1` surface:
+ * `/train` builds its lines from the prototype's `GET /opening-explorer`, which
+ * reads the observation table this sheet has stopped reading and which counts a
+ * mistake at 90 centipawns.
+ *
+ * So the sheet says so. Pointing at it silently would carry a reader straight
+ * from a number counted one way into a drill selected another way, under one
+ * word — which is the exact confusion this page's threshold line exists to
+ * prevent. Disabling it would be worse: it works, and a switched-off control on
+ * a feature that exists is its own kind of lie.
+ *
+ * `/v1` has three practice routes — the queue, an attempt and a refill — and
+ * none of them takes an opening. `POST /v1/practice/refill` mints drills from
+ * the whole account's recent mistakes, so there is nothing on `/v1` to point a
+ * per-line control at yet. When there is, this note goes and the link changes;
+ * nothing else about the row has to.
+ */
+const PRACTICE_SOURCE =
+  "Practice still builds its lines from the older opening graph, which counted a mistake at 90 centipawns rather than against the tolerance above. It drills the same openings; it does not pick them by the same measurement.";
+
 export function TearSheet({
   sheet,
-  username,
+  coverage,
+  openFamily = null,
 }: {
   sheet: Sheet;
-  username: string;
+  /** From `GET /v1/openings/explorer`. The gap in it is stated, not hidden. */
+  coverage: OpeningExplorerCoverage;
+  /** The line `/openings/:familySlug` names. Opens instead of the marker's. */
+  openFamily?: string | null;
 }) {
   /**
-   * One line open at a time, starting on the one the marker names.
+   * One line open at a time, starting on the one the URL names and otherwise on
+   * the one the marker does.
    *
    * A page where every row can be open at once is the spreadsheet again, one
    * scroll further down. The single open row is also what makes "the next
    * thing" a place on the page rather than a card above it.
+   *
+   * The URL wins over the marker: somebody who followed a link to a line has
+   * already said which one they came for, and opening a different row would
+   * answer a question they did not ask.
    */
-  const [open, setOpen] = useState<string | null>(sheet.marker?.rowKey ?? null);
+  const [open, setOpen] = useState<string | null>(() => {
+    const named = openFamily
+      ? sheet.sections.flatMap((section) => section.rows).find((row) => row.family === openFamily)
+      : null;
+    return named?.key ?? sheet.marker?.rowKey ?? null;
+  });
   const [showAll, setShowAll] = useState<Set<string>>(new Set());
 
   const lines = sheet.sections.reduce((n, section) => n + section.rows.length, 0);
@@ -220,6 +321,14 @@ export function TearSheet({
       ),
     0,
   );
+
+  // The API's own two numbers, not a threshold guess about them. `scored` is
+  // the caller's opening decisions a published analysis judged; `decided` is
+  // all of them, analysed or not. The difference is games nothing has looked
+  // at, and it is the denominator behind every figure above.
+  const scored = coverage.scoredDecisions;
+  const decided = coverage.playerDecisions;
+  const waiting = Math.max(0, decided - scored);
 
   return (
     <div className="lsheet">
@@ -241,11 +350,42 @@ export function TearSheet({
             <b>{depth >= sheet.maxMove ? sheet.maxMove - 1 : depth}</b>
           </span>
         </p>
-        {/* The threshold is stated, not implied. A number a player can check is
-            worth more than an adjective they have to take on trust. */}
+        {/* The threshold is stated, not implied, and it is the canonical one.
+            A number a player can check is worth more than an adjective they
+            have to take on trust — and this number changed when the sheet
+            moved off the prototype graph, so restating the old 90cp rule would
+            have been two different measurements wearing one word. */}
         <p className="lsheet-key">
           One square per move, darkest where you make the most mistakes. A mistake is a
-          move outside your book that lost 90 centipawns or more.
+          move Forma's published analysis judged outside tolerance: it gave up more than
+          0.02 of expected score against the best line the same search found.
+        </p>
+        {/* Coverage, said once, at the top. Every count above is over the
+            judged moves and not over all of them, and a reader who does not
+            know that reads an unexamined repertoire as a clean one. */}
+        <p className="lsheet-key">
+          {decided === 0 ? (
+            "None of your opening moves have been analysed yet, so nothing here is a verdict."
+          ) : waiting === 0 ? (
+            <>
+              All <b>{decided}</b> of your opening moves in these games have been analysed.
+            </>
+          ) : (
+            <>
+              <b>{scored}</b> of your <b>{decided}</b> opening moves have been analysed. The
+              other <b>{waiting}</b> are counted as unanalysed, never as moves that went well
+              {coverage.unanalysedGames > 0
+                ? ` — ${coverage.unanalysedGames} ${plural(coverage.unanalysedGames, "game is", "games are")} still waiting`
+                : ""}
+              .
+            </>
+          )}
+        </p>
+        {/* Stated because Practice is the one control that leaves this page
+            for a screen counting by the older rule. */}
+        <p className="lsheet-key">
+          Practice is drilled from the older opening graph.{" "}
+          <InfoTip label="what practice is built from">{PRACTICE_SOURCE}</InfoTip>
         </p>
       </header>
 
@@ -254,7 +394,6 @@ export function TearSheet({
           key={section.color}
           section={section}
           sheet={sheet}
-          username={username}
           named={sheet.sections.length > 1}
           open={open}
           setOpen={setOpen}
@@ -269,7 +408,6 @@ export function TearSheet({
 function Section({
   section,
   sheet,
-  username,
   named,
   open,
   setOpen,
@@ -278,7 +416,6 @@ function Section({
 }: {
   section: Sheet["sections"][number];
   sheet: Sheet;
-  username: string;
   named: boolean;
   open: string | null;
   setOpen: (key: string | null) => void;
@@ -317,7 +454,20 @@ function Section({
     });
   }, [section.rows, marked]);
 
-  const shown = expanded ? rows : rows.slice(0, VISIBLE_ROWS);
+  /**
+   * The open row is always drawn, even when it falls past the fold.
+   *
+   * A link to `/openings/:familySlug` opens a row that the worst-first ordering
+   * may have put eighth, and without this the page would arrive with its answer
+   * folded away behind "Show all".
+   */
+  const shown = useMemo(() => {
+    if (expanded) return rows;
+    const head = rows.slice(0, VISIBLE_ROWS);
+    if (open === null || head.some(({ row }) => row.key === open)) return head;
+    const opened = rows.find(({ row }) => row.key === open);
+    return opened ? [...head, opened] : head;
+  }, [rows, expanded, open]);
 
   return (
     <section className="lsheet-section">
@@ -332,7 +482,6 @@ function Section({
             color={section.color}
             maxMove={sheet.maxMove}
             marker={sheet.marker?.rowKey === row.key ? sheet.marker : null}
-            username={username}
             open={open === row.key}
             onToggle={() => setOpen(open === row.key ? null : row.key)}
           />
@@ -362,7 +511,6 @@ function LineRow({
   color,
   maxMove,
   marker,
-  username,
   open,
   onToggle,
 }: {
@@ -371,7 +519,6 @@ function LineRow({
   color: "white" | "black";
   maxMove: number;
   marker: Sheet["marker"];
-  username: string;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -400,7 +547,11 @@ function LineRow({
   const here = picked ?? opensOn;
 
   const panelId = `line-panel-${openingSlug(row.family)}-${color}`;
-  // "Other lines" is a bucket, not an opening, so there is nothing to drill.
+  // The row's own sample, so a reader can weigh its verdict without scrolling
+  // back to the account-wide figure at the top.
+  const waiting = tallyCells(row.cells).unjudged;
+  // "Other lines" is a bucket, not an opening, so there is nothing to drill in
+  // particular — the trainer gets the side and picks for itself.
   const practiceHref =
     row.family === OTHER_ROW
       ? `/train?color=${color}`
@@ -423,6 +574,7 @@ function LineRow({
               <small>
                 {row.games} {plural(row.games, "game", "games")}
                 {row.variations.length ? ` · ${row.variations.length} variations` : ""}
+                {waiting > 0 ? ` · ${waiting} unanalysed` : ""}
               </small>
             </span>
           </span>
@@ -441,7 +593,16 @@ function LineRow({
           </span>
         </button>
 
-        <Link to={practiceHref} className="line-practice" aria-label={`Practice ${row.label}`}>
+        {/* The action, in its own slot beside the disclosure rather than
+            inside it. The accessible name carries what the drill is built
+            from, because a reader who tabs straight to this control never
+            passes the note in the header. */}
+        <Link
+          to={practiceHref}
+          className="line-practice"
+          aria-label={`Practice ${row.label}. ${PRACTICE_SOURCE}`}
+          title={PRACTICE_SOURCE}
+        >
           Practice
         </Link>
       </div>
@@ -453,7 +614,6 @@ function LineRow({
             color={color}
             maxMove={maxMove}
             marker={marker}
-            username={username}
             here={here}
             onPick={setPicked}
           />
@@ -480,7 +640,6 @@ function LinePanel({
   color,
   maxMove,
   marker,
-  username,
   here,
   onPick,
 }: {
@@ -488,7 +647,6 @@ function LinePanel({
   color: "white" | "black";
   maxMove: number;
   marker: Sheet["marker"];
-  username: string;
   here: { cell: SheetCell; variation: string | null } | null;
   onPick: (picked: { cell: SheetCell; variation: string | null }) => void;
 }) {
@@ -509,11 +667,23 @@ function LinePanel({
     })
     .slice(0, 2);
 
-  const explorerHref = (() => {
-    const query = new URLSearchParams({ username, color, family: row.family });
-    if (cell?.nodeKeys[0]) query.set("node", cell.nodeKeys[0]);
-    return `/openings/${openingSlug(row.family)}?${query}`;
-  })();
+  // The walk, on the same screen, one route deeper. No username in the URL:
+  // `/v1` resolves the subject from the access token, and a handle in a link
+  // was exactly the thing that let one person's page name another's games.
+  const walkHref = `/openings/${openingSlug(row.family)}?color=${color}`;
+
+  // Written prose about this line, when somebody has written some. It sits in
+  // the open panel rather than the row header: thirteen of the openings a
+  // player might have have a lesson and the rest do not, and a control that
+  // appears on some rows and not others turns the header into a place you have
+  // to read rather than scan.
+  const lesson = lessonForFamily(row.family, color);
+
+  // The worst position behind the selected square, and the move order that
+  // reaches it. Both come from the same sorted list in `buildCells`, so the
+  // book is always asked about the board on screen.
+  const bookPosition = cell?.nodeKeys[0] ?? null;
+  const bookLine = cell?.nodeLines[0] ?? "";
 
   const strip = here?.variation
     ? row.variations.find((v) => v.label === here.variation)?.cells ?? row.cells
@@ -584,11 +754,27 @@ function LinePanel({
         </div>
       ) : null}
 
-      {cell && cell.decisions > 0 ? (
-        <Link to={explorerHref} className="secondary-button line-explore">
-          Open in explorer
-        </Link>
+      {/* The other half of the loop. The sheet has said which square costs the
+          most; the book says what the line is called, what it plays here, and
+          which of the reader's own moves left it. Keyed on the position so
+          picking a different square asks a different question rather than
+          leaving the old answer on screen under a new heading. */}
+      {bookPosition ? (
+        <OpeningBookPanel key={bookPosition} position={bookPosition} line={bookLine} />
       ) : null}
+
+      <div className="line-panel-actions">
+        {cell && (cell.decisions > 0 || cell.unjudged > 0) ? (
+          <Link to={walkHref} className="secondary-button">
+            Walk this line
+          </Link>
+        ) : null}
+        {lesson ? (
+          <Link to={`/lessons/${lesson.slug}`} className="secondary-button">
+            Read the lesson
+          </Link>
+        ) : null}
+      </div>
     </div>
   );
 }
