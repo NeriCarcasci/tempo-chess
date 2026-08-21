@@ -229,40 +229,6 @@
   }
   .scale-band.is-in { opacity: 1; transform: none; }
 
-  /* -- the drifting roster ------------------------------------------- */
-  .scale-wash {
-    position: absolute; inset: 0; z-index: 0; pointer-events: none;
-    display: flex; flex-direction: column; justify-content: space-evenly;
-    font-size: clamp(0.82rem, 1.35vw, 1.02rem); font-weight: 600;
-    letter-spacing: -0.01em; white-space: nowrap;
-    color: #f3efe9;
-  }
-  .scale-wash-line { overflow: hidden; }
-  /* Rendered twice and travelling exactly -50%, so at the end of a lap the
-     second copy sits where the first began and the loop has no seam. */
-  .scale-wash-track {
-    display: flex; width: max-content;
-    animation: scale-drift var(--dur, 90s) linear infinite;
-    animation-direction: var(--dir, normal);
-  }
-  .scale-chip {
-    display: inline-flex; align-items: center; gap: 0.45rem;
-    padding: 0 clamp(0.75rem, 1.6vw, 1.35rem);
-  }
-  .scale-chip svg { flex: 0 0 auto; opacity: 0.85; }
-
-  /* Clears the middle so the figures read, and dissolves both ends so the rows
-     leave the band rather than being chopped at its edge. Painted in the band's
-     own colour, which is why this lives inside .scale-band. */
-  .scale-wash::after {
-    content: ""; position: absolute; inset: 0;
-    background:
-      radial-gradient(46% 64% at 50% 50%, var(--color-ink-block) 38%, transparent 78%),
-      linear-gradient(90deg, var(--color-ink-block), transparent 18% 82%, var(--color-ink-block));
-  }
-
-  @keyframes scale-drift { to { transform: translateX(-50%); } }
-
   /* -- the figures ---------------------------------------------------- */
   .scale-fore {
     position: relative; z-index: 1;
@@ -603,7 +569,6 @@
   .page-head-center h1, .page-head-center > p { margin-inline: auto; }
 
   /* -- pricing ------------------------------------------------------- */
-  .price-cancelled { margin-top: 1.2rem; color: var(--color-mistake); font-size: 0.85rem; font-weight: 650; }
   .price-toggle {
     display: inline-flex; gap: 0.25rem; margin-top: 2rem; padding: 0.3rem;
     border-radius: var(--radius-pill); background: var(--color-surface-2);
@@ -664,6 +629,10 @@
     color: var(--color-win); font-size: 0.75rem; font-weight: 750;
   }
   .price-cta { width: 100%; }
+  /* Unavailable, not busy. The shared disabled rule sets `cursor: wait`, which
+     is right for a button mid-request and wrong here: there is no checkout to
+     wait for, and the note under the button says so. */
+  .price-cta:disabled { cursor: not-allowed; }
   .price-current {
     display: grid; min-height: 3.1rem; place-items: center;
     border-radius: var(--radius-pill); background: var(--color-surface-2);
@@ -1190,9 +1159,6 @@
   /* The band still arrives; it just does not travel. useCountUp jumps to the
      value in this mode, so nothing is lost but the movement. */
   .scale-band { transition: none; transform: none; }
-  /* The drift is the one thing on the page that moves forever, so it is the
-     first thing to stop. The roster is still there, just still. */
-  .scale-wash-track { animation: none; }
   .sheet[open], .sheet[open]::backdrop { animation: none; }
 }
 
@@ -1234,9 +1200,8 @@
 
 @media (max-width: 720px) {
   /* Two big figures side by side stop being readable well before the phone
-     breakpoint; they stack, and the roster thins to match. */
+     breakpoint, so they stack. */
   .scale-figures { flex-direction: column; gap: 1.6rem; }
-  .scale-wash-line:nth-child(n + 3) { display: none; }
   .field-row { grid-template-columns: 1fr; }
   /* On a phone the sheet is a bottom sheet: reachable, and it does not float
      in the middle of a screen it nearly fills anyway. */

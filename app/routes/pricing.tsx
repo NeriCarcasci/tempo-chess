@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { Link, useLoaderData, useSearchParams } from "react-router";
+import { Link, useLoaderData } from "react-router";
 import { PublicPage } from "../components/PublicShell";
 import { getSession } from "../lib/session";
 import {
   fetchPlans,
   formatPrice,
-  startCheckout,
   yearlySaving,
   type Interval,
   type Plan,
@@ -17,32 +16,34 @@ export function meta() {
     {
       name: "description",
       content:
-        "Start free with your last 50 games. Go Pro for your whole history, deep engine review, and unlimited drills.",
+        "Start free with your last 50 games. Go Pro for your whole history and deep engine review.",
     },
   ];
 }
 
 interface PricingData {
   plans: Plan[];
-  configured: boolean;
   signedIn: boolean;
 }
 
 /**
- * No `currentPlan`.
+ * No `currentPlan`, and no checkout.
  *
- * It came off the session's `subscription` block, which came off the prototype
- * `/me`. `/v1` publishes no per-user entitlement, so nothing here can tell a
- * subscriber from anyone else, and the "Your current plan" marker is not drawn
- * rather than drawn on a guess. The card offers Pro to a subscriber as a
- * result; the checkout endpoint is the one that knows, and it is where that
- * has to be caught until an entitlement read exists.
+ * `currentPlan` came off the session's `subscription` block, which came off the
+ * prototype `/me`. `/v1` publishes no per-user entitlement, so nothing here can
+ * tell a subscriber from anyone else, and the "Your current plan" marker is not
+ * drawn rather than drawn on a guess.
+ *
+ * The catalogue's `checkoutAvailable` is read on the server and not branched on
+ * here, because it answers a different question: whether the *API* holds Stripe
+ * keys, not whether this client has a route to start a payment. It does not —
+ * `/v1` has no checkout endpoint at all — so the Pro control is unavailable
+ * whatever that flag says, and the card states the reason.
  */
 export async function clientLoader(): Promise<PricingData> {
   const [catalogue, session] = await Promise.all([fetchPlans(), getSession()]);
   return {
     plans: catalogue.plans,
-    configured: catalogue.configured,
     signedIn: Boolean(session),
   };
 }
@@ -70,39 +71,21 @@ function PlanCard({
   plan,
   interval,
   signedIn,
-  configured,
   current = false,
 }: {
   plan: Plan;
   interval: Interval;
   signedIn: boolean;
-  configured: boolean;
   /** Nothing sets this while `/v1` publishes no entitlement. See the loader. */
   current?: boolean;
 }) {
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const isPro = plan.id === "pro";
   const price = interval === "yearly" ? plan.priceYearly : plan.priceMonthly;
   const per = interval === "yearly" ? "/year" : "/month";
 
-  async function subscribe() {
-    setBusy(true);
-    try {
-      const result = await startCheckout(plan.id, interval);
-      if (!result.url) setMessage(result.message);
-    } catch (error) {
-      if (error instanceof Response) throw error;
-      setMessage(error instanceof Error ? error.message : "Could not start checkout.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const note = message
-    ?? (!configured && isPro
-      ? "Billing is not switched on yet, so Pro features are open to everyone in the meantime."
-      : null);
+  const note = isPro
+    ? "Billing is not connected yet, so Pro cannot be bought. Everything in it is open to everyone in the meantime."
+    : null;
 
   // Five regions in a fixed order. The grid outside puts every card's regions on
   // the same row lines, so the two plans stay comparable rather than each one
@@ -136,8 +119,12 @@ function PlanCard({
             {signedIn ? "Go to dashboard" : "Start free"}
           </Link>
         ) : signedIn ? (
-          <button type="button" className="primary-button price-cta" onClick={subscribe} disabled={busy}>
-            {busy ? "Starting…" : "Upgrade to Pro"}
+          /* Disabled rather than removed. The card's five regions are a fixed
+             order, and a missing control would leave a signed-in reader with no
+             statement at all about how they get Pro. The note underneath says
+             why it cannot be pressed. */
+          <button type="button" className="primary-button price-cta" disabled>
+            Upgrade to Pro
           </button>
         ) : (
           <Link to="/signup?plan=pro" className="primary-button price-cta">
@@ -163,24 +150,21 @@ function PlanCard({
 }
 
 export default function Pricing() {
-  const { plans, configured, signedIn } = useLoaderData() as PricingData;
+  const { plans, signedIn } = useLoaderData() as PricingData;
   const [interval, setInterval] = useState<Interval>("monthly");
-  const [params] = useSearchParams();
-  const cancelled = params.get("checkout") === "cancelled";
 
   return (
     <PublicPage>
       <header className="page-head page-head-center">
         <h1>Start free. Upgrade when 50 games is not enough.</h1>
+        {/* The lessons are gone from the product, so they are gone from the
+            sentence that sold them. Naming a surface that no longer exists is
+            the one thing a pricing page cannot do. */}
         <p>
-          Free is a real product, not a teaser: the dashboard, the lessons, and
-          daily drills. Pro is for histories long enough that the pattern only
-          shows up across all of it.
+          Free is a real product, not a teaser: the whole opening tree your games
+          made, and every mistake Forma found in it. Pro is for histories long
+          enough that the pattern only shows up across all of it.
         </p>
-
-        {cancelled ? (
-          <p className="price-cancelled">Checkout cancelled. Nothing was charged.</p>
-        ) : null}
 
         <div className="price-toggle" role="group" aria-label="Billing interval">
           <button
@@ -204,13 +188,7 @@ export default function Pricing() {
 
       <section className="price-grid">
         {plans.map((plan) => (
-          <PlanCard
-            key={plan.id}
-            plan={plan}
-            interval={interval}
-            signedIn={signedIn}
-            configured={configured}
-          />
+          <PlanCard key={plan.id} plan={plan} interval={interval} signedIn={signedIn} />
         ))}
       </section>
 

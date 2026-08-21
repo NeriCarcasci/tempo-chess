@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchReach, fetchReachFresh, type Reach, type ReachPlayer } from "../lib/reach";
-import { LichessMark, ChessComMark } from "./PlatformMarks";
+import { fetchReach, fetchReachFresh, type Reach } from "../lib/reach";
+import type { PublicFigure } from "../lib/v1/types";
 import { BetaForm } from "./BetaForm";
 
 /**
- * How much chess Forma has read: the figures, and the accounts they count.
+ * How much chess Forma has read.
  *
- * Both numbers come from `GET /stats/reach`, which counts rows (see
+ * Both numbers come from `GET /v1/public/stats`, which counts rows (see
  * server/src/players/reach.ts — including the one documented exception, the
  * games baseline). Nothing here is a number a designer can bump.
  *
@@ -17,6 +17,16 @@ import { BetaForm } from "./BetaForm";
  * If the API cannot be reached the section does not render at all. There is no
  * placeholder and no dash: a band whose entire content is a claim about our
  * scale has nothing to say when it does not know the figure.
+ *
+ * ## Why the roster behind the figures is gone
+ *
+ * Four rows of drifting handles used to sit behind the numbers, taken from the
+ * same join that produced the count. `/v1/public/stats` does not publish them:
+ * they are real accounts screened from public arena results, and the contract
+ * requires opt-in before a provider handle is shown anywhere. The response
+ * names the omission in its own redaction block rather than dropping it
+ * quietly. Nothing invented replaces it — the figures were always the headline,
+ * and the wash was the evidence, not the claim.
  */
 
 /** The server caches for five minutes, so polling faster than this buys nothing. */
@@ -36,97 +46,6 @@ function prefersReducedMotion(): boolean {
   return (
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
-
-/* -- the drifting roster ------------------------------------------------- */
-
-const WASH_ROWS = 4;
-
-/**
- * Each row gets the whole roster, starting at a different account.
- *
- * Splitting the accounts *between* rows was the obvious version and it does not
- * fill: a couple of dozen handles divided four ways leaves rows narrower than a
- * wide monitor, so the wash sits in the middle as a tidy block instead of
- * running off both edges. Rotating the full list per row guarantees every row
- * overflows at any width, and no row repeats a handle within itself.
- */
-function toRows(players: ReachPlayer[]): ReachPlayer[][] {
-  if (players.length === 0) return [];
-  const step = Math.max(1, Math.ceil(players.length / WASH_ROWS));
-  return Array.from({ length: WASH_ROWS }, (_, r) => {
-    const offset = (r * step) % players.length;
-    return [...players.slice(offset), ...players.slice(0, offset)];
-  });
-}
-
-/**
- * Deterministic per-handle opacity, from the handle itself. Random would give a
- * nicer scatter but would also change on every render, and a background that
- * reshuffles when React re-renders is worse than a slightly regular one.
- */
-function washOpacity(name: string): number {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  // Ceiling deliberately low. The roster is a ground, not a second thing to
-  // read: at the old range the brightest handles pulled the eye off the
-  // figures, which is precisely backwards for a band whose whole point is the
-  // two numbers.
-  return 0.2 + (hash % 5) * 0.075;
-}
-
-/** Seconds per lap. Long, and prime-ish per row so the rows never re-sync. */
-const ROW_SECONDS = [78, 97, 67, 109];
-
-/**
- * The accounts themselves, drifting behind the figures.
- *
- * The row is rendered twice and the animation travels exactly -50%, which is
- * what makes the loop seamless: at the end of a lap the second copy is sitting
- * precisely where the first started, so there is no jump to hide. The duplicate
- * is aria-hidden along with everything else here — it is texture, and the
- * figures in front already say what it means.
- */
-function Wash({ players }: { players: ReachPlayer[] }) {
-  const rows = toRows(players);
-  if (rows.length === 0) return null;
-  return (
-    <div className="scale-wash" aria-hidden="true">
-      {rows.map((row, i) => (
-        <div key={i} className="scale-wash-line">
-          <div
-            className="scale-wash-track"
-            style={
-              {
-                "--dur": `${ROW_SECONDS[i % ROW_SECONDS.length]}s`,
-                // Alternating direction reads as drift rather than as a
-                // conveyor belt, which is the difference between motion that
-                // sits behind content and motion that competes with it.
-                "--dir": i % 2 === 0 ? "normal" : "reverse",
-              } as React.CSSProperties
-            }
-          >
-            {[0, 1].map((copy) =>
-              row.map((player) => (
-                <span
-                  key={`${copy}:${player.username}`}
-                  className="scale-chip"
-                  style={{ opacity: washOpacity(player.username) }}
-                >
-                  {player.platform === "chesscom" ? (
-                    <ChessComMark size={15} />
-                  ) : (
-                    <LichessMark size={15} />
-                  )}
-                  {player.username}
-                </span>
-              )),
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -200,6 +119,34 @@ function Stat({
   return (
     <div className="scale-stat">
       <strong className="scale-figure">{shown.toLocaleString("en-GB")}</strong>
+      <span className="scale-label">{label}</span>
+    </div>
+  );
+}
+
+/**
+ * A count the API may decline to give exactly.
+ *
+ * `/v1/public/stats` suppresses a player count small enough to identify
+ * somebody and answers "fewer than N" instead. That is a different sentence
+ * from the number, so it is drawn as one: no roll-up, because there is no value
+ * to roll up to, and never a zero, which is the reading a bare dash invites.
+ */
+function FigureStat({
+  figure,
+  active,
+  label,
+}: {
+  figure: PublicFigure;
+  active: boolean;
+  label: string;
+}) {
+  if (figure.disclosure === "exact") {
+    return <Stat value={figure.value} active={active} label={label} />;
+  }
+  return (
+    <div className="scale-stat">
+      <strong className="scale-figure">fewer than {figure.below.toLocaleString("en-GB")}</strong>
       <span className="scale-label">{label}</span>
     </div>
   );
@@ -299,8 +246,6 @@ export function Scale() {
   return (
     <section className="scale" ref={nodeRef} aria-labelledby="scale-title">
       <div className={`scale-band ${visible ? "is-in" : ""}`}>
-        <Wash players={reach.players_list ?? []} />
-
         <div className="scale-fore">
           {/* The figures are the headline. A sentence above them saying the same
               thing in words was the thing that did not fit. */}
@@ -310,7 +255,7 @@ export function Scale() {
 
           <div className="scale-figures">
             <Stat value={reach.games} active={visible} label="games analysed" />
-            <Stat value={reach.players} active={visible} label="players read" />
+            <FigureStat figure={reach.players} active={visible} label="players read" />
           </div>
 
           {/* The figures and the roster behind them already say this is real.

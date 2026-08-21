@@ -8,6 +8,9 @@ import {
   type LinkedAccount,
 } from "../lib/session";
 import { apiFetch } from "../lib/api";
+import { linkAccount } from "../lib/onboarding/api";
+import { newIdempotencyKey } from "../lib/v1/client";
+import { ProblemError } from "../lib/v1/problem";
 import { invalidateCache } from "../lib/loaderCache";
 import { BrandLock } from "../components/PublicShell";
 import { LichessMark, ChessComMark } from "../components/PlatformMarks";
@@ -31,6 +34,22 @@ import { LichessMark, ChessComMark } from "../components/PlatformMarks";
  * *missing* — pre-filling for onboarding meant "Link another account" opened a
  * form already holding your Chess.com name with Lichess selected, and searching
  * it truthfully reported that no such Lichess player exists.
+ *
+ * ## What this writes, and what it no longer writes
+ *
+ * The link is `POST /v1/me/accounts`, which is the only account list the
+ * session validates against. It used to be the prototype's `/me/accounts`,
+ * whose ids stopped matching what `requireSession()` checks, so a freshly
+ * linked account could leave the product pointed at nothing.
+ *
+ * The import that followed it is gone. It posted to the prototype importer,
+ * which fills `public.games`; the canonical system has no import endpoint,
+ * because games arrive with an examination run rather than on demand. The copy
+ * no longer promises one.
+ *
+ * The lookup is the one legacy call this screen keeps: `/v1` has no public
+ * provider-profile route, and dropping it would drop the "is this you?" check
+ * that stops a typo becoming a linked stranger.
  */
 
 export function meta() {
@@ -132,30 +151,30 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
     } satisfies ActionResult;
   }
 
-  // -- step two: they confirmed it, so link and import ---------------------
-  const linked = await apiFetch("/me/accounts", { json: { username, platform } });
-  if (!linked.ok) {
-    const body = (await linked.json().catch(() => null)) as { error?: string } | null;
-    return { error: body?.error ?? "Could not link that account." } satisfies ActionResult;
+  // -- step two: they confirmed it, so link it -----------------------------
+  try {
+    const created = await linkAccount({
+      provider: platform,
+      handle: username,
+      idempotencyKey: newIdempotencyKey(),
+    });
+
+    // A freshly linked account is the one they came here to use, so point the
+    // product at it. Otherwise the second account you add stays invisible
+    // behind the first, which is exactly the bug this flow used to have. The
+    // id has to be the `/v1` one: it is the only list the session validates
+    // the stored choice against.
+    setActiveAccount(session.userId, created.id);
+
+    // Linking changes who /v1/me reports, so both caches have to go before the
+    // dashboard loader runs.
+    invalidateSession();
+    invalidateCache();
+  } catch (error) {
+    if (error instanceof Response) throw error; // a 401 redirect must land
+    if (error instanceof ProblemError) return { error: error.message } satisfies ActionResult;
+    return { error: "Could not link that account." } satisfies ActionResult;
   }
-  const created = (await linked.json().catch(() => null)) as { account?: LinkedAccount } | null;
-
-  // A freshly linked account is the one they came here to use, so point the
-  // product at it. Otherwise the second account you add stays invisible behind
-  // the first, which is exactly the bug this flow used to have.
-  if (created?.account?.id) setActiveAccount(session.userId, created.account.id);
-
-  // Linking changes who /me reports, so both caches have to go before the
-  // dashboard loader runs.
-  invalidateSession();
-  invalidateCache();
-
-  // The platform goes with it. Without it the API assumed Lichess for everyone,
-  // so a Chess.com account was looked up under the wrong platform and the
-  // import died before it read a single game.
-  await apiFetch("/imports/lichess", {
-    json: { username, platform, games: "all" },
-  }).catch(() => null);
 
   throw redirect("/today");
 }
@@ -200,8 +219,8 @@ function Candidate({
               ? "Switching…"
               : "Switch to this account"
             : busy
-              ? "Importing your games…"
-              : "Yes, import my games"}
+              ? "Linking…"
+              : "Yes, that's me"}
         </button>
       </Form>
       <Form method="get">
@@ -248,7 +267,7 @@ export default function Connect({ loaderData, actionData }: Route.ComponentProps
           {candidate
             ? alreadyLinked
               ? "This account is already linked to you. Switch to it and every page will read its games instead."
-              : "We found one account with that name. Confirm it and we will read its whole history."
+              : "We found one account with that name. Confirm it and Forma will include it the next time it reads your games."
             : adding
               ? "Play on both sites, or under another name? Add it and you can switch between accounts from the menu at any time."
               : "Forma analyses games you have already played. Tell us where you play and we will find your account."}

@@ -105,6 +105,8 @@ export type WorkflowList = Data<"listWorkflows">;
 
 export type PublicStats = Data<"getPublicStats">;
 export type PublicPlans = Data<"getPublicPlans">;
+export type PublicPlan = PublicPlans["plans"][number];
+export type PublicBetaSignupBody = Body<"createBetaSignup">;
 export type CaseStudy = Data<"getCaseStudy">;
 export type CaseStudySummary = Data<"listCaseStudies">[number];
 export type DirectoryProfile = Data<"getDirectoryProfile">;

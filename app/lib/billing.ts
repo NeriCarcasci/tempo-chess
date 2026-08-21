@@ -1,49 +1,32 @@
-import { api, apiFetch } from "./api";
+import { v1Data } from "./v1/client";
+import type { PublicPlan, PublicPlans } from "./v1/types";
 
 /**
- * Client half of the billing seam. Mirrors `server/src/billing/plans.ts`; the
- * plan catalogue is fetched rather than duplicated so the pricing page can
- * never advertise a tier the server doesn't honour.
+ * The plan catalogue, from `GET /v1/public/plans`.
+ *
+ * Fetched rather than duplicated so the pricing page can never advertise a tier
+ * the server does not honour.
+ *
+ * Two things the prototype's `/billing/plans` published are not on the
+ * versioned surface, and both are deliberate subtractions rather than gaps to
+ * fill in later. The Stripe price ids are gone, because a public catalogue has
+ * no business naming them. The limit table is gone, because publishing it
+ * invites a client to enforce entitlements that the server is the only
+ * authority on.
+ *
+ * **There is no checkout call.** The prototype had `POST /billing/checkout` and
+ * `POST /billing/portal`; `/v1` has neither, and Stripe is not wired. Nothing
+ * here fakes one — see `routes/pricing.tsx`, where the button says so.
  */
 
-export type PlanId = "free" | "pro";
+export type Plan = PublicPlan;
+export type PlanId = Plan["id"];
 export type Interval = "monthly" | "yearly";
-
-export interface PlanFeature {
-  label: string;
-  included: boolean;
-}
-
-export interface PlanLimits {
-  analysedGames: number | null;
-  dailyDrills: number | null;
-  explorerDepth: number;
-  deepEngineAnalysis: boolean;
-  fullRepertoireMap: boolean;
-}
-
-export interface Plan {
-  id: PlanId;
-  name: string;
-  tagline: string;
-  priceMonthly: number;
-  priceYearly: number;
-  currency: "usd";
-  priceIdMonthly: string | null;
-  priceIdYearly: string | null;
-  features: PlanFeature[];
-  limits: PlanLimits;
-}
-
-export interface PlanCatalogue {
-  plans: Plan[];
-  /** False until Stripe keys are set on the API. */
-  configured: boolean;
-}
+export type PlanCatalogue = PublicPlans;
 
 export function fetchPlans(): Promise<PlanCatalogue> {
   // Public: the pricing page has to work for signed-out visitors.
-  return api<PlanCatalogue>("/billing/plans", { anonymous: true });
+  return v1Data<PlanCatalogue>("/v1/public/plans", { anonymous: true });
 }
 
 /** Dollars, with cents only when they're non-zero. */
@@ -57,38 +40,4 @@ export function yearlySaving(plan: Plan): number {
   if (!plan.priceMonthly || !plan.priceYearly) return 0;
   const monthlyTotal = plan.priceMonthly * 12;
   return Math.round(((monthlyTotal - plan.priceYearly) / monthlyTotal) * 100);
-}
-
-export interface CheckoutResult {
-  url: string | null;
-  configured: boolean;
-  message: string;
-}
-
-/**
- * Start a subscription. When Stripe is live this returns a hosted-checkout URL
- * and we hand the browser over; until then the server answers `configured:
- * false` and the caller shows the message instead of redirecting.
- */
-export async function startCheckout(plan: PlanId, interval: Interval): Promise<CheckoutResult> {
-  const result = await api<CheckoutResult>("/billing/checkout", {
-    json: {
-      plan,
-      interval,
-      successUrl: `${location.origin}/account?checkout=success`,
-      cancelUrl: `${location.origin}/pricing?checkout=cancelled`,
-    },
-  });
-  if (result.url) location.href = result.url;
-  return result;
-}
-
-/** Open the customer portal to change or cancel an existing subscription. */
-export async function openBillingPortal(): Promise<CheckoutResult> {
-  const response = await apiFetch("/billing/portal", {
-    json: { returnUrl: `${location.origin}/account` },
-  });
-  const result = await response.json() as CheckoutResult;
-  if (result.url) location.href = result.url;
-  return result;
 }

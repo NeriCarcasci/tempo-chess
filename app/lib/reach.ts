@@ -1,31 +1,31 @@
-import { apiMaybe } from "./api";
+import { v1Maybe } from "./v1/client";
+import type { PublicStats } from "./v1/types";
 import { getCached, setCached } from "./loaderCache";
 
 /**
- * The one claim the landing page makes about our scale. It comes from the API,
- * which counts screened games in the database: nothing here is a constant a
- * designer can bump. If the call fails the caller shows nothing, because an
- * invented number is worse than no number (DESIGN.md, "Public copy rules").
+ * The one claim the landing page makes about our scale, from
+ * `GET /v1/public/stats`.
+ *
+ * It counts rows in the database: nothing here is a constant a designer can
+ * bump. If the call fails the caller shows nothing, because an invented number
+ * is worse than no number (DESIGN.md, "Public copy rules").
+ *
+ * Two things changed when this moved off the prototype's `/stats/reach`, and
+ * both are the contract being stricter rather than the figures moving.
+ *
+ * `players` is a disclosure, not a number: a count small enough to identify
+ * somebody comes back as "fewer than N" instead of the exact figure, so callers
+ * must render both shapes. `games` stays a plain integer, since a game count
+ * names nobody.
+ *
+ * The roster of handles is gone. `/v1` withholds it — it is named in the
+ * response's own redaction block as `data.playersList` — because those accounts
+ * are real people screened from public arena results who never opted into being
+ * listed, and the contract's rule that provider handles require opt-in does not
+ * stop applying because the surface is a statistic.
  */
 
-export interface Reach {
-  players: number;
-  games: number;
-  /** Live row counts, before the pre-reset baseline is added. */
-  counted?: { players: number; games: number };
-  /** What the pre-reset baseline contributed. See server/src/players/reach.ts. */
-  baseline?: { players: number; games: number };
-  /**
-   * The accounts behind `counted.players`, each with the platform it belongs to.
-   * Optional so an older API build simply renders the figures without the wash.
-   */
-  players_list?: ReachPlayer[];
-}
-
-export interface ReachPlayer {
-  username: string;
-  platform: "lichess" | "chesscom";
-}
+export type Reach = PublicStats;
 
 const CACHE_KEY = "reach";
 const CACHE_TTL_MS = 5 * 60_000;
@@ -42,7 +42,7 @@ const CACHE_TTL_MS = 5 * 60_000;
  * a round trip and no database work.
  */
 async function readReach(): Promise<Reach | null> {
-  const reach = await apiMaybe<Reach>("/stats/reach", {
+  const reach = await v1Maybe<Reach>("/v1/public/stats", {
     anonymous: true,
     cache: "no-store",
   });
@@ -65,26 +65,4 @@ export async function fetchReach(): Promise<Reach | null> {
  */
 export async function fetchReachFresh(): Promise<Reach | null> {
   return readReach();
-}
-
-/**
- * Round *down* to a readable figure, so the number on screen is never larger
- * than the number in the database. 512 reads "500+", 40 reads "40".
- *
- * `step` is the bucket the value falls into; small counts are printed exactly
- * because "0+" and "50+" would both be worse than the real figure.
- */
-export function atLeast(value: number, step: number): string {
-  if (value < step * 2) return value.toLocaleString("en-GB");
-  return `${(Math.floor(value / step) * step).toLocaleString("en-GB")}+`;
-}
-
-/** Players: buckets of 50, so 512 reads "500+" and 40 reads "40". */
-export function formatPlayers(value: number): string {
-  return atLeast(value, 50);
-}
-
-/** Games: buckets of a thousand, which is the resolution anyone reads anyway. */
-export function formatGames(value: number): string {
-  return atLeast(value, 1000);
 }

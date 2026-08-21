@@ -4,6 +4,8 @@ import {
   RATINGS,
   submitBetaSignup,
   type BetaSignup,
+  type Platform,
+  type RatingBand,
 } from "../lib/betaSignup";
 
 /**
@@ -30,8 +32,8 @@ export function BetaForm({ open, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [platform, setPlatform] = useState<string>("lichess");
-  const [rating, setRating] = useState<string>("1400-1800");
+  const [platform, setPlatform] = useState<Platform>("lichess");
+  const [rating, setRating] = useState<RatingBand>("1400-1800");
   const ids = useId();
 
   // showModal()/close() are imperative by design; mirroring React state onto
@@ -64,7 +66,7 @@ export function BetaForm({ open, onClose }: Props) {
       email: String(data.get("email") ?? "").trim(),
       platform,
       username: String(data.get("username") ?? "").trim(),
-      rating,
+      ratingBand: rating,
       goal: String(data.get("goal") ?? "").trim(),
     };
     setStatus("sending");
