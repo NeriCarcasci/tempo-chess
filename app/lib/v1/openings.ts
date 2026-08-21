@@ -15,7 +15,7 @@
  */
 
 import { v1, v1Data, newIdempotencyKey } from "./client";
-import type { OpeningExplorer, OpeningGraphV1 } from "./types";
+import type { OpeningBook, OpeningExplorer, OpeningGraphV1 } from "./types";
 import type { OpeningGraph } from "../openings";
 
 export interface ExplorerQuery {
@@ -35,6 +35,29 @@ export function getOpeningExplorer(query: ExplorerQuery = {}): Promise<OpeningEx
       since: query.since ?? undefined,
       family: query.family ?? undefined,
     },
+  });
+}
+
+/**
+ * The book at one position.
+ *
+ * A read, like the explorer, but the opposite shape: the explorer ships a whole
+ * graph once because walking it is the interaction, and this ships one position
+ * because studying it is. It is asked for when somebody has already decided
+ * which position they care about, never on a keypress.
+ *
+ * `line` is the UCI moves that reached the position. Without it the response
+ * still names the opening — from the catalogue's own representative line — but
+ * it cannot say where the player left the book, and it says null rather than
+ * "nowhere".
+ */
+export function getOpeningBook(query: {
+  position: string;
+  line?: readonly string[] | string | null;
+}): Promise<OpeningBook> {
+  const line = typeof query.line === "string" ? query.line : (query.line ?? []).join(" ");
+  return v1Data<OpeningBook>("/v1/openings/book", {
+    query: { position: query.position, line: line || undefined },
   });
 }
 

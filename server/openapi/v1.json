@@ -8172,6 +8172,442 @@
         "summary": "The generated OpenAPI 3.1 document for this API"
       }
     },
+    "/v1/openings/book": {
+      "get": {
+        "description": "The named-opening catalogue at one position, with the caller's own games counted against it. `opening` names the deepest position the catalogue still recognises on the given line, `book.continuations` are the catalogue's moves from there, and `departure` is the first move of the line the catalogue has no edge for. `yourMoves` separates games played from games judged, so an unanalysed game is never rendered as a move that went well.",
+        "operationId": "getOpeningBook",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "position",
+            "required": true,
+            "schema": {
+              "pattern": "^(?:[pnbrqkPNBRQK1-8]{1,8}\\/){7}[pnbrqkPNBRQK1-8]{1,8} [wb] (?:-|[KQkq]{1,4}) (?:-|[a-h][36])$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "line",
+            "required": false,
+            "schema": {
+              "maxLength": 240,
+              "pattern": "^[a-h][1-8][a-h][1-8][qrbn]?(?:[ ,]+[a-h][1-8][a-h][1-8][qrbn]?)*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "asOf": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "book": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "atRequestedPosition": {
+                              "type": "boolean"
+                            },
+                            "continuations": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "eco": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "name": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "san": {
+                                    "type": "string"
+                                  },
+                                  "uci": {
+                                    "type": "string"
+                                  },
+                                  "yourGames": {
+                                    "maximum": 9007199254740991,
+                                    "minimum": -9007199254740991,
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "uci",
+                                  "san",
+                                  "name",
+                                  "eco",
+                                  "yourGames"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "fromKey": {
+                              "type": "string"
+                            },
+                            "inBookPlies": {
+                              "maximum": 9007199254740991,
+                              "minimum": -9007199254740991,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "fromKey",
+                            "atRequestedPosition",
+                            "inBookPlies",
+                            "continuations"
+                          ],
+                          "type": "object"
+                        },
+                        "departure": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "lastBookKey": {
+                                  "type": "string"
+                                },
+                                "lastBookName": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "ply": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                },
+                                "side": {
+                                  "enum": [
+                                    "white",
+                                    "black"
+                                  ],
+                                  "type": "string"
+                                },
+                                "uci": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "ply",
+                                "uci",
+                                "side",
+                                "lastBookKey",
+                                "lastBookName"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "opening": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "atRequestedPosition": {
+                                  "type": "boolean"
+                                },
+                                "eco": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "family": {
+                                  "type": "string"
+                                },
+                                "lineSan": {
+                                  "type": "string"
+                                },
+                                "lineUci": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "ply": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                },
+                                "variation": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "eco",
+                                "family",
+                                "variation",
+                                "ply",
+                                "lineSan",
+                                "lineUci",
+                                "atRequestedPosition"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "requested": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "line": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "position": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "position",
+                            "line"
+                          ],
+                          "type": "object"
+                        },
+                        "yourMoves": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "games": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "inBook": {
+                                "type": "boolean"
+                              },
+                              "judged": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "mistakes": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "san": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "uci": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "uci",
+                              "san",
+                              "inBook",
+                              "games",
+                              "judged",
+                              "mistakes"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "asOf",
+                        "requested",
+                        "opening",
+                        "book",
+                        "yourMoves",
+                        "departure"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "What this opening is called, what the book plays, and where you left it",
+            "headers": {
+              "ETag": {
+                "description": "Strong validator for If-None-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The caller's copy is current."
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The request could not be accepted"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "What this opening is called, what the book plays, and where you left it"
+      }
+    },
     "/v1/openings/explorer": {
       "get": {
         "description": "The transposition-aware position graph for your own games, bounded to the opening. Every node is a core position, so two move orders reaching the same board are one node. Decision verdicts are cited from the published analysis of each game, and games with no published analysis are counted in coverage rather than treated as clean.",

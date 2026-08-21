@@ -76,6 +76,9 @@ export type PracticeRefill = Data<"refillPracticeQueue">;
 export type OpeningExplorer = Data<"getOpeningExplorer">;
 export type OpeningExplorerCoverage = OpeningExplorer["coverage"];
 export type OpeningFamilySummary = OpeningExplorer["families"][number];
+export type OpeningBook = Data<"getOpeningBook">;
+export type BookContinuation = OpeningBook["book"]["continuations"][number];
+export type PlayerBookMove = OpeningBook["yourMoves"][number];
 /** Null when the filtered sample contains no move; the caller must handle it. */
 export type OpeningGraphV1 = NonNullable<OpeningExplorer["graph"]>;
 export type OpeningGraphV1Node = OpeningGraphV1["nodes"][number];

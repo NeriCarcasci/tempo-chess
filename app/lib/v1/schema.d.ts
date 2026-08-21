@@ -573,6 +573,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/openings/book": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What this opening is called, what the book plays, and where you left it
+         * @description The named-opening catalogue at one position, with the caller's own games counted against it. `opening` names the deepest position the catalogue still recognises on the given line, `book.continuations` are the catalogue's moves from there, and `departure` is the first move of the line the catalogue has no edge for. `yourMoves` separates games played from games judged, so an unanalysed game is never rendered as a move that went well.
+         */
+        get: operations["getOpeningBook"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/openings/explorer": {
         parameters: {
             query?: never;
@@ -3768,6 +3788,141 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getOpeningBook: {
+        parameters: {
+            query: {
+                position: string;
+                line?: string;
+            };
+            header?: {
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What this opening is called, what the book plays, and where you left it */
+            200: {
+                headers: {
+                    /** @description Strong validator for If-None-Match. */
+                    ETag?: string;
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            asOf: string | null;
+                            book: {
+                                atRequestedPosition: boolean;
+                                continuations: {
+                                    eco: string | null;
+                                    name: string | null;
+                                    san: string;
+                                    uci: string;
+                                    yourGames: number;
+                                }[];
+                                fromKey: string;
+                                inBookPlies: number;
+                            };
+                            departure: {
+                                lastBookKey: string;
+                                lastBookName: string | null;
+                                ply: number;
+                                /** @enum {string} */
+                                side: "white" | "black";
+                                uci: string;
+                            } | null;
+                            opening: {
+                                atRequestedPosition: boolean;
+                                eco: string | null;
+                                family: string;
+                                lineSan: string;
+                                lineUci: string;
+                                name: string;
+                                ply: number;
+                                variation: string | null;
+                            } | null;
+                            requested: {
+                                line: string | null;
+                                position: string;
+                            };
+                            yourMoves: {
+                                games: number;
+                                inBook: boolean;
+                                judged: number;
+                                mistakes: number;
+                                san: string | null;
+                                uci: string;
+                            }[];
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description The caller's copy is current. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request could not be accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
             };
             /** @description Something went wrong */
             500: {
