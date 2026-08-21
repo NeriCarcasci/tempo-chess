@@ -53,6 +53,16 @@ export interface ConceptDefinition {
   readonly family: string;
   readonly category: ConceptCategory;
   readonly displayName: string;
+  /**
+   * The version of *this* concept, not of the catalogue.
+   *
+   * It used to be one number for all of them, which meant correcting one rule
+   * minted a new version of every other concept as a side effect -- six new
+   * rows, five of them describing a rule that had not changed, and evidence
+   * split across versions for no reason anyone could later reconstruct.
+   * Bumping this bumps one concept. See FOR-122.
+   */
+  readonly versionNo: number;
   /** Written for the player whose game it describes, not for the detector. */
   readonly humanDefinition: string;
   readonly supportedRoles: readonly ConceptRole[];
@@ -79,6 +89,7 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
     slug: "material_safety",
     family: "material",
     category: "tactical",
+    versionNo: 1,
     displayName: "Keeping your pieces safe",
     humanDefinition:
       "One of your pieces was available to be taken for less than it is worth, and you were to move. "
@@ -101,6 +112,7 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
     slug: "free_material",
     family: "material",
     category: "tactical",
+    versionNo: 1,
     displayName: "Taking what is offered",
     humanDefinition:
       "Your opponent left something available to be taken for less than it is worth. "
@@ -122,6 +134,7 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
     slug: "critical_moment",
     family: "decision",
     category: "tactical",
+    versionNo: 1,
     displayName: "Positions that decide the game",
     humanDefinition:
       "A moment where the moves available led to genuinely different games. "
@@ -142,6 +155,7 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
     slug: "only_move",
     family: "decision",
     category: "defensive",
+    versionNo: 1,
     displayName: "Finding the only move",
     humanDefinition:
       "A position where exactly one move held and everything else lost ground. "
@@ -158,6 +172,7 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
     slug: "winning_conversion",
     family: "conversion",
     category: "conversion",
+    versionNo: 1,
     displayName: "Converting a winning position",
     humanDefinition:
       "You reached a position that should win. This measures whether it still should by the time "
@@ -178,6 +193,7 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
     slug: "worse_position_defence",
     family: "resilience",
     category: "defensive",
+    versionNo: 1,
     displayName: "Defending a worse position",
     humanDefinition:
       "You were worse and had to keep the game alive. This measures whether your moves held the "
@@ -195,9 +211,6 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
   },
 ]);
 
-/** The version this catalogue describes. A change to any rule is a new one. */
-export const CATALOGUE_VERSION_NO = 1;
-
 /**
  * The hash a concept version is pinned by.
  *
@@ -205,13 +218,19 @@ export const CATALOGUE_VERSION_NO = 1;
  * contract are what determine whether two observations mean the same thing, and
  * the display name is not. Renaming "Taking what is offered" must not orphan a
  * season of evidence.
+ *
+ * `versionNo` now comes from the definition rather than from one number shared
+ * by the whole catalogue. For every v1 concept the hashed input is byte for byte
+ * what it was, so this change registers nothing new and invalidates nothing --
+ * which is the point. What it buys is that bumping `critical_moment` to 2 leaves
+ * the other five hashes alone.
  */
 export function conceptVersionHash(definition: ConceptDefinition): string {
   return createHash("sha256")
     .update(
       JSON.stringify({
         slug: definition.slug,
-        versionNo: CATALOGUE_VERSION_NO,
+        versionNo: definition.versionNo,
         roles: [...definition.supportedRoles].sort(),
         evidenceSourceKind: definition.evidenceSourceKind,
         detector: definition.detectorContract,

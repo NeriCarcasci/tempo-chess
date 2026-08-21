@@ -80,7 +80,38 @@ export interface DetectedOpportunity {
     readonly endPly: number;
     readonly facts: Record<string, unknown>;
     readonly completeness: "complete" | "incomplete" | "censored";
+    /**
+     * Deterministic identity of the physical occurrence. See `eventKey`.
+     *
+     * Two observations of the same moment -- recognising a critical position
+     * and executing it -- share this, because they are one thing that happened
+     * and two things measured about it.
+     */
+    readonly detectionKey: string;
   };
+}
+
+/**
+ * The identity of a physical occurrence, stable across runs.
+ *
+ * Deliberately excludes the role, the concept and the detector version. A fork
+ * is one fork whether it is labelled once or three times, and it is still the
+ * same fork after the detector that named it is corrected -- so a later version
+ * attaches another label to this event rather than claiming a second fork
+ * happened at the same ply.
+ *
+ * `discriminator` is for the families that can produce two genuinely different
+ * occurrences of the same type on the same ply: one move can create two pins.
+ * The current six cannot, so they leave it out and the key is type and ply.
+ */
+export function eventKey(
+  eventType: string,
+  focalPly: number,
+  discriminator?: string,
+): string {
+  return discriminator === undefined
+    ? `${eventType}:${focalPly}`
+    : `${eventType}:${focalPly}:${discriminator}`;
 }
 
 const opposite = (color: "white" | "black"): "white" | "black" =>
@@ -231,6 +262,7 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
           eventType: "material_exposed",
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
+          detectionKey: eventKey("material_exposed", transition.fromPly),
           endPly: transition.fromPly + 1,
           facts: { atRiskCp: exposed.gain, resolved: survived },
           completeness: "complete",
@@ -261,6 +293,7 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
           eventType: "material_offered",
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
+          detectionKey: eventKey("material_offered", transition.fromPly),
           endPly: transition.fromPly + 1,
           facts: { onOfferCp: offered.gain, taken: tookIt },
           completeness: "complete",
@@ -307,6 +340,7 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
           eventType: "critical_moment",
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
+          detectionKey: eventKey("critical_moment", transition.fromPly),
           endPly: transition.fromPly + 1,
           facts: { criticality: transition.criticality, rank: transition.playedMoveRank },
           completeness: "complete",
@@ -321,6 +355,7 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
           eventType: "critical_moment",
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
+          detectionKey: eventKey("critical_moment", transition.fromPly),
           endPly: transition.fromPly + 1,
           facts: { criticality: transition.criticality, acceptable: transition.playedMoveAcceptable },
           completeness: "complete",
@@ -343,6 +378,7 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
           eventType: "only_move",
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
+          detectionKey: eventKey("only_move", transition.fromPly),
           endPly: transition.fromPly + 1,
           facts: { acceptable: transition.playedMoveAcceptable },
           completeness: "complete",
@@ -365,6 +401,7 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
           eventType: "defending_worse",
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
+          detectionKey: eventKey("defending_worse", transition.fromPly),
           endPly: transition.fromPly + 1,
           facts: { expectedScoreBefore: subjectBefore },
           completeness: "complete",
@@ -421,6 +458,7 @@ function conversionConcept(game: GameFacts): DetectedOpportunity[] {
         eventType: "winning_position_reached",
         startPly: reached.fromPly,
         focalPly: reached.fromPly,
+        detectionKey: eventKey("winning_position_reached", reached.fromPly),
         endPly: reached.fromPly,
         facts: { converted: null, censored: censorFor(game.termination) },
         completeness: "censored",
@@ -451,6 +489,10 @@ function conversionConcept(game: GameFacts): DetectedOpportunity[] {
       endPly: last.fromPly,
       facts: { converted: held, movesPlayed: after.length },
       completeness: "complete",
+      // Same key as the censored branch above: the position that became winning
+      // is the same occurrence whether or not the subject went on to move in
+      // it. Only the observation about it differs.
+      detectionKey: eventKey("winning_position_reached", reached.fromPly),
     },
   }];
 }

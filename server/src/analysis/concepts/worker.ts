@@ -181,15 +181,33 @@ export async function detectForRun(
     // a position graph rather than about one pass of the engine over it, which
     // is why the estimator joins these rows by game and snapshot and never by
     // run at all.
-    const [existing] = await tx<{ count: string }[]>`
-      select count(*)::text from analysis.concept_opportunities
-      where run_id = ${materializationRunId}
-    `;
-    if (existing && Number(existing.count) > 0) {
-      return {
-        outputRef: `run:${runId}`,
-        outputSummary: { opportunities: Number(existing.count), duplicate: true },
-      };
+    // What this run has already produced, at the granularity that actually
+    // repeats.
+    //
+    // This used to be one question -- "does this materialization run have any
+    // opportunity at all?" -- and an early return if it did. Correct for a
+    // re-delivered message and wrong for everything else: adding a seventh
+    // concept could never reach a game that already had rows from the first
+    // six, and correcting a detector could never reach anything. The only way
+    // to pick up a new version was to delete evidence, which `forma_analysis`
+    // is rightly not granted. So identity moves down to the physical occurrence
+    // and the observation, and a second run inserts what is missing.
+    const knownEvents = new Map<string, number>();
+    for (const row of await tx<{ id: string; detection_key: string }[]>`
+      select id, detection_key from analysis.chess_events
+      where run_id = ${materializationRunId} and detection_key is not null
+    `) {
+      knownEvents.set(row.detection_key, Number(row.id));
+    }
+
+    const knownOpportunities = new Set<string>();
+    for (const row of await tx<{ detection_key: string; concept_version_id: string; role: string }[]>`
+      select e.detection_key, o.concept_version_id, o.role
+      from analysis.concept_opportunities o
+      join analysis.chess_events e on e.id = o.event_id
+      where o.run_id = ${materializationRunId} and e.detection_key is not null
+    `) {
+      knownOpportunities.add(`${row.detection_key}|${row.concept_version_id}|${row.role}`);
     }
 
     const detected = detectGame(facts);
@@ -197,6 +215,7 @@ export async function detectForRun(
     let written = 0;
     let censored = 0;
     let skipped = 0;
+    let alreadyPresent = 0;
     const byConcept = new Map<string, number>();
 
     for (const observation of detected) {
@@ -217,20 +236,39 @@ export async function detectForRun(
         continue;
       }
 
-      const [event] = await tx<{ id: string }[]>`
-        insert into analysis.chess_events (
-          run_id, replay_revision_id, subject_game_id, event_type, start_ply, focal_ply,
-          end_ply, actor_color, affected_color, facts, detection_confidence, completeness
-        ) values (
-          ${materializationRunId}, ${game.replay_revision_id}, ${run.subject_game_id},
-          ${observation.event.eventType}, ${observation.event.startPly},
-          ${observation.event.focalPly}, ${observation.event.endPly},
-          ${game.subject_color}, ${game.subject_color},
-          ${jsonParam(observation.event.facts)}::jsonb, null, ${observation.event.completeness}
-        )
-        returning id
-      `;
-      if (!event) throw new Error("the event vanished on insert");
+      const { detectionKey } = observation.event;
+      if (knownOpportunities.has(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`)) {
+        // This exact observation is already recorded under this exact concept
+        // version. Not an error and not a duplicate to write: a re-run that
+        // finds its own previous output is the normal case.
+        alreadyPresent += 1;
+        continue;
+      }
+
+      // One physical occurrence, one row. Two observations of the same moment
+      // -- recognising a critical position and executing it -- share the key
+      // and therefore share the event.
+      let eventId = knownEvents.get(detectionKey);
+      if (eventId === undefined) {
+        const [event] = await tx<{ id: string }[]>`
+          insert into analysis.chess_events (
+            run_id, replay_revision_id, subject_game_id, event_type, start_ply, focal_ply,
+            end_ply, actor_color, affected_color, facts, detection_confidence, completeness,
+            detection_key
+          ) values (
+            ${materializationRunId}, ${game.replay_revision_id}, ${run.subject_game_id},
+            ${observation.event.eventType}, ${observation.event.startPly},
+            ${observation.event.focalPly}, ${observation.event.endPly},
+            ${game.subject_color}, ${game.subject_color},
+            ${jsonParam(observation.event.facts)}::jsonb, null, ${observation.event.completeness},
+            ${detectionKey}
+          )
+          returning id
+        `;
+        if (!event) throw new Error("the event vanished on insert");
+        eventId = Number(event.id);
+        knownEvents.set(detectionKey, eventId);
+      }
 
       const [evidence] = await tx<{ id: string }[]>`
         insert into analysis.evidence_items (
@@ -250,7 +288,7 @@ export async function detectForRun(
           score, rubric_component_version_id, difficulty, phase, speed, context,
           confidence, evidence_source_kind, occurred_at
         ) values (
-          ${materializationRunId}, ${run.subject_id}, ${run.subject_game_id}, ${event.id}, ${conceptVersionId},
+          ${materializationRunId}, ${run.subject_id}, ${run.subject_game_id}, ${eventId}, ${conceptVersionId},
           ${observation.draft.role}, ${observation.draft.opportunityPly},
           ${observation.draft.responsePly}, ${observation.draft.responseObserved},
           ${observation.draft.censoredReason}, ${observation.draft.success},
@@ -261,6 +299,7 @@ export async function detectForRun(
         )
       `;
 
+      knownOpportunities.add(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`);
       written += 1;
       if (!observation.draft.responseObserved) censored += 1;
       byConcept.set(observation.conceptSlug, (byConcept.get(observation.conceptSlug) ?? 0) + 1);
@@ -272,6 +311,7 @@ export async function detectForRun(
         opportunities: written,
         censored,
         skipped,
+        alreadyPresent,
         concepts: Object.fromEntries(byConcept),
       },
       metrics: { inputCount: transitions.length, outputCount: written },
