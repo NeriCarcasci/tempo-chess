@@ -162,10 +162,13 @@ among the candidates the search retained. Both labels now hang off one
 **v1 overclaim corrected.** `only_move` is computed from the *retained* candidate
 set, so v1's "exactly one move held and everything else lost ground" claimed a
 proof over all legal moves that the search never performed. v2 records the
-coverage it actually has. `candidateCount` is null until FOR-132 loads it, so
-every M1 event is `searched`; the field exists now so the honest subtype is
-recorded the moment the evidence is there, rather than the wording being
-retro-fitted later.
+coverage it actually has.
+
+`candidateCount` turned out to need no new engine work: `engine/assessments.ts`
+already stores it as `difficulty_features.retainedLines` on every transition, so
+the worker reads it and the subtype is real from M1 rather than deferred. A null
+count resolves to `searched`, never to `absolute` — a missing number must not
+read as full coverage, or the overclaim returns invisibly.
 
 ### 5. `winning_conversion` — v2 — *Converting a winning position*
 
@@ -190,7 +193,7 @@ the position the subject moved *from* — one ply before the position that was
 actually winning. The opportunity now begins in the winning position itself.
 Censoring is unchanged and remains correct.
 
-### 6. `worse_position_defence` — v2 — *Defending a worse position*
+### 6. `worse_position_defence` — v1, unchanged — *Defending a worse position*
 
 | | |
 | --- | --- |
@@ -207,10 +210,22 @@ Censoring is unchanged and remains correct.
 | Confidence | null |
 | Evidence | Engine transition assessment |
 
-**Reconfirmed, not corrected.** Expected scores are stored from White's
-perspective and `fromSubject` flips them for Black; the v1 rule is right for both
-colours. v2 exists only so the family shares one version generation with the
-rest of the corrected catalogue and so its abstention rule is written down.
+**Reconfirmed, not corrected, and therefore still v1.** Expected scores are
+stored from White's perspective and `fromSubject` flips them for Black; the rule
+is right for both colours.
+
+An earlier draft of this matrix gave it a v2 anyway, "so the family shares one
+version generation with the rest of the corrected catalogue". That is exactly
+the habit FOR-122 exists to break: a version is what a season of evidence points
+at, and minting a new one for a rule nobody changed splits that evidence in two
+for the sake of a tidy number. It keeps v1, and the five corrected concepts move
+to v2 without it.
+
+One known wart, left alone on purpose: the perspective flip does not round, so a
+stored White score of 0.8 becomes 0.19999999999999996 in a Black subject's
+difficulty vector. Nothing thresholds on the stored value, and rounding it would
+change what this concept records — which would make it a corrected concept
+needing a v2, for a cosmetic gain.
 
 ---
 

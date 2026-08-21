@@ -126,12 +126,19 @@ export async function detectForRun(
       played_move_acceptable: boolean;
       only_move: boolean | null;
       criticality: string | null;
+      acceptable_move_count: number | null;
+      retained_lines: string | null;
       expected_score_before: string;
       expected_score_after: string;
       phase: string | null;
     }[]>`
       select from_ply, actor_color, played_move_uci, best_move_uci, played_move_rank,
-             played_move_acceptable, only_move, criticality,
+             played_move_acceptable, only_move, criticality, acceptable_move_count,
+             -- How many lines the search that answered the candidate questions
+             -- retained. only_move is derived from that set, so without this
+             -- the detector cannot tell "the only move we looked at" from "the
+             -- only move there is" -- and v1 asserted the second.
+             difficulty_features->>'retainedLines' as retained_lines,
              expected_score_before, expected_score_after, phase
       from analysis.transition_assessments
       where analysis_run_id = ${runId}
@@ -169,6 +176,8 @@ export async function detectForRun(
         playedMoveAcceptable: row.played_move_acceptable,
         onlyMove: row.only_move,
         criticality: row.criticality === null ? null : Number(row.criticality),
+        acceptableMoveCount: row.acceptable_move_count,
+        candidateCount: row.retained_lines === null ? null : Number(row.retained_lines),
         expectedScoreBefore: Number(row.expected_score_before),
         expectedScoreAfter: Number(row.expected_score_after),
         phase: row.phase,

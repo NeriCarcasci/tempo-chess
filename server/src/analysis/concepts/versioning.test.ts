@@ -124,6 +124,8 @@ function busyGame(over: Partial<GameFacts> = {}): GameFacts {
     playedMoveAcceptable: true,
     onlyMove: index === 4,
     criticality: index === 4 ? 0.4 : null,
+    acceptableMoveCount: index === 4 ? 1 : null,
+    candidateCount: index === 4 ? 3 : null,
     expectedScoreBefore: 0.5,
     expectedScoreAfter: 0.5,
     phase: "opening",
