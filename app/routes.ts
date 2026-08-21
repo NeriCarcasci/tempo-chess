@@ -23,11 +23,12 @@ export default [
   route("report", "routes/report.tsx"),
   route("today", "routes/dashboard.tsx"),
   route("dashboard", "routes/dashboard-redirect.tsx"),
+  // One openings screen, on /v1. `/openings/:familySlug` is the same module
+  // with that line's row open and the walk under it.
   route("openings", "routes/openings.tsx"),
   route("openings/:familySlug", "routes/opening-family.tsx"),
-  // The /v1 explorer, beside the legacy screens rather than over them: the tear
-  // sheet, the repertoire stars and the drill queue still have no /v1 surface,
-  // so replacing `/openings` today would remove working features.
+  // `/explorer` was the second build of the same idea. It redirects now rather
+  // than 404s, because the URL has been linked.
   route("explorer", "routes/explorer.tsx"),
   route("middlegame", "routes/middlegame.tsx"),
   route("endgame", "routes/endgame.tsx"),

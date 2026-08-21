@@ -89,6 +89,9 @@ export type OpeningFamilySummary = OpeningExplorer["families"][number];
 export type OpeningGraphV1 = NonNullable<OpeningExplorer["graph"]>;
 export type OpeningGraphV1Node = OpeningGraphV1["nodes"][number];
 export type OpeningGraphV1Edge = OpeningGraphV1["edges"][number];
+export type OpeningBook = Data<"getOpeningBook">;
+export type BookContinuation = OpeningBook["book"]["continuations"][number];
+export type PlayerBookMove = OpeningBook["yourMoves"][number];
 
 // --- games ------------------------------------------------------------------
 
