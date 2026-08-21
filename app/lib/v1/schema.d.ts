@@ -593,6 +593,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/play/moves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The opponent's reply in a game against the engine
+         * @description Validates the position and every supplied move server-side, then returns one bounded engine move. No game is stored: it lives in the client, and a game against the engine is never part of the player's archive or of any analysis. The reply carries no evaluation, and there is no depth, time or MultiPV parameter. A family the deployment cannot serve is refused rather than answered by a different engine.
+         */
+        post: operations["requestOpponentMove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/play/opponents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The opponents and strengths this deployment can actually play
+         * @description The server's level catalogue, per family. `available` is false when a family is not configured here; a client must not offer an unavailable family, and asking for one is refused rather than served by a different engine. `playsAt` is the rating the family really plays a level at and `clamped` says it could not reach the level — Stockfish's strength limiter stops at 1320, so the lower levels are its floor rather than their nominal rating.
+         */
+        get: operations["listPlayOpponents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/players/{handle}": {
         parameters: {
             query?: never;
@@ -3910,6 +3950,217 @@ export interface operations {
             };
             /** @description Too many requests */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    requestOpponentMove: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque client-generated value. An identical retry replays the original response; a different request under the same key is a conflict. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    opponent: {
+                        /** @enum {string} */
+                        family: "stockfish" | "maia";
+                        /** @enum {string} */
+                        level: "800" | "1000" | "1200" | "1400" | "1600" | "1800" | "2000" | "2200" | "2400";
+                    };
+                    position: {
+                        fen: string;
+                        /** @default [] */
+                        moves?: string[];
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description The opponent's reply in a game against the engine */
+            200: {
+                headers: {
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            opponent: {
+                                clamped: boolean;
+                                engine: string | null;
+                                /** @enum {string} */
+                                family: "stockfish" | "maia";
+                                /** @enum {string} */
+                                level: "800" | "1000" | "1200" | "1400" | "1600" | "1800" | "2000" | "2200" | "2400";
+                                nominalRating: number;
+                                playsAt: number;
+                            };
+                            position: {
+                                fen: string;
+                                /** @enum {string} */
+                                status: "in_play" | "checkmate" | "stalemate" | "insufficient_material" | "fifty_move";
+                                /** @enum {string} */
+                                turn: "white" | "black";
+                            };
+                            reply: {
+                                san: string;
+                                uci: string;
+                            } | null;
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description The request could not be accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description This idempotency key was already used for a different request */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listPlayOpponents: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The opponents and strengths this deployment can actually play */
+            200: {
+                headers: {
+                    /** @description Strong validator for If-None-Match. */
+                    ETag?: string;
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            families: {
+                                available: boolean;
+                                /** @enum {string} */
+                                family: "stockfish" | "maia";
+                                levels: {
+                                    clamped: boolean;
+                                    /** @enum {string} */
+                                    key: "800" | "1000" | "1200" | "1400" | "1600" | "1800" | "2000" | "2200" | "2400";
+                                    nominalRating: number;
+                                    playsAt: number;
+                                }[];
+                                unavailableReason: ("not_configured" | "not_permitted_here") | null;
+                            }[];
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description The caller's copy is current. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -37,6 +37,7 @@ export const LEGACY_SUCCESSORS: Readonly<Record<string, string>> = {
   "/stats/reach": "/v1/public/stats",
   "/billing/plans": "/v1/public/plans",
   "/beta-signups": "/v1/public/beta-signups",
+  "/engine/play": "/v1/play/moves",
 };
 
 /** Paths that are not part of the deprecated product surface. */

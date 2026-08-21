@@ -6,14 +6,30 @@ import { Board } from "../components/Board";
 import { MoveInput } from "../components/MoveInput";
 import { TopNav } from "../components/TopNav";
 import { requireSession } from "../lib/session";
-import { apiFetch } from "../lib/api";
 import { RouteError } from "../components/RouteError";
 import { loadBoardTheme } from "../lib/boardThemes";
 import { loadPieceSet } from "../lib/pieceSets";
 import { fetchProfile } from "../lib/lichess";
+import { newIdempotencyKey } from "../lib/v1/client";
+import { ProblemError } from "../lib/v1/problem";
+import {
+  availableFamilies,
+  getPlayOpponents,
+  nearestLevel,
+  requestOpponentMove,
+  strengthNote,
+} from "../lib/v1/play";
+import type { OpponentFamily, OpponentFamilyEntry, PlayLevelKey } from "../lib/v1/types";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-const STRENGTHS = [800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400];
+
+/** How each family reads on screen. Named here so the API stays a vocabulary. */
+const FAMILY_LABELS: Record<string, string> = {
+  stockfish: "Stockfish",
+  maia: "Maia",
+};
+
+const familyLabel = (family: string) => FAMILY_LABELS[family] ?? family;
 
 export function meta() {
   return [{ title: "Play vs the bot · Forma" }];
@@ -23,31 +39,76 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   return <RouteError title="Play unavailable" error={error} />;
 }
 
+/**
+ * The opponents are read from the server, not hard-coded.
+ *
+ * The list of families and the strengths each one can actually play is a
+ * `/v1` catalogue, so the day a second engine is configured this screen offers
+ * it without a change here — and until then it offers only what can really
+ * answer, rather than a name that would be served by a different engine.
+ */
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const session = await requireSession();
   const url = new URL(request.url);
   const fen = url.searchParams.get("fen") || START_FEN;
   const color = url.searchParams.get("color") === "black" ? "black" : "white";
-  let elo = Number(url.searchParams.get("elo")) || 0;
-  if (!elo) {
-    try {
-      const profile = await fetchProfile(session.username);
-      const perfs = profile.perfs ?? {};
-      elo = Math.round(
-        perfs.rapid?.rating ?? perfs.blitz?.rating ?? perfs.classical?.rating ?? perfs.bullet?.rating ?? 1500,
-      );
-    } catch {
-      elo = 1500;
-    }
+  const [catalogue, rating] = await Promise.all([
+    getPlayOpponents(),
+    ratingFor(session.username, Number(url.searchParams.get("elo")) || 0),
+  ]);
+  return { fen, color: color as "white" | "black", rating, families: availableFamilies(catalogue) };
+}
+
+/** The player's own rating, only so the strength selector opens somewhere sane. */
+async function ratingFor(username: string, requested: number): Promise<number> {
+  if (requested) return requested;
+  try {
+    const perfs = (await fetchProfile(username)).perfs ?? {};
+    return Math.round(
+      perfs.rapid?.rating ?? perfs.blitz?.rating ?? perfs.classical?.rating ?? perfs.bullet?.rating ?? 1500,
+    );
+  } catch {
+    return 1500;
   }
-  return { fen, color: color as "white" | "black", elo };
 }
 
 const algFromSq = (sq: number) => String.fromCharCode(97 + (sq % 8)) + (Math.floor(sq / 8) + 1);
 const sqFromAlg = (alg: string) => (Number(alg[1]) - 1) * 8 + (alg.charCodeAt(0) - 97);
 
+/** What the server needs to see the game: the moves since the starting position. */
+function uciHistory(game: Chess): string[] {
+  return (game.history({ verbose: true }) as Array<{ from: string; to: string; promotion?: string }>).map(
+    (move) => `${move.from}${move.to}${move.promotion ?? ""}`,
+  );
+}
+
+/**
+ * What to say when the opponent could not move.
+ *
+ * Each branch is a different thing to do about it, which is why they are not
+ * collapsed into one sentence. `describeProblem` is deliberately not reused:
+ * its wording is about syncing games from a chess site, and telling someone
+ * their chess site is down when an engine timed out sends them looking in the
+ * wrong place.
+ */
+function engineFailure(error: unknown): string {
+  if (!(error instanceof ProblemError)) {
+    return "The bot didn't respond. Take back a move or start a new game.";
+  }
+  if (error.is("CONFLICT")) return error.message;
+  if (error.is("RATE_LIMITED")) {
+    return error.retryAfterSeconds === null
+      ? "That was a lot of moves at once. Wait a moment and play it again."
+      : `That was a lot of moves at once. Wait ${error.retryAfterSeconds} seconds and play it again.`;
+  }
+  if (error.is("PROVIDER_UNAVAILABLE")) {
+    return "The engine didn't answer. Play the move again, or take one back.";
+  }
+  return "The bot didn't respond. Take back a move or start a new game.";
+}
+
 export default function Play({ loaderData }: Route.ComponentProps) {
-  const { fen: initialFen, color, elo: initialElo } = loaderData;
+  const { fen: initialFen, color, rating, families } = loaderData;
   const userColor = color === "white" ? "w" : "b";
   const theme = useMemo(() => loadBoardTheme(), []);
   const pieceSet = useMemo(() => loadPieceSet(), []);
@@ -63,14 +124,18 @@ export default function Play({ loaderData }: Route.ComponentProps) {
   const [lastMove, setLastMove] = useState<[number, number] | undefined>();
   const [thinking, setThinking] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  // Snap the player's rating to the nearest preset so the selector reflects it.
-  const [elo, setElo] = useState(() =>
-    STRENGTHS.reduce((best, value) => (Math.abs(value - initialElo) < Math.abs(best - initialElo) ? value : best), STRENGTHS[0]!),
+  const [family, setFamily] = useState<OpponentFamily | null>(families[0]?.family ?? null);
+  const opponent: OpponentFamilyEntry | null =
+    families.find((entry) => entry.family === family) ?? families[0] ?? null;
+  // Snap the player's rating to the nearest level the chosen family offers.
+  const [levelKey, setLevelKey] = useState<PlayLevelKey | null>(
+    () => nearestLevel(opponent?.levels ?? [], rating)?.key ?? null,
   );
+  const level = opponent?.levels.find((entry) => entry.key === levelKey) ?? null;
   const [flip, setFlip] = useState(userColor === "b");
 
-  const eloRef = useRef(elo);
-  eloRef.current = elo;
+  const requestRef = useRef({ family, levelKey });
+  requestRef.current = { family, levelKey };
 
   const startPly = useMemo(() => {
     const fields = initialFen.split(" ");
@@ -106,36 +171,53 @@ export default function Play({ loaderData }: Route.ComponentProps) {
   const botTurn = useCallback(async () => {
     const game = gameRef.current;
     if (game.isGameOver() || game.turn() === userColor) return;
+    const chosen = requestRef.current;
+    if (!chosen.family || !chosen.levelKey) return;
     const gen = ++genRef.current; // claim this reply; supersedes any earlier one
     setThinking(true);
+    // One key for this move, reused across attempts: a retry of the same move
+    // must return the move that was already searched rather than buy a new one.
+    const idempotencyKey = newIdempotencyKey();
     let applied = false;
+    let failure: string | null = null;
+
     for (let attempt = 0; attempt < 2 && !applied; attempt++) {
       try {
-        const response = await apiFetch("/engine/play", {
-          json: { fen: game.fen(), elo: eloRef.current },
-        });
+        const result = await requestOpponentMove(
+          {
+            // The whole game, not just the position: the engine needs the moves
+            // to see a repetition, and the server re-checks every one of them.
+            position: { fen: initialFen, moves: uciHistory(game) },
+            opponent: { family: chosen.family, level: chosen.levelKey },
+          },
+          idempotencyKey,
+        );
         if (gen !== genRef.current) return; // a restart/undo happened — discard
-        const data = await response.json();
-        if (data.move) {
-          const move = game.move({
-            from: data.move.slice(0, 2),
-            to: data.move.slice(2, 4),
-            promotion: (data.move[4] as "q" | "r" | "b" | "n") || "q",
-          });
-          if (move) {
-            sync(move);
-            applied = true;
-          }
+        if (!result.reply) break; // the server says there is no move to make
+        const move = game.move({
+          from: result.reply.uci.slice(0, 2),
+          to: result.reply.uci.slice(2, 4),
+          promotion: (result.reply.uci[4] as "q" | "r" | "b" | "n") || "q",
+        });
+        if (move) {
+          sync(move);
+          applied = true;
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof Response) throw error; // a sign-in redirect
         if (gen !== genRef.current) return;
+        failure = engineFailure(error);
+        // A refusal is not a transport hiccup: retrying an unavailable opponent
+        // or a spent rate-limit budget just spends the second attempt too.
+        if (error instanceof ProblemError && !error.retryable) break;
       }
     }
+
     if (gen !== genRef.current) return;
     setThinking(false);
     if (applied) evaluateEnd();
-    else setStatus("The bot didn't respond — take back a move or start a new game.");
-  }, [userColor, sync, evaluateEnd]);
+    else if (!evaluateEnd()) setStatus(failure ?? "The bot didn't respond. Take back a move or start a new game.");
+  }, [userColor, sync, evaluateEnd, initialFen]);
 
   // If the bot is on move from the start position, let it play first.
   useEffect(() => {
@@ -155,7 +237,7 @@ export default function Play({ loaderData }: Route.ComponentProps) {
   /** Apply the user's move (click or drag). Returns true when it was legal. */
   const tryMove = (fromSq: number, toSq: number): boolean => {
     const game = gameRef.current;
-    if (thinking || game.isGameOver() || game.turn() !== userColor) return false;
+    if (thinking || !opponent || game.isGameOver() || game.turn() !== userColor) return false;
     let move: { from: string; to: string } | null = null;
     try {
       move = game.move({ from: algFromSq(fromSq), to: algFromSq(toSq), promotion: "q" });
@@ -170,7 +252,7 @@ export default function Play({ loaderData }: Route.ComponentProps) {
 
   const onSquareClick = (sq: number) => {
     const game = gameRef.current;
-    if (thinking || game.isGameOver() || game.turn() !== userColor) return;
+    if (thinking || !opponent || game.isGameOver() || game.turn() !== userColor) return;
     const piece = game.get(algFromSq(sq) as never) as { color: string } | undefined;
     if (selected != null) {
       if (targets.includes(sq)) {
@@ -231,13 +313,16 @@ export default function Play({ loaderData }: Route.ComponentProps) {
     return [...map.entries()].sort((a, b) => a[0] - b[0]);
   }, [history, startPly]);
 
-  const turnLabel = gameRef.current.isGameOver()
-    ? "Game over"
-    : gameRef.current.turn() === userColor
-      ? "Your move"
-      : thinking
-        ? "Bot is thinking…"
-        : "Bot to move";
+  const turnLabel = !opponent
+    ? "No opponent"
+    : gameRef.current.isGameOver()
+      ? "Game over"
+      : gameRef.current.turn() === userColor
+        ? "Your move"
+        : thinking
+          ? "Bot is thinking…"
+          : "Bot to move";
+  const note = strengthNote(level);
 
   return (
     <div className="relative z-10 min-h-dvh">
@@ -247,7 +332,13 @@ export default function Play({ loaderData }: Route.ComponentProps) {
           <div>
             <p className="eyebrow">Play it out</p>
             <h1>Study against the bot</h1>
-            <p>Play the position out versus Stockfish at your level, then take what you learn back to the explorer.</p>
+            <p>
+              {opponent
+                ? `Play the position out versus ${familyLabel(opponent.family)} at your level, then take what you learn back to the explorer.`
+                : "Play the position out versus the bot, then take what you learn back to the explorer."}{" "}
+              Games here are yours to practise with. They are never filed with the games you really
+              played.
+            </p>
           </div>
         </header>
 
@@ -265,7 +356,7 @@ export default function Play({ loaderData }: Route.ComponentProps) {
                 onMove={tryMove}
                 selected={selected}
                 targets={targets}
-                interactive
+                interactive={Boolean(opponent)}
               />
             </div>
             <div className="explorer-controls" role="group" aria-label="Game controls">
@@ -279,24 +370,63 @@ export default function Play({ loaderData }: Route.ComponentProps) {
                 <span aria-hidden="true">⇅</span> Flip
               </button>
             </div>
-            <MoveInput fen={fen} onMove={tryMove} disabled={thinking || gameRef.current.isGameOver() || gameRef.current.turn() !== userColor} />
+            <MoveInput
+              fen={fen}
+              onMove={tryMove}
+              disabled={thinking || !opponent || gameRef.current.isGameOver() || gameRef.current.turn() !== userColor}
+            />
           </div>
 
           <div className="play-side">
-            <div className={`play-status ${gameRef.current.turn() === userColor && !gameRef.current.isGameOver() ? "is-yours" : ""}`}>
+            <div className={`play-status ${gameRef.current.turn() === userColor && opponent && !gameRef.current.isGameOver() ? "is-yours" : ""}`}>
               <span className="play-turn">{turnLabel}</span>
               <span className="play-you">You play {color}</span>
             </div>
             {status ? <div className="play-result">{status}</div> : null}
 
-            <label className="play-strength">
-              <span>Bot strength</span>
-              <select value={elo} onChange={(e) => setElo(Number(e.target.value))}>
-                {STRENGTHS.map((value) => (
-                  <option key={value} value={value}>{value} Elo</option>
-                ))}
-              </select>
-            </label>
+            {opponent ? (
+              <>
+                {families.length > 1 ? (
+                  <label className="play-strength">
+                    <span>Opponent</span>
+                    <select
+                      value={opponent.family}
+                      onChange={(e) => {
+                        const next = families.find((entry) => entry.family === e.target.value);
+                        if (!next) return;
+                        setFamily(next.family);
+                        // Levels are per family, so the chosen one may not exist
+                        // in the new catalogue; land on the nearest rather than
+                        // silently sending a key the server would reject.
+                        setLevelKey(nearestLevel(next.levels, level?.nominalRating ?? rating)?.key ?? null);
+                      }}
+                    >
+                      {families.map((entry) => (
+                        <option key={entry.family} value={entry.family}>{familyLabel(entry.family)}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
+                <label className="play-strength">
+                  <span>Bot strength</span>
+                  <select
+                    value={levelKey ?? ""}
+                    onChange={(e) => setLevelKey(e.target.value as PlayLevelKey)}
+                  >
+                    {opponent.levels.map((entry) => (
+                      <option key={entry.key} value={entry.key}>{entry.nominalRating} Elo</option>
+                    ))}
+                  </select>
+                  {note ? <small>{note}</small> : null}
+                </label>
+              </>
+            ) : (
+              <div className="play-result">
+                No engine opponent is available right now, so there is nobody to play. The explorer
+                still works.
+              </div>
+            )}
 
             <div className="movelist-panel play-moves">
               <div className="movelist-head">

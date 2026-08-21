@@ -2318,6 +2318,9 @@
   .explorer-board-col { position: static; max-width: 34rem; margin-inline: auto; }
   .play-workspace { grid-template-columns: 1fr; }
   .play-board-col { position: static; max-width: 34rem; margin-inline: auto; }
+  /* The caveat under the strength selector: an engine that cannot play the
+     level it was asked for says so rather than letting the label stand. */
+  .play-strength small { color: var(--color-ink-faint); font-size: 0.72rem; line-height: 1.4; }
 }
 
 @media (max-width: 560px) {

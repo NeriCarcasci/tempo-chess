@@ -96,6 +96,16 @@ export type Game = Data<"getGame">;
 export type GameReview = Data<"getGameReview">;
 export type GameAnalysisRequest = Data<"requestGameAnalysis">;
 
+// --- play -------------------------------------------------------------------
+
+export type OpponentCatalogue = Data<"listPlayOpponents">;
+export type OpponentFamilyEntry = OpponentCatalogue["families"][number];
+export type OpponentFamilyLevel = OpponentFamilyEntry["levels"][number];
+export type OpponentFamily = OpponentFamilyEntry["family"];
+export type OpponentMove = Data<"requestOpponentMove">;
+export type OpponentMoveBody = Body<"requestOpponentMove">;
+export type PlayLevelKey = OpponentFamilyLevel["key"];
+
 // --- work -------------------------------------------------------------------
 
 export type Workflow = Data<"getWorkflow">;

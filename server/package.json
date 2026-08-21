@@ -63,7 +63,7 @@
     "analysis:migration": "tsx src/analysis/gates/migration.ts",
     "analysis:performance": "tsx src/analysis/gates/performance.ts",
     "analysis:api": "tsx src/analysis/gates/api.ts",
-    "engine:unit": "tsx src/engine/contract.test.ts && tsx src/engine/stockfish.test.ts && tsx src/engine/critical-position.test.ts && tsx src/engine/attacks.test.ts",
+    "engine:unit": "tsx src/engine/contract.test.ts && tsx src/engine/stockfish.test.ts && tsx src/engine/critical-position.test.ts && tsx src/engine/attacks.test.ts && tsx src/engine/opponent.test.ts",
     "engine:integration": "tsx src/engine/gates/integration.ts",
     "engine:security": "tsx src/engine/gates/security.ts",
     "engine:migration": "tsx src/engine/gates/migration.ts",
