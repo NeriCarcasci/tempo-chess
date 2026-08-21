@@ -88,7 +88,64 @@ export interface DetectedOpportunity {
      * and two things measured about it.
      */
     readonly detectionKey: string;
+    /**
+     * Who did it, and who it happened to, relative to the subject.
+     *
+     * Relative rather than absolute so this module stays colour-agnostic: the
+     * worker resolves `subject`/`opponent` against the colour the subject
+     * actually played. `null` is a real answer and not a gap -- when a position
+     * became winning, *who made it winning* is genuinely not established by
+     * anything here, and naming the subject as the actor would credit them for
+     * an opponent's mistake.
+     */
+    readonly actor: "subject" | "opponent" | null;
+    readonly affected: "subject" | "opponent" | null;
   };
+}
+
+/**
+ * The generation of detector logic that produced a label.
+ *
+ * Recorded on every `event_concepts` row. Distinct from a concept version: the
+ * concept version says what the rule *is*, this says which build applied it, so
+ * a label that turns out to be wrong can be traced to the code that wrote it
+ * without redefining what the concept means. Bump it when detection behaviour
+ * changes, which is not the same event as bumping a contract.
+ */
+export const DETECTOR_VERSION = "1";
+
+/** One physical occurrence and everything measured about it. */
+export interface EventGroup {
+  readonly event: DetectedOpportunity["event"];
+  readonly observations: readonly DetectedOpportunity[];
+}
+
+/**
+ * Group observations by the occurrence they are about.
+ *
+ * The detector emits an observation at a time because that is the unit it
+ * reasons in, but the database stores an occurrence at a time: one
+ * `chess_events` row, then a `event_concepts` label per concept version and
+ * role. Doing that grouping here rather than inside the worker keeps it pure
+ * and testable, and keeps the worker's job to writing rows.
+ *
+ * Insertion order is preserved, so the row order of two runs over one game is
+ * the same and a diff between them means something changed.
+ */
+export function groupByEvent(detected: readonly DetectedOpportunity[]): EventGroup[] {
+  const groups = new Map<string, { event: DetectedOpportunity["event"]; observations: DetectedOpportunity[] }>();
+  for (const observation of detected) {
+    const existing = groups.get(observation.event.detectionKey);
+    if (existing) {
+      existing.observations.push(observation);
+      continue;
+    }
+    groups.set(observation.event.detectionKey, {
+      event: observation.event,
+      observations: [observation],
+    });
+  }
+  return [...groups.values()];
 }
 
 /**
@@ -263,6 +320,8 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
           detectionKey: eventKey("material_exposed", transition.fromPly),
+          actor: "opponent",
+          affected: "subject",
           endPly: transition.fromPly + 1,
           facts: { atRiskCp: exposed.gain, resolved: survived },
           completeness: "complete",
@@ -294,6 +353,8 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
           detectionKey: eventKey("material_offered", transition.fromPly),
+          actor: "subject",
+          affected: "opponent",
           endPly: transition.fromPly + 1,
           facts: { onOfferCp: offered.gain, taken: tookIt },
           completeness: "complete",
@@ -341,6 +402,8 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
           detectionKey: eventKey("critical_moment", transition.fromPly),
+          actor: "subject",
+          affected: "subject",
           endPly: transition.fromPly + 1,
           facts: { criticality: transition.criticality, rank: transition.playedMoveRank },
           completeness: "complete",
@@ -356,6 +419,8 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
           detectionKey: eventKey("critical_moment", transition.fromPly),
+          actor: "subject",
+          affected: "subject",
           endPly: transition.fromPly + 1,
           facts: { criticality: transition.criticality, acceptable: transition.playedMoveAcceptable },
           completeness: "complete",
@@ -379,6 +444,8 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
           detectionKey: eventKey("only_move", transition.fromPly),
+          actor: "subject",
+          affected: "subject",
           endPly: transition.fromPly + 1,
           facts: { acceptable: transition.playedMoveAcceptable },
           completeness: "complete",
@@ -402,6 +469,8 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
           detectionKey: eventKey("defending_worse", transition.fromPly),
+          actor: "subject",
+          affected: "subject",
           endPly: transition.fromPly + 1,
           facts: { expectedScoreBefore: subjectBefore },
           completeness: "complete",
@@ -459,6 +528,8 @@ function conversionConcept(game: GameFacts): DetectedOpportunity[] {
         startPly: reached.fromPly,
         focalPly: reached.fromPly,
         detectionKey: eventKey("winning_position_reached", reached.fromPly),
+        actor: null,
+        affected: "subject",
         endPly: reached.fromPly,
         facts: { converted: null, censored: censorFor(game.termination) },
         completeness: "censored",
@@ -493,6 +564,8 @@ function conversionConcept(game: GameFacts): DetectedOpportunity[] {
       // is the same occurrence whether or not the subject went on to move in
       // it. Only the observation about it differs.
       detectionKey: eventKey("winning_position_reached", reached.fromPly),
+      actor: null,
+      affected: "subject",
     },
   }];
 }

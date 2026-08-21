@@ -38,7 +38,14 @@ import { WorkFailure } from "../../ops/retry.js";
 import { isRecordableOpportunity, difficultyIsUncontaminated } from "../observations.js";
 import { conceptBySlug } from "./catalogue.js";
 import { conceptVersionIds } from "./register.js";
-import { detectGame, type GameFacts, type PositionFact, type TransitionFact } from "./detect.js";
+import {
+  detectGame,
+  groupByEvent,
+  DETECTOR_VERSION,
+  type GameFacts,
+  type PositionFact,
+  type TransitionFact,
+} from "./detect.js";
 import { publishedMaterializationRun } from "../../engine/recipe.js";
 
 export const DETECT_TASK = "analysis_detect_concepts";
@@ -210,44 +217,69 @@ export async function detectForRun(
       knownOpportunities.add(`${row.detection_key}|${row.concept_version_id}|${row.role}`);
     }
 
-    const detected = detectGame(facts);
+    // One physical occurrence per group, however many things are measured about
+    // it. The grouping is pure and lives in `detect.ts`; this loop only writes.
+    const groups = groupByEvent(detectGame(facts));
+
+    const opponentColor = game.subject_color === "white" ? "black" : "white";
+    /** `subject`/`opponent` are relative so the detector stays colour-agnostic. */
+    const resolveColor = (side: "subject" | "opponent" | null): string | null =>
+      side === null ? null : side === "subject" ? game.subject_color : opponentColor;
 
     let written = 0;
     let censored = 0;
     let skipped = 0;
     let alreadyPresent = 0;
+    let events = 0;
+    let labels = 0;
     const byConcept = new Map<string, number>();
 
-    for (const observation of detected) {
-      const conceptVersionId = versions.get(observation.conceptSlug);
-      const definition = conceptBySlug(observation.conceptSlug);
-      if (!conceptVersionId || !definition) {
-        // The catalogue in the database is behind this build. Skipping is the
-        // conservative answer: an unregistered concept has no definition a
-        // player could be shown, so evidence against it could not be explained.
-        skipped += 1;
-        continue;
-      }
-      // The validators exist so a detector cannot write a row that lies. They
-      // are checked here, on the way in, rather than trusted.
-      if (!isRecordableOpportunity(observation.draft)
-        || !difficultyIsUncontaminated(observation.draft.difficulty)) {
-        skipped += 1;
-        continue;
+    for (const group of groups) {
+      const { detectionKey } = group.event;
+
+      // Decide what is writable before writing anything. An event with no
+      // labels left to attach is an event nobody asked for -- inserting it and
+      // then finding every observation was already present would leave a
+      // physical occurrence with nothing hanging off it.
+      const writable: {
+        observation: (typeof group.observations)[number];
+        conceptVersionId: string;
+        evidenceSourceKind: string;
+      }[] = [];
+
+      for (const observation of group.observations) {
+        const conceptVersionId = versions.get(observation.conceptSlug);
+        const definition = conceptBySlug(observation.conceptSlug);
+        if (!conceptVersionId || !definition) {
+          // The catalogue in the database is behind this build. Skipping is the
+          // conservative answer: an unregistered concept has no definition a
+          // player could be shown, so evidence against it could not be explained.
+          skipped += 1;
+          continue;
+        }
+        // The validators exist so a detector cannot write a row that lies. They
+        // are checked here, on the way in, rather than trusted.
+        if (!isRecordableOpportunity(observation.draft)
+          || !difficultyIsUncontaminated(observation.draft.difficulty)) {
+          skipped += 1;
+          continue;
+        }
+        if (knownOpportunities.has(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`)) {
+          // This exact observation is already recorded under this exact concept
+          // version. Not an error and not a duplicate to write: a re-run that
+          // finds its own previous output is the normal case.
+          alreadyPresent += 1;
+          continue;
+        }
+        writable.push({
+          observation,
+          conceptVersionId,
+          evidenceSourceKind: definition.evidenceSourceKind,
+        });
       }
 
-      const { detectionKey } = observation.event;
-      if (knownOpportunities.has(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`)) {
-        // This exact observation is already recorded under this exact concept
-        // version. Not an error and not a duplicate to write: a re-run that
-        // finds its own previous output is the normal case.
-        alreadyPresent += 1;
-        continue;
-      }
+      if (writable.length === 0) continue;
 
-      // One physical occurrence, one row. Two observations of the same moment
-      // -- recognising a critical position and executing it -- share the key
-      // and therefore share the event.
       let eventId = knownEvents.get(detectionKey);
       if (eventId === undefined) {
         const [event] = await tx<{ id: string }[]>`
@@ -257,10 +289,10 @@ export async function detectForRun(
             detection_key
           ) values (
             ${materializationRunId}, ${game.replay_revision_id}, ${run.subject_game_id},
-            ${observation.event.eventType}, ${observation.event.startPly},
-            ${observation.event.focalPly}, ${observation.event.endPly},
-            ${game.subject_color}, ${game.subject_color},
-            ${jsonParam(observation.event.facts)}::jsonb, null, ${observation.event.completeness},
+            ${group.event.eventType}, ${group.event.startPly},
+            ${group.event.focalPly}, ${group.event.endPly},
+            ${resolveColor(group.event.actor)}, ${resolveColor(group.event.affected)},
+            ${jsonParam(group.event.facts)}::jsonb, null, ${group.event.completeness},
             ${detectionKey}
           )
           returning id
@@ -268,47 +300,72 @@ export async function detectForRun(
         if (!event) throw new Error("the event vanished on insert");
         eventId = Number(event.id);
         knownEvents.set(detectionKey, eventId);
+        events += 1;
       }
 
-      const [evidence] = await tx<{ id: string }[]>`
-        insert into analysis.evidence_items (
-          run_id, evidence_kind, subject_id, subject_game_id, occurred_at, confidence
-        ) values (
-          ${materializationRunId}, 'opportunity', ${run.subject_id}, ${run.subject_game_id},
-          ${facts.playedAt.toISOString()}, null
-        )
-        returning id
-      `;
-      if (!evidence) throw new Error("the evidence item vanished on insert");
+      for (const { observation, conceptVersionId, evidenceSourceKind } of writable) {
+        // The semantic label. §17.4's many-to-many: this is what lets one
+        // moment carry `recognize` and `execute` as separate observations
+        // without being stored as two separate moments.
+        //
+        // `color` is the side whose behaviour the role describes, which for
+        // every concept in this catalogue is the subject -- `respond` measures
+        // the subject answering an opponent's threat, and it is the answer
+        // being labelled, not the threat. The threat's owner is on the event,
+        // in `actor_color`.
+        const labelled = await tx`
+          insert into analysis.event_concepts (
+            event_id, concept_version_id, color, role, label_confidence, detector_version
+          ) values (
+            ${eventId}, ${conceptVersionId}, ${game.subject_color}, ${observation.draft.role},
+            null, ${DETECTOR_VERSION}
+          )
+          on conflict (event_id, concept_version_id, color, role) do nothing
+        `;
+        if (labelled.count > 0) labels += 1;
 
-      await tx`
-        insert into analysis.concept_opportunities (
-          run_id, subject_id, subject_game_id, event_id, concept_version_id, role,
-          opportunity_ply, response_ply, response_observed, censored_reason, success,
-          score, rubric_component_version_id, difficulty, phase, speed, context,
-          confidence, evidence_source_kind, occurred_at
-        ) values (
-          ${materializationRunId}, ${run.subject_id}, ${run.subject_game_id}, ${eventId}, ${conceptVersionId},
-          ${observation.draft.role}, ${observation.draft.opportunityPly},
-          ${observation.draft.responsePly}, ${observation.draft.responseObserved},
-          ${observation.draft.censoredReason}, ${observation.draft.success},
-          ${observation.draft.score}, ${observation.draft.rubricComponentVersionId},
-          ${jsonParam(observation.draft.difficulty)}::jsonb, ${observation.phase},
-          ${game.speed}, ${jsonParam({ evidenceItemId: evidence.id })}::jsonb, null,
-          ${definition.evidenceSourceKind}, ${facts.playedAt.toISOString()}
-        )
-      `;
+        const [evidence] = await tx<{ id: string }[]>`
+          insert into analysis.evidence_items (
+            run_id, evidence_kind, subject_id, subject_game_id, occurred_at, confidence
+          ) values (
+            ${materializationRunId}, 'opportunity', ${run.subject_id}, ${run.subject_game_id},
+            ${facts.playedAt.toISOString()}, null
+          )
+          returning id
+        `;
+        if (!evidence) throw new Error("the evidence item vanished on insert");
 
-      knownOpportunities.add(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`);
-      written += 1;
-      if (!observation.draft.responseObserved) censored += 1;
-      byConcept.set(observation.conceptSlug, (byConcept.get(observation.conceptSlug) ?? 0) + 1);
+        await tx`
+          insert into analysis.concept_opportunities (
+            run_id, subject_id, subject_game_id, event_id, concept_version_id, role,
+            opportunity_ply, response_ply, response_observed, censored_reason, success,
+            score, rubric_component_version_id, difficulty, phase, speed, context,
+            confidence, evidence_source_kind, occurred_at, evidence_item_id
+          ) values (
+            ${materializationRunId}, ${run.subject_id}, ${run.subject_game_id}, ${eventId},
+            ${conceptVersionId}, ${observation.draft.role}, ${observation.draft.opportunityPly},
+            ${observation.draft.responsePly}, ${observation.draft.responseObserved},
+            ${observation.draft.censoredReason}, ${observation.draft.success},
+            ${observation.draft.score}, ${observation.draft.rubricComponentVersionId},
+            ${jsonParam(observation.draft.difficulty)}::jsonb, ${observation.phase},
+            ${game.speed}, ${jsonParam({ evidenceItemId: evidence.id })}::jsonb, null,
+            ${evidenceSourceKind}, ${facts.playedAt.toISOString()}, ${Number(evidence.id)}
+          )
+        `;
+
+        knownOpportunities.add(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`);
+        written += 1;
+        if (!observation.draft.responseObserved) censored += 1;
+        byConcept.set(observation.conceptSlug, (byConcept.get(observation.conceptSlug) ?? 0) + 1);
+      }
     }
 
     return {
       outputRef: `run:${runId}`,
       outputSummary: {
         opportunities: written,
+        events,
+        labels,
         censored,
         skipped,
         alreadyPresent,
