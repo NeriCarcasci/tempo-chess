@@ -137,8 +137,19 @@ async function main(): Promise<void> {
     // The corpus is not reproducible from a public API: arena games roll off
     // and a manifest hash nobody can check a body against proves nothing. So
     // the body itself is stored, once, addressed by its own digest.
-    const artifactId = corpusPath === null ? null : await uploadCorpus(sql, corpusPath);
-    if (artifactId) console.log(`corpus     stored as artifact ${artifactId}`);
+    // A frozen holdout may already be stored by an earlier model validation.
+    // Reuse that immutable body by manifest instead of asking the migration
+    // role to create a duplicate artifact (it deliberately cannot write the
+    // artifact lifecycle tables).
+    const existingArtifactId = await existingHoldoutArtifact(sql, report.corpus.manifestSha256);
+    const artifactId = existingArtifactId ?? (corpusPath === null ? null : await uploadCorpus(sql, corpusPath));
+    if (artifactId) {
+      console.log(
+        existingArtifactId
+          ? `corpus     reused artifact ${artifactId}`
+          : `corpus     stored as artifact ${artifactId}`,
+      );
+    }
 
     await recordLifecycle(sql, {
       componentVersionId: model.componentVersionId,
@@ -210,6 +221,20 @@ async function main(): Promise<void> {
   } finally {
     await sql.end({ timeout: 5 });
   }
+}
+
+async function existingHoldoutArtifact(
+  sql: postgres.Sql,
+  manifestSha256: string,
+): Promise<string | null> {
+  const [row] = await sql<{ artifact_id: string }[]>`
+    select artifact_id
+    from analysis.validation_datasets
+    where manifest_sha256 = ${manifestSha256} and artifact_id is not null
+    order by created_at desc, id desc
+    limit 1
+  `;
+  return row?.artifact_id ?? null;
 }
 
 /** Store the holdout body in the private system bucket, deduplicated by digest. */
