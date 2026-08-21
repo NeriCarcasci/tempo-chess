@@ -60,7 +60,10 @@ async function productionMaia3(sql: Sql): Promise<ProductionModel | null> {
     where p.role = 'human_policy'
       and p.licence_review_status = 'cleared'
       and lifecycle.to_state = 'production'
-      and cv.model_identity ->> 'family' = 'maia3'
+      and coalesce(
+        cv.model_identity ->> 'family',
+        ((cv.model_identity #>> '{}')::jsonb) ->> 'family'
+      ) = 'maia3'
     order by cv.created_at desc, cv.id desc
     limit 1
   `;

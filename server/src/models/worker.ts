@@ -129,7 +129,10 @@ export async function writeContinuationPolicy(
     throw new WorkFailure("invalid_input", "unknown_position", "no such core position");
   }
   const [model] = await sql<{ family: string | null }[]>`
-    select cv.model_identity ->> 'family' as family
+    select coalesce(
+      cv.model_identity ->> 'family',
+      ((cv.model_identity #>> '{}')::jsonb) ->> 'family'
+    ) as family
     from analysis.component_versions cv
     join analysis.model_profiles p on p.component_version_id = cv.id
     where cv.id = ${modelComponentVersionId}
@@ -227,7 +230,10 @@ export async function writePracticalContext(
   }
 
   const [model] = await sql<{ content_hash: string; family: string | null }[]>`
-    select cv.content_hash, cv.model_identity ->> 'family' as family
+    select cv.content_hash, coalesce(
+      cv.model_identity ->> 'family',
+      ((cv.model_identity #>> '{}')::jsonb) ->> 'family'
+    ) as family
     from analysis.component_versions cv
     join analysis.model_profiles p on p.component_version_id = cv.id
     join lateral (
