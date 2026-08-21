@@ -15,6 +15,7 @@ import {
 } from "./idempotency.js";
 import { verifyServiceCaller, type ServiceCaller } from "./auth/oidc.js";
 import { ProblemError, problemDocument, toProblemError, type ProblemCode } from "./problem.js";
+import { accessDetail, grantsProductAccess } from "../access/contract.js";
 import { clientAddress, consume, type RateLimitStatus } from "./rate-limit.js";
 import { routeKey, requiresIdempotencyKey, type RouteDefinition } from "./registry.js";
 import { observeRequest, type AuthMode } from "./telemetry.js";
@@ -27,15 +28,20 @@ import { logSafeError } from "../security/redaction.js";
  * One function turns a route declaration into a mounted handler with every
  * shared behaviour applied in a fixed order. The order is the design:
  *
- *   identifiers -> authentication -> address rate limits -> validation ->
- *   body-derived rate limits -> idempotency -> handler -> envelope -> caching
+ *   identifiers -> authentication -> address rate limits -> access ->
+ *   validation -> body-derived rate limits -> idempotency -> handler ->
+ *   envelope -> caching
  *
  * Authentication precedes rate limiting so an authenticated caller is counted
  * as themselves. Address limits precede validation so a flood of malformed
- * bodies is still counted. Body-derived limits follow validation because they
- * need a parsed body. Idempotency is last before the handler so a duplicate is
- * detected only once the request is known to be well-formed — otherwise a
- * client could burn a key on a request that never ran.
+ * bodies is still counted. The access gate follows them so that an account
+ * which has not been let into the closed beta is still *counted* before it is
+ * refused, and precedes validation so a refusal discloses nothing about the
+ * shape of a request it was never going to run. Body-derived limits follow
+ * validation because they need a parsed body. Idempotency is last before the
+ * handler so a duplicate is detected only once the request is known to be
+ * well-formed — otherwise a client could burn a key on a request that never
+ * ran.
  *
  * Every exit goes through `problemDocument`. There is no path where a thrown
  * value reaches the wire.
@@ -194,6 +200,45 @@ async function applyRateLimits(
   }
 }
 
+/**
+ * Refuse an account that has not been let into the closed beta.
+ *
+ * One place, deliberately. The alternative — a check at the top of each
+ * handler — is a rule that holds until somebody adds the forty-first route and
+ * forgets, and the failure is silent: the route works, for everyone. Here the
+ * default is `approved`, so a new route is gated by its author having written
+ * nothing, and opening one is an explicit word in the declaration.
+ *
+ * The consequence of getting this wrong is not abstract. An unapproved account
+ * that reaches `POST /v1/onboarding/runs` starts a real examination, and a real
+ * examination spends real engine time on Cloud Run before any person has agreed
+ * to let that account in.
+ */
+async function assertAccessApproved(
+  route: RouteDefinition<never, never, never>,
+  auth: AuthorizationContext | null,
+  state: RequestState,
+): Promise<void> {
+  if (route.auth !== "required" || auth === null) return;
+  // `self` is the only opening: the routes an account uses to read its own
+  // state and write the note it wants read. Everything else, including the
+  // admin surface, requires approval first.
+  if (route.access === "self") return;
+  if (grantsProductAccess(auth.access.state)) return;
+
+  await recordAuditEvent({
+    actorKind: "user",
+    actorRef: auth.profileId,
+    action: "access.refused",
+    requestId: state.requestId,
+    traceId: state.traceId,
+    result: "denied",
+    reasonCode: auth.access.state,
+    metadata: { route: routeKey(route) },
+  });
+  throw new ProblemError("ACCESS_NOT_APPROVED", { detail: accessDetail(auth.access.state) });
+}
+
 /** Mount one declared route onto the app with every kernel behaviour applied. */
 export function mountRoute<E extends Env>(
   app: Hono<E>,
@@ -220,6 +265,8 @@ export function mountRoute<E extends Env>(
         "address",
         auth,
       );
+
+      await assertAccessApproved(route, auth, state);
 
       const query = route.querySchema
         ? (() => {

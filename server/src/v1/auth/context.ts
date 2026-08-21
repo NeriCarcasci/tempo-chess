@@ -1,4 +1,6 @@
 import { client } from "../../db/client.js";
+import { ensureAccessRequest } from "../../access/service.js";
+import type { AccessRequest } from "../../access/contract.js";
 import { ProblemError } from "../problem.js";
 import type { AuthMode, VerifiedToken } from "./verifier.js";
 
@@ -23,6 +25,15 @@ export interface AuthorizationContext {
   authMode: AuthMode;
   /** Every subject this actor may act on. Empty is a valid, denying state. */
   subjects: readonly string[];
+  /**
+   * Whether this account has been let into the closed beta, and what it said.
+   *
+   * Resolved here rather than by each route because the kernel gate reads it on
+   * every authenticated request, and a second query per request to answer a
+   * question this transaction has already answered is a cost paid on every call
+   * for nothing. Never null: `ensureAccessRequest` creates the row.
+   */
+  access: AccessRequest;
 }
 
 /**
@@ -80,9 +91,15 @@ async function ensureProfile(actorId: string, email: string | null): Promise<"fr
  * against `private.current_actor_id()`, which is null on an unbound connection
  * -- so an insert off the pool is silently refused by the policy rather than
  * failing loudly.
+ *
+ * The access request is created in the same transaction, and after the
+ * `app.profiles` insert it depends on by foreign key. Doing it here rather than
+ * on a button press is what makes a new signup visible to an operator without
+ * the person having to do anything: they appear in the pending queue the first
+ * time they open the product.
  */
-async function ensureSubject(actorId: string): Promise<void> {
-  await withActorContext(actorId, async (tx) => {
+async function ensureAccount(actorId: string): Promise<AccessRequest> {
+  return withActorContext(actorId, async (tx) => {
     await tx`
       insert into app.profiles (user_id) values (${actorId}::uuid)
       on conflict (user_id) do nothing`;
@@ -97,14 +114,40 @@ async function ensureSubject(actorId: string): Promise<void> {
         select 1 from app.analysis_subjects
         where owner_user_id = ${actorId}::uuid and kind = 'personal' and status = 'active'
       )`;
+    return ensureAccessRequest(tx, actorId);
   });
+}
+
+/**
+ * Test seam: answer with this context instead of reading the database.
+ *
+ * The symmetric twin of `setTokenVerifierForTest`. The kernel's auth pipeline
+ * has two steps that leave the process — verifying a token, and resolving the
+ * account behind it — and the offline unit gate has to be able to drive the
+ * whole pipeline in order to prove the *order* things happen in. That the
+ * access gate runs after rate limiting and before validation is a property of
+ * the kernel, not of the database, and it is exactly the kind of property that
+ * breaks silently when a later edit moves a line.
+ *
+ * What this cannot prove is that the row it stands in for is readable at all,
+ * which is a claim about row level security and is proven against a real
+ * cluster in `gates/integration.ts`. Neither test replaces the other.
+ *
+ * Null restores the real builder. Nothing in `src` outside a gate calls this,
+ * and a deployed process never reaches it.
+ */
+let contextOverride: AuthorizationContext | null = null;
+
+export function setAuthorizationContextForTest(context: AuthorizationContext | null): void {
+  contextOverride = context;
 }
 
 export async function buildAuthorizationContext(
   token: VerifiedToken,
 ): Promise<AuthorizationContext> {
+  if (contextOverride) return { ...contextOverride, authMode: token.mode };
   const plan = await ensureProfile(token.actorId, token.email);
-  await ensureSubject(token.actorId);
+  const access = await ensureAccount(token.actorId);
   return {
     actorId: token.actorId,
     profileId: token.actorId,
@@ -112,6 +155,7 @@ export async function buildAuthorizationContext(
     plan,
     authMode: token.mode,
     subjects: await resolveSubjects(token.actorId),
+    access,
   };
 }
 

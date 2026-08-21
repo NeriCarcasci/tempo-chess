@@ -44,7 +44,8 @@ vi.mock("./supabase", () => ({
   }),
 }));
 
-const { getSession, requireSession, invalidateSession } = await import("./session");
+const { getSession, requireSession, requireUser, invalidateSession, awaitingApproval } =
+  await import("./session");
 
 type WireAccount = Me["accounts"][number];
 
@@ -80,6 +81,16 @@ function answering(body: Me, status = 200): void {
 
 function failing(status: number): void {
   vi.stubGlobal("fetch", async () => new Response("{}", { status }));
+}
+
+/** A problem document, as `/v1/me` returns one. */
+function refusing(status: number, code: string): void {
+  vi.stubGlobal("fetch", async () =>
+    new Response(JSON.stringify({ code, status, title: "no" }), {
+      status,
+      headers: { "content-type": "application/problem+json" },
+    }),
+  );
 }
 
 /** The redirect a guard threw, or null when it did not throw one. */
@@ -159,5 +170,52 @@ describe("requireSession", () => {
   test("no session at all goes to sign-in", async () => {
     token = null;
     expect(await redirectFrom(requireSession)).toBe("/login");
+  });
+});
+
+/**
+ * The closed beta gate, on the side that decides where somebody lands.
+ *
+ * The API is the gate and has already refused the request by the time any of
+ * this runs. What is being tested is the loop: an unapproved account sent to
+ * `/login` signs in successfully, gets refused again, and is sent back to
+ * `/login`, forever. That shape of bug has shipped to a real person once on a
+ * different redirect, which is why it is pinned here rather than trusted.
+ */
+describe("the closed beta gate", () => {
+  test("an unapproved account is not signed out", async () => {
+    refusing(403, "ACCESS_NOT_APPROVED");
+    await expect(getSession()).resolves.toBeNull();
+    // Signing them out would drop a session that is perfectly valid and leave
+    // them with no way back to the screen that explains the wait.
+    expect(signedOut).toBe(false);
+    expect(awaitingApproval()).toBe(true);
+  });
+
+  test("the guards send them to the waiting screen, not to sign in again", async () => {
+    refusing(403, "ACCESS_NOT_APPROVED");
+    expect(await redirectFrom(requireSession)).toBe("/access");
+    expect(await redirectFrom(requireUser)).toBe("/access");
+  });
+
+  test("a forbidden that is not the beta gate still means sign in", async () => {
+    refusing(403, "FORBIDDEN");
+    await expect(getSession()).resolves.toBeNull();
+    expect(awaitingApproval()).toBe(false);
+    expect(await redirectFrom(requireSession)).toBe("/login");
+  });
+
+  test("approval clears the flag rather than leaving it set", async () => {
+    refusing(403, "ACCESS_NOT_APPROVED");
+    await getSession();
+    expect(awaitingApproval()).toBe(true);
+
+    // The operator approved them; the next read succeeds. A flag that survived
+    // would bounce an approved account off every product page.
+    invalidateSession();
+    answering(me([account()]));
+    await expect(getSession()).resolves.not.toBeNull();
+    expect(awaitingApproval()).toBe(false);
+    expect(await redirectFrom(requireSession)).toBeNull();
   });
 });

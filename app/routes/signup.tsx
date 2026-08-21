@@ -1,6 +1,6 @@
 import { Form, Link, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/signup";
-import { getSession, signUpWithPassword, invalidateSession } from "../lib/session";
+import { getSession, signUpWithPassword, invalidateSession, awaitingApproval } from "../lib/session";
 import { supabaseConfigured } from "../lib/supabase";
 import { BrandLock } from "../components/PublicShell";
 
@@ -10,6 +10,10 @@ export function meta() {
 
 export async function clientLoader() {
   if (await getSession()) throw redirect("/today");
+  // Signed in and not yet let into the closed beta. Showing the sign-in form
+  // instead would invite them to authenticate again, which succeeds and lands
+  // them back here.
+  if (awaitingApproval()) throw redirect("/access");
   return null;
 }
 

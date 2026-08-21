@@ -120,6 +120,21 @@ export async function v1<T>(path: string, options: V1Options = {}): Promise<V1Re
 
   if (!response.ok) {
     const document = (await response.json().catch(() => null)) as ProblemDocument | null;
+
+    /*
+     * The closed beta gate, as the API reports it.
+     *
+     * This is the safety net rather than the gate. The gate is server-side and
+     * has already refused the request; what happens here only decides where the
+     * person lands. It is a separate branch from the 401 above because "sign
+     * in" and "you are waiting to be let in" are different instructions, and
+     * sending an unapproved account to `/login` produces a loop: they sign in,
+     * the loader refuses them, and they are sent back to sign in again. That
+     * loop shipped once to a real person on a different redirect and is the
+     * reason this branch is spelled out rather than folded into the next one.
+     */
+    if (document?.code === "ACCESS_NOT_APPROVED" && !anonymous) throw redirect("/access");
+
     const retryAfter = response.headers.get("retry-after");
     throw new ProblemError(
       document ?? {

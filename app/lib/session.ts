@@ -153,6 +153,24 @@ let current: Session | null = null;
 let inFlight: Promise<Session | null> | null = null;
 
 /** The last resolved session. Safe in components; null before the first loader. */
+/**
+ * Whether the last session read found an account that has not been let in.
+ *
+ * A separate flag rather than a variant of `Session`, because an unapproved
+ * account is *not* a session as far as any product screen is concerned: it has
+ * no subject, no linked account and nothing to render. Every existing caller of
+ * `getSession()` keeps getting `null` and keeps behaving correctly. The two
+ * functions that have to tell "signed out" from "waiting" read this.
+ *
+ * Advisory only. The gate is the API's, and it refuses the request whatever
+ * this says.
+ */
+let awaitingAccess = false;
+
+export function awaitingApproval(): boolean {
+  return awaitingAccess;
+}
+
 export function peekSession(): Session | null {
   return current;
 }
@@ -240,6 +258,9 @@ function connected(accounts: V1Account[]): LinkedAccount[] {
  */
 async function loadSession(): Promise<Session | null> {
   if (!supabaseConfigured) return null;
+  // Cleared on every read rather than only on success: a stale `true` would
+  // send somebody who had just been approved back to the waiting screen.
+  awaitingAccess = false;
   let { data } = await getSupabase().auth.getSession();
   if (!data.session && (await devAutoSignIn())) {
     ({ data } = await getSupabase().auth.getSession());
@@ -257,6 +278,14 @@ async function loadSession(): Promise<Session | null> {
     // A rejected token means the session is stale; clear it so the user gets a
     // clean sign-in rather than a page that half-loads and then 401s.
     if (response.status === 401) await getSupabase().auth.signOut();
+    // Forma is in closed beta and this account has not been let in. The session
+    // is perfectly good, so it is deliberately *not* signed out: doing that
+    // would drop somebody who is legitimately waiting, and they would have no
+    // way back to the screen that tells them so.
+    if (response.status === 403) {
+      const problem = (await response.json().catch(() => null)) as { code?: string } | null;
+      awaitingAccess = problem?.code === "ACCESS_NOT_APPROVED";
+    }
     current = null;
     return null;
   }
@@ -317,7 +346,7 @@ export function getSession(): Promise<Session | null> {
  */
 export async function requireSession(): Promise<Session> {
   const session = await getSession();
-  if (!session) throw redirect("/login");
+  if (!session) throw redirect(awaitingAccess ? "/access" : "/login");
   // `/welcome` is where a new person connects an account and the examination
   // starts. `/account/connect` is still mounted for "link another account",
   // which is a different errand.
@@ -331,7 +360,7 @@ export async function requireSession(): Promise<Session> {
  */
 export async function requireUser(): Promise<Session> {
   const session = await getSession();
-  if (!session) throw redirect("/login");
+  if (!session) throw redirect(awaitingAccess ? "/access" : "/login");
   return session;
 }
 

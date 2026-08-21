@@ -4,6 +4,126 @@
  */
 
 export interface paths {
+    "/v1/access-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The signed-in account's own request to join the closed beta
+         * @description Readable by an account that has not been approved; it is how that account learns whether it is waiting or was declined. Answers only for the caller.
+         */
+        get: operations["getAccessRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/access-request/note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Say something about yourself and your chess, for whoever reads the queue
+         * @description Replaces the note on the caller's own access request. Writable while the request is pending or after a decision; it changes no state and grants nothing.
+         */
+        put: operations["setAccessRequestNote"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/access-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Accounts waiting to be let into the closed beta
+         * @description Oldest request first, so the person who has waited longest is at the top. Requires an operator grant; an approved account without one is refused exactly as an unapproved one is.
+         */
+        get: operations["listAccessRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/access-requests/{userId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or decline one account
+         * @description Writes the decision and appends it to the account's decision history in one transaction. Re-deciding an account is allowed and is recorded as a further decision rather than overwriting the first.
+         */
+        post: operations["decideAccessRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every account, with its access state and how far it has got
+         * @description Newest first. Counts and states rather than content: whether a chess account is linked and whether a report exists, never the games or the report itself.
+         */
+        get: operations["listAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/operations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Onboarding runs in flight, the work ledger, and sync health
+         * @description Three readings that are invisible from every other surface: which accounts are part way through onboarding, which work is dead or waiting to retry and why, and what the last syncs accepted and rejected.
+         */
+        get: operations["getOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/artifacts/{artifactId}/download": {
         parameters: {
             query?: never;
@@ -876,7 +996,7 @@ export interface components {
     schemas: {
         Problem: {
             /** @enum {string} */
-            code: "AUTH_REQUIRED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_FAILED" | "CONFLICT" | "IDEMPOTENCY_CONFLICT" | "IDEMPOTENCY_IN_PROGRESS" | "PRECONDITION_REQUIRED" | "PRECONDITION_FAILED" | "RATE_LIMITED" | "ENTITLEMENT_REQUIRED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_RATE_LIMITED" | "UNSUPPORTED_GAME" | "INSUFFICIENT_COVERAGE" | "WORKFLOW_NOT_CANCELLABLE" | "WORK_NOT_READY" | "INTERNAL_ERROR";
+            code: "AUTH_REQUIRED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_FAILED" | "CONFLICT" | "IDEMPOTENCY_CONFLICT" | "IDEMPOTENCY_IN_PROGRESS" | "PRECONDITION_REQUIRED" | "PRECONDITION_FAILED" | "RATE_LIMITED" | "ENTITLEMENT_REQUIRED" | "ACCESS_NOT_APPROVED" | "PROVIDER_UNAVAILABLE" | "PROVIDER_RATE_LIMITED" | "UNSUPPORTED_GAME" | "INSUFFICIENT_COVERAGE" | "WORKFLOW_NOT_CANCELLABLE" | "WORK_NOT_READY" | "INTERNAL_ERROR";
             detail?: string | null;
             errors?: {
                 code: string;
@@ -905,6 +1025,548 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getAccessRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The signed-in account's own request to join the closed beta */
+            200: {
+                headers: {
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            decidedAt: string | null;
+                            decisionNote: string | null;
+                            note: string | null;
+                            noteUpdatedAt: string | null;
+                            requestedAt: string;
+                            /** @enum {string} */
+                            state: "pending" | "approved" | "declined";
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    setAccessRequestNote: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque client-generated value. An identical retry replays the original response; a different request under the same key is a conflict. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    note: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Say something about yourself and your chess, for whoever reads the queue */
+            200: {
+                headers: {
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            decidedAt: string | null;
+                            decisionNote: string | null;
+                            note: string | null;
+                            noteUpdatedAt: string | null;
+                            requestedAt: string;
+                            /** @enum {string} */
+                            state: "pending" | "approved" | "declined";
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description The request could not be accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description This idempotency key was already used for a different request */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAccessRequests: {
+        parameters: {
+            query?: {
+                state?: "pending" | "approved" | "declined";
+                cursor?: string;
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accounts waiting to be let into the closed beta */
+            200: {
+                headers: {
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            decidedAt: string | null;
+                            decisionNote: string | null;
+                            email: string | null;
+                            joinedAt: string | null;
+                            marketingSignup: {
+                                goal: string | null;
+                                platform: string;
+                                rating: string | null;
+                            } | null;
+                            note: string | null;
+                            requestedAt: string;
+                            /** @enum {string} */
+                            state: "pending" | "approved" | "declined";
+                            userId: string;
+                        }[];
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                        page: {
+                            hasMore: boolean;
+                            nextCursor: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description The request could not be accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    decideAccessRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque client-generated value. An identical retry replays the original response; a different request under the same key is a conflict. */
+                "Idempotency-Key": string;
+            };
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    decision: "approved" | "declined";
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Approve or decline one account */
+            200: {
+                headers: {
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            state: string;
+                            userId: string;
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description The request could not be accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description This idempotency key was already used for a different request */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAccounts: {
+        parameters: {
+            query?: {
+                state?: "pending" | "approved" | "declined";
+                cursor?: string;
+                limit?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every account, with its access state and how far it has got */
+            200: {
+                headers: {
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            accessState: ("pending" | "approved" | "declined") | null;
+                            email: string | null;
+                            handles: {
+                                handle: string;
+                                provider: string;
+                            }[];
+                            hasPublishedReport: boolean;
+                            joinedAt: string;
+                            linkedAccounts: number;
+                            onboardingStage: string | null;
+                            onboardingStatus: string | null;
+                            onboardingUpdatedAt: string | null;
+                            userId: string;
+                        }[];
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                        page: {
+                            hasMore: boolean;
+                            nextCursor: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description The request could not be accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getOperations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Onboarding runs in flight, the work ledger, and sync health */
+            200: {
+                headers: {
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            onboarding: {
+                                email: string | null;
+                                stage: string;
+                                startedAt: string;
+                                updatedAt: string;
+                                userId: string;
+                            }[];
+                            sync: {
+                                accepted: number;
+                                duplicate: number;
+                                failureClass: string | null;
+                                finishedAt: string | null;
+                                handle: string | null;
+                                mode: string;
+                                rejected: number;
+                                rejectionSummary: {
+                                    [key: string]: unknown;
+                                } | null;
+                                startedAt: string;
+                                state: string;
+                                syncRunId: string;
+                            }[];
+                            work: {
+                                count: number;
+                                errorCode: string | null;
+                                oldestAt: string | null;
+                                status: string;
+                                taskType: string;
+                            }[];
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     downloadArtifact: {
         parameters: {
             query?: never;

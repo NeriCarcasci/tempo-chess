@@ -20,6 +20,11 @@ import {
 import { POLICIES, clientAddress, windowStart } from "./rate-limit.js";
 import { routeKey, requiresIdempotencyKey, type RouteDefinition } from "./registry.js";
 import { setSigningKeyForTest, inspectKernelConfig, sign, signatureMatches } from "./signing.js";
+import { Hono } from "hono";
+import { mountRoute } from "./kernel.js";
+import { setTokenVerifierForTest, TokenVerifier } from "./auth/verifier.js";
+import { setAuthorizationContextForTest, type AuthorizationContext } from "./auth/context.js";
+import { ACCESS_STATES, grantsProductAccess, type AccessState } from "../access/contract.js";
 import { OBSERVATION_FIELDS, observationLine } from "./telemetry.js";
 import { parseOrProblem } from "./validation.js";
 import { assertNoClientIdentity, authorizeSubject } from "./auth/context.js";
@@ -634,6 +639,168 @@ check("the beta signup body schema reaches the document", () => {
   const schema = operation.requestBody.content["application/json"].schema;
   assert.deepEqual((schema.required as string[]).sort(), ["email", "name", "platform"]);
   assert.equal((schema.properties as Record<string, unknown>).ratingBand !== undefined, true);
+});
+
+console.log("closed beta access gate");
+
+/**
+ * The gate, through a mounted route and a real HTTP round trip.
+ *
+ * Not a call to the gate function: the claim worth proving is that an
+ * unapproved account is refused by the *kernel*, before any handler runs, on a
+ * route that did nothing to opt in. A unit test of the predicate alone would
+ * still pass if somebody deleted the line that calls it.
+ *
+ * Both boundaries that leave the process are stubbed, and neither is the thing
+ * under test. What a real database proves instead — that the row behind
+ * `auth.access` is readable at all under row level security — is in
+ * `gates/integration.ts`. Neither test replaces the other.
+ */
+async function checkAsync(name: string, run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+    console.log(`  ok  ${name}`);
+  } catch (error) {
+    failures += 1;
+    console.error(`  FAIL ${name}: ${(error as Error).message}`);
+  }
+}
+
+const GATE_ACTOR = "3f1a1d2e-0000-4000-8000-00000000beef";
+
+function contextWith(state: AccessState): AuthorizationContext {
+  return {
+    actorId: GATE_ACTOR,
+    profileId: GATE_ACTOR,
+    email: "gate@example.invalid",
+    plan: "free",
+    authMode: "fallback",
+    subjects: [GATE_ACTOR],
+    access: {
+      userId: GATE_ACTOR,
+      state,
+      note: null,
+      requestedAt: "2026-08-01T00:00:00.000Z",
+      noteUpdatedAt: null,
+      decidedAt: state === "pending" ? null : "2026-08-02T00:00:00.000Z",
+      decisionNote: null,
+    },
+  };
+}
+
+setTokenVerifierForTest(
+  new TokenVerifier({
+    supabaseUrl: "https://unit.supabase.invalid",
+    supabaseAnonKey: "unit-gate-anon-key",
+    // An opaque token is not a local JWT, so verification takes the fallback
+    // path and this stands in for `supabase.auth.getUser`.
+    getUser: async () => ({ id: GATE_ACTOR, email: "gate@example.invalid" }),
+  }),
+);
+
+/**
+ * A token shaped like the legacy symmetric one, so verification takes the
+ * fallback path where `getUser` stands in for Supabase.
+ *
+ * The verifier refuses anything that is neither a locally verifiable JWT nor
+ * `alg: HS256` before it will spend a round trip, which is the right behaviour
+ * and means an opaque string never reaches the stub. Nothing checks the
+ * signature on this path; the stub above is the authority.
+ */
+const GATE_TOKEN = [
+  Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
+  Buffer.from(JSON.stringify({ sub: GATE_ACTOR })).toString("base64url"),
+  Buffer.from("unit-gate").toString("base64url"),
+].join(".");
+
+/** Set by a handler when it runs, so "refused" can be told from "ran, then 403". */
+let handlerRan = false;
+
+function probe(path: string, access?: "self"): RouteDefinition<never, never, { ok: boolean }> {
+  return {
+    method: "GET",
+    path,
+    operationId: `probe_${path.replace(/[^a-z]+/gi, "_")}`,
+    summary: "gate probe",
+    kind: "read",
+    auth: "required",
+    ...(access ? { access } : {}),
+    envelope: "resource",
+    successStatus: 200,
+    cacheControl: "private, no-store",
+    async handler() {
+      handlerRan = true;
+      return { data: { ok: true } };
+    },
+  };
+}
+
+const gateApp = new Hono();
+mountRoute(gateApp, probe("/v1/probe/product") as unknown as RouteDefinition<never, never, never>);
+mountRoute(gateApp, probe("/v1/probe/self", "self") as unknown as RouteDefinition<never, never, never>);
+
+function signedIn(path: string): Promise<Response> {
+  return gateApp.request(path, { headers: { Authorization: `Bearer ${GATE_TOKEN}` } });
+}
+
+for (const state of ACCESS_STATES) {
+  await checkAsync(`${state}: a route that opted into nothing refuses it`, async () => {
+    setAuthorizationContextForTest(contextWith(state));
+    handlerRan = false;
+    const response = await signedIn("/v1/probe/product");
+    if (grantsProductAccess(state)) {
+      assert.equal(response.status, 200, "an approved account is served");
+      assert.equal(handlerRan, true);
+      return;
+    }
+    assert.equal(response.status, 403);
+    assert.equal(handlerRan, false, "the handler must not run for an unapproved account");
+    const body = (await response.json()) as { code: string; status: number; retryable: boolean; detail: string | null };
+    // `FORBIDDEN` already means "that is somebody else's". A client cannot send
+    // somebody who is merely waiting to the right screen if the two collapse.
+    assert.equal(body.code, "ACCESS_NOT_APPROVED");
+    assert.equal(body.status, 403);
+    assert.equal(body.retryable, false);
+    assert.ok((body.detail ?? "").length > 0, "the refusal says which state it is");
+  });
+}
+
+await checkAsync("an unapproved account may still read its own access state", async () => {
+  setAuthorizationContextForTest(contextWith("pending"));
+  handlerRan = false;
+  const response = await signedIn("/v1/probe/self");
+  assert.equal(response.status, 200);
+  assert.equal(handlerRan, true);
+});
+
+await checkAsync("no token is still 401, not the beta refusal", async () => {
+  setAuthorizationContextForTest(contextWith("pending"));
+  const response = await gateApp.request("/v1/probe/product");
+  // "Sign in" and "you are waiting" are different instructions, and the gate
+  // must not shadow the first with the second.
+  assert.equal(response.status, 401);
+});
+
+setAuthorizationContextForTest(null);
+
+check("only the account's own access routes opt out of the gate", () => {
+  const opted = V1_ROUTES.filter((route) => route.auth === "required" && route.access === "self");
+  assert.deepEqual(
+    opted.map((route) => route.path).sort(),
+    ["/v1/access-request", "/v1/access-request/note"],
+    "opening the gate on a route has to be a deliberate, reviewed line",
+  );
+});
+
+check("the admin surface is gated like everything else", () => {
+  const admin = V1_ROUTES.filter((route) => route.path.startsWith("/v1/admin"));
+  assert.ok(admin.length > 0, "the admin routes are mounted");
+  for (const route of admin) {
+    assert.equal(route.auth, "required", `${route.path} is authenticated`);
+    // An operator is an approved account with an extra grant, never a way past
+    // the gate: `operator` falls through to the approval check in the kernel.
+    assert.equal(route.access, "operator", `${route.path} declares its audience`);
+  }
 });
 
 console.log(failures === 0 ? "\nv1 kernel unit gate: pass" : `\nv1 kernel unit gate: ${failures} failing`);

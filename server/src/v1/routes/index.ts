@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { generateOpenApiDocument } from "../openapi.js";
 import type { RouteDefinition } from "../registry.js";
+import { ACCESS_ROUTES } from "./access.js";
+import { ADMIN_ROUTES } from "./admin.js";
 import { ARTIFACT_ROUTES } from "./artifacts.js";
 import { CASE_STUDY_ROUTES } from "./case-studies.js";
 import { DASHBOARD_ROUTES } from "./dashboard.js";
@@ -26,6 +28,10 @@ import { WORKFLOW_ROUTES } from "./workflows.js";
 
 const PRODUCT_ROUTES = [
   ...PUBLIC_ROUTES,
+  // Before every product route, because these are the two an account that has
+  // not been let in may still reach, and the admin surface that decides it.
+  ...ACCESS_ROUTES,
+  ...ADMIN_ROUTES,
   ...DIRECTORY_ROUTES,
   ...CASE_STUDY_ROUTES,
   ...IDENTITY_ROUTES,

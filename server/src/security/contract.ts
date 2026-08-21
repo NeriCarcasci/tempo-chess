@@ -185,11 +185,27 @@ export const JOURNAL_ENTRY = {
   breakpoints: true,
 } as const;
 
-/** The exact deployed CORS allowlist. A wildcard fallback is forbidden. */
+/**
+ * The exact deployed CORS allowlist. A wildcard fallback is forbidden.
+ *
+ * `resolveAllowedOrigins` requires set *equality* in a deployed process, not
+ * containment: a configured list missing an entry and one carrying an extra
+ * both refuse to start. So this constant and the `WEB_ORIGINS` variable on
+ * Cloud Run have to change in the same revision. Deploying the image first
+ * takes the API down with a missing origin, and setting the variable first
+ * takes it down with an unexpected one. There is no safe ordering, only a
+ * single atomic deploy.
+ *
+ * The admin surface is a fourth origin because it is a real, separate host.
+ * Serving it from a path on `formachess.com` would have avoided this entry
+ * entirely, and was rejected: the admin surface should not be one typo away
+ * from the product, and a subdomain is what makes a hostname gate meaningful.
+ */
 export const ALLOWED_ORIGINS = [
   "https://forma-chess.pages.dev",
   "https://formachess.com",
   "https://www.formachess.com",
+  "https://admin.formachess.com",
 ] as const;
 
 /**
@@ -260,5 +276,5 @@ freeze("contained tables", CONTAINED_TABLES.length, 22);
 freeze("policy tables", POLICY_TABLES.length, 19);
 freeze("runtime grant pairs", RUNTIME_GRANT_PAIRS.length, 54);
 freeze("no-runtime-grant tables", NO_RUNTIME_GRANT_TABLES.length, 3);
-freeze("allowed origins", ALLOWED_ORIGINS.length, 3);
+freeze("allowed origins", ALLOWED_ORIGINS.length, 4);
 freeze("denied roles", DENIED_ROLES.length, 3);

@@ -50,6 +50,22 @@ export const PROBLEM_CODES = {
   PRECONDITION_FAILED: { status: 412, title: "The resource has changed", retryable: false },
   RATE_LIMITED: { status: 429, title: "Too many requests", retryable: true },
   ENTITLEMENT_REQUIRED: { status: 402, title: "This needs a different plan", retryable: false },
+  /**
+   * The account is authenticated and has not been let into the closed beta.
+   *
+   * Distinct from `FORBIDDEN`, which already means "that is somebody else's".
+   * A client has to tell the two apart: one sends the person to the screen that
+   * explains they are waiting, and the other is a bug in the client or an
+   * attempt at somebody else's data. Collapsing them would put a person who is
+   * simply waiting in front of an error, and hide a real authorization failure
+   * behind a friendly one.
+   *
+   * The state itself is not in the code, because `pending` and `declined` are
+   * both "not approved" as far as any route is concerned. A client that needs
+   * the difference reads `GET /v1/access-request`, which an unapproved account
+   * is allowed to call.
+   */
+  ACCESS_NOT_APPROVED: { status: 403, title: "Forma is in closed beta", retryable: false },
   PROVIDER_UNAVAILABLE: { status: 503, title: "A provider did not respond", retryable: true },
   PROVIDER_RATE_LIMITED: { status: 429, title: "A provider is rate limiting us", retryable: true },
   UNSUPPORTED_GAME: { status: 422, title: "That game is not supported", retryable: false },

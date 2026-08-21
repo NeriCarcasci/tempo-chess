@@ -29,6 +29,26 @@ export type RouteKind = "read" | "command";
  */
 export type RouteAuth = "public" | "required" | "internal";
 
+/**
+ * What an authenticated caller must additionally hold to reach a route.
+ *
+ * `approved` is the default and is never written out: Forma is in closed beta,
+ * so an account that has not been let in reaches nothing. Default-deny is the
+ * point. A route added next month is gated by having said nothing, and the only
+ * way to open one is to say so in the declaration where a reviewer sees it.
+ *
+ * `self` is the narrow exception: a route about the caller's own access, which
+ * an unapproved account has to be able to reach or it can never learn why it is
+ * stuck or argue its case. Nothing under `self` may read or write anything but
+ * the caller's own access request.
+ *
+ * `operator` is the admin surface. It still requires approval — an operator is
+ * an approved account with an extra grant, not a way around the gate — and the
+ * grant itself is checked by the database inside `withOperatorContext`, not
+ * here. This value exists so the declaration says what the route is for.
+ */
+export type RouteAccess = "approved" | "self" | "operator";
+
 /** `v1` is the browser-facing product surface; `internal` is private ingress. */
 export type RouteSurface = "v1" | "internal";
 
@@ -83,6 +103,11 @@ export interface RouteDefinition<TQuery = unknown, TBody = unknown, TData = unkn
   surface?: RouteSurface;
   /** Which internal allowlist may call this. Required when `auth` is `internal`. */
   serviceRole?: ServiceRole;
+  /**
+   * Defaults to `approved`. Only meaningful when `auth` is `required`: a public
+   * route has no account to judge, and an internal route's caller is a service.
+   */
+  access?: RouteAccess;
   /**
    * `ledger` says this command's idempotency is enforced by the durable work
    * ledger's conditional transitions rather than by an `Idempotency-Key`

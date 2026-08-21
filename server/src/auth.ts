@@ -3,6 +3,7 @@ import { client } from "./db/client.js";
 import { CuratedError } from "./security/redaction.js";
 import { buildAuthorizationContext } from "./v1/auth/context.js";
 import { bearerToken, tokenVerifier } from "./v1/auth/verifier.js";
+import { accessDetail, grantsProductAccess, type AccessState } from "./access/contract.js";
 
 /**
  * Identity for the API. The browser holds a Supabase session; every protected
@@ -27,6 +28,8 @@ export interface AuthUser {
   id: string;
   email: string | null;
   plan: "free" | "pro";
+  /** Whether the closed beta has let this account in. */
+  accessState: AccessState;
 }
 
 function bearer(c: Context): string | null {
@@ -39,13 +42,36 @@ export async function userFromToken(token: string | null): Promise<AuthUser | nu
   const verified = await tokenVerifier().verify(token);
   if (!verified.ok) return null;
   const context = await buildAuthorizationContext(verified.token);
-  return { id: context.profileId, email: context.email, plan: context.plan };
+  return {
+    id: context.profileId,
+    email: context.email,
+    plan: context.plan,
+    accessState: context.access.state,
+  };
 }
 
-/** Rejects anonymous callers with 401; hands the profile to the handler. */
+/**
+ * Rejects anonymous callers with 401; hands the profile to the handler.
+ *
+ * It also enforces the closed beta, which is not `/v1`'s job to do twice but is
+ * nobody else's job here. `/imports`, `/analyze` and `/engine/*` are on this
+ * middleware and every one of them spends real Stockfish time on Cloud Run, so
+ * an account that has not been let in and can still reach them makes the gate
+ * decorative. The legacy surface is being retired in a separate piece of work;
+ * until it is gone it is a product surface, and this is the one place that
+ * covers all fourteen of its route prefixes at once.
+ *
+ * The body shape is the legacy `{ error }` rather than a problem document,
+ * because these routes' contract is deliberately unchanged and a client parsing
+ * `{ error }` should not start getting something else. The code lives in the
+ * body so the browser can still tell this apart from a plain refusal.
+ */
 export const requireAuth: MiddlewareHandler = async (c: Context, next: Next) => {
   const user = await userFromToken(bearer(c));
   if (!user) return c.json({ error: "Sign in to continue" }, 401);
+  if (!grantsProductAccess(user.accessState)) {
+    return c.json({ error: accessDetail(user.accessState), code: "ACCESS_NOT_APPROVED" }, 403);
+  }
   c.set("user", user);
   await next();
 };

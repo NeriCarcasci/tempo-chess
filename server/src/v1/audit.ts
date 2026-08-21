@@ -38,7 +38,17 @@ export type AuditAction =
   | "game_analysis.access_denied"
   // E16.
   | "onboarding.access_denied"
-  | "diagnostic_attempt.rejected";
+  | "diagnostic_attempt.rejected"
+  // The closed beta gate. `access.refused` is written on every request an
+  // unapproved account makes, which is deliberate volume: the question after an
+  // incident is "was this account trying, and for how long", and a single row
+  // per decision would not answer it. `access.decided` is the operator's act,
+  // and is the one row here that records something being granted rather than
+  // refused -- the history table beside it is the product's record, this is the
+  // security one, and they are written in the same request.
+  | "access.refused"
+  | "access.decided"
+  | "admin.access_denied";
 
 export interface AuditEvent {
   actorKind: AuditActorKind;

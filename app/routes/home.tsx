@@ -1,8 +1,23 @@
-import { Link } from "react-router";
+import { Link, redirect } from "react-router";
 import { PublicPage } from "../components/PublicShell";
+import { ADMIN_HOST } from "../lib/admin";
 import { HeroBoard } from "../components/HeroBoard";
 import { Showcase } from "../components/Showcase";
 import { Scale } from "../components/Scale";
+
+/**
+ * `admin.formachess.com/` is the admin surface, not the landing page.
+ *
+ * One Pages project serves both hostnames, so without this the operator
+ * subdomain shows the marketing site and the admin screens are reachable only
+ * by typing the path. Exact hostname rather than `isAdminHost`, because that
+ * helper also allows localhost, and redirecting `/` in development would put
+ * the landing page out of reach of the person building it.
+ */
+export function clientLoader() {
+  if (window.location.hostname === ADMIN_HOST) throw redirect("/admin");
+  return null;
+}
 
 export function meta() {
   return [

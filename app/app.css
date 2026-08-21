@@ -2657,6 +2657,165 @@
   .auth-alt a { color: var(--color-accent); font-weight: 700; text-decoration: underline; text-underline-offset: 0.2rem; }
   .auth-note { margin-top: 1rem; text-align: center; color: var(--color-ink-faint); font-size: 0.68rem; line-height: 1.5; }
 
+  /* -- the closed beta waiting screen ---------------------------------------
+     Same card as the auth screens, wider: it carries a paragraph and a
+     textarea rather than two fields, and at 26rem the prose wraps every five
+     words. Everything else is inherited on purpose, because this screen is the
+     same kind of thing as signing in and should not look like a new product. */
+  .access-card { width: min(34rem, 100%); }
+  /* The field is a recessed well like the auth inputs, not an outlined box:
+     DESIGN.md keeps borders for real edges, and a hairline on a white card
+     reads as a drawn rule rather than an input. */
+  .auth-form textarea {
+    border: 0; border-radius: var(--radius-control);
+    background: var(--color-surface-2); color: var(--color-ink);
+    padding: 0.7rem 0.85rem; font: inherit; font-size: 0.9rem; line-height: 1.55;
+    box-shadow: var(--shadow-flat); resize: vertical; min-height: 6rem;
+  }
+  .auth-form textarea:focus {
+    outline: 0; background: var(--color-surface);
+    box-shadow: 0 0 0 2px var(--color-accent);
+  }
+  .auth-form textarea::placeholder { color: var(--color-ink-faint); }
+  /* Left, not centred: it sits under the field it explains, and a centred
+     caption under a left-aligned label reads as a footnote to the whole card. */
+  .access-hint { margin-top: -0.2rem; text-align: left; }
+  .access-saved {
+    margin: 0; color: var(--color-win); font-size: 0.78rem; font-weight: 650;
+  }
+  /* An operator's sentence, set apart from our own copy so it is clear that a
+     person wrote it and the product did not. */
+  .access-decision {
+    margin-top: 1rem; border-radius: var(--radius-control);
+    background: var(--color-surface-2); padding: 0.85rem 1rem;
+    color: var(--color-ink); font-size: 0.85rem; line-height: 1.6;
+    box-shadow: var(--shadow-flat);
+  }
+  .access-signout { margin-top: 1.5rem; text-align: center; }
+  /* A button that is a button to the accessibility tree and a link to the eye.
+     Used where the action is real but must not compete with the primary one. */
+  .link-button {
+    border: 0; background: none; padding: 0; cursor: pointer;
+    color: var(--color-ink-muted); font: inherit; font-size: 0.78rem;
+    text-decoration: underline; text-underline-offset: 0.2rem;
+  }
+  .link-button:hover { color: var(--color-ink); }
+  .link-button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+  /* -- admin.formachess.com --------------------------------------------------
+     A third shell, deliberately unlike the other two. The product shell is
+     built to keep one person's attention on their own chess; this is a console
+     for reading other people's states, so it is denser, table-led, and quieter.
+     It uses the same tokens throughout: an internal surface that invented its
+     own palette would be a second design system to maintain, and the first
+     thing to rot. */
+  .admin-shell { min-height: 100dvh; background: var(--color-bg); }
+  .admin-bar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem;
+    background: var(--color-surface); padding: 0.85rem clamp(1rem, 4vw, 2rem);
+    box-shadow: var(--shadow-soft);
+  }
+  .admin-brand {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-weight: 800; letter-spacing: -0.03em; text-transform: uppercase; font-size: 0.95rem;
+  }
+  /* Says which surface you are on, at a glance, from across a desk. The whole
+     point of the tag is that an operator never mistakes this for the product. */
+  .admin-tag {
+    border-radius: var(--radius-pill); background: var(--color-accent-wash);
+    padding: 0.15rem 0.5rem;
+    color: var(--color-accent); font-family: var(--font-mono);
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em;
+  }
+  .admin-tabs { display: flex; gap: 0.35rem; }
+  .admin-tab {
+    border-radius: var(--radius-pill); padding: 0.4rem 0.85rem;
+    color: var(--color-ink-muted); font-size: 0.82rem; font-weight: 650;
+  }
+  .admin-tab:hover { background: var(--color-surface-2); color: var(--color-ink); }
+  .admin-tab.is-active { background: var(--color-accent-wash); color: var(--color-accent); }
+  .admin-main { margin: 0 auto; max-width: 72rem; padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 4vw, 2rem) 5rem; }
+
+  .admin-head {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 0.75rem; margin-bottom: 1.25rem;
+  }
+  .admin-head h1 { font-size: 1.4rem; font-weight: 650; letter-spacing: -0.03em; }
+  .admin-section {
+    margin: 2.5rem 0 0.85rem; font-size: 0.95rem; font-weight: 700; letter-spacing: -0.02em;
+  }
+  .admin-meta {
+    color: var(--color-ink-faint); font-family: var(--font-mono); font-size: 0.7rem;
+  }
+  .admin-more { margin-top: 1rem; }
+  .admin-empty { color: var(--color-ink-muted); font-size: 0.88rem; }
+  .admin-null { color: var(--color-ink-faint); }
+
+  .admin-filters { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 1.25rem; }
+  .admin-filter {
+    border-radius: var(--radius-pill); background: var(--color-surface);
+    padding: 0.35rem 0.8rem;
+    color: var(--color-ink-muted); font-size: 0.78rem; font-weight: 650;
+    box-shadow: var(--shadow-flat);
+  }
+  .admin-filter.is-active { background: var(--color-accent); color: var(--color-accent-ink); }
+
+  .admin-list { display: grid; gap: 1rem; }
+  .admin-request {
+    border-radius: var(--radius-panel); background: var(--color-surface); padding: 1.25rem;
+    box-shadow: var(--shadow-soft);
+  }
+  .admin-request-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+  }
+  .admin-request h3 { font-size: 1rem; font-weight: 650; letter-spacing: -0.02em; }
+  .admin-request-head .admin-meta { margin-top: 0.25rem; }
+  /* Their words, set apart from ours. A note rendered in body copy reads as
+     something the product wrote about them. */
+  .admin-quote {
+    margin-top: 0.9rem; border-radius: var(--radius-control);
+    background: var(--color-surface-2); padding: 0.8rem 0.95rem;
+    font-size: 0.88rem; line-height: 1.6; white-space: pre-wrap;
+  }
+  .admin-empty-note { margin-top: 0.9rem; color: var(--color-ink-faint); font-size: 0.85rem; }
+  .admin-signup { margin-top: 0.6rem; color: var(--color-ink-muted); font-size: 0.78rem; }
+  .admin-decide { display: grid; gap: 0.6rem; margin-top: 1rem; }
+  .admin-decide input[type="text"] {
+    height: 2.5rem; border: 0; border-radius: var(--radius-control);
+    background: var(--color-surface-2); color: var(--color-ink);
+    padding: 0 0.8rem; font-size: 0.85rem;
+    box-shadow: var(--shadow-flat);
+  }
+  .admin-decide input[type="text"]:focus {
+    outline: 0; background: var(--color-surface); box-shadow: 0 0 0 2px var(--color-accent);
+  }
+  .admin-decide-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+  /* A word as well as a colour, everywhere this is used, because colour never
+     carries meaning alone. */
+  .admin-state {
+    border-radius: var(--radius-pill); padding: 0.2rem 0.6rem;
+    font-family: var(--font-mono); font-size: 0.65rem; font-weight: 700;
+    letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap;
+  }
+  .admin-state-pending, .admin-state-warn { background: #f7ecd8; color: #8a6320; }
+  .admin-state-approved { background: #dcece5; color: var(--color-win); }
+  .admin-state-declined, .admin-state-bad { background: #f3dede; color: var(--color-loss); }
+  .admin-state-quiet { background: var(--color-surface-2); color: var(--color-ink-muted); }
+
+  /* Wide tables scroll inside their own container. The page body never does. */
+  .admin-table-scroll { overflow-x: auto; border-radius: var(--radius-panel); background: var(--color-surface); box-shadow: var(--shadow-soft); }
+  .admin-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+  .admin-table th, .admin-table td { padding: 0.65rem 0.9rem; text-align: left; white-space: nowrap; }
+  .admin-table th {
+    color: var(--color-ink-faint); font-family: var(--font-mono);
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  /* The one place DESIGN.md still allows a hairline: rows in a dense table. */
+  .admin-table tbody tr { border-top: 1px solid var(--color-line); }
+  .admin-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
   /* -- account usage: quieter, data-led, and deliberately unlike a game XP card */
   .account-usage {
     margin-top: 1rem; border: 1px solid var(--color-line); border-radius: 10px;

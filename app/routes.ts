@@ -13,6 +13,10 @@ export default [
   route("login", "routes/login.tsx"),
   route("signup", "routes/signup.tsx"),
   route("reset-password", "routes/reset-password.tsx"),
+  // Where an account that has not been let into the closed beta lands. Under
+  // auth rather than under the product, because it is the screen the product's
+  // own refusal redirects to and it must not itself require access.
+  route("access", "routes/access.tsx"),
   route("account/connect", "routes/connect.tsx"),
   route("welcome", "routes/welcome.tsx"),
 
@@ -43,4 +47,13 @@ export default [
   route("dev/preview-rook", "routes/__preview-rook.tsx"),
   route("dev/foundation", "routes/__foundation.tsx"),
   route("game/:id", "routes/game.tsx"),
+
+  // --- admin: admin.formachess.com -------------------------------------
+  // One deployment serves both hosts; see routes/admin/layout.tsx for why, and
+  // for why the hostname check there is presentation rather than a boundary.
+  route("admin", "routes/admin/layout.tsx", [
+    index("routes/admin/requests.tsx"),
+    route("accounts", "routes/admin/accounts.tsx"),
+    route("operations", "routes/admin/operations.tsx"),
+  ]),
 ] satisfies RouteConfig;

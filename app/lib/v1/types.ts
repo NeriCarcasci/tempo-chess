@@ -114,6 +114,20 @@ export type PlayLevelKey = OpponentFamilyLevel["key"];
 export type Workflow = Data<"getWorkflow">;
 export type WorkflowList = Data<"listWorkflows">;
 
+// --- access -----------------------------------------------------------------
+
+/** The signed-in account's own request to join the closed beta. */
+export type AccessRequest = Data<"getAccessRequest">;
+export type AccessState = AccessRequest["state"];
+
+/** The operator's view. Reachable only by an account with an operator grant. */
+export type AdminAccessRequest = Data<"listAccessRequests">[number];
+export type AdminAccount = Data<"listAccounts">[number];
+export type AdminOperations = Data<"getOperations">;
+export type AdminOnboardingRun = AdminOperations["onboarding"][number];
+export type AdminWorkTally = AdminOperations["work"][number];
+export type AdminSyncRun = AdminOperations["sync"][number];
+
 // --- public -----------------------------------------------------------------
 
 export type PublicStats = Data<"getPublicStats">;

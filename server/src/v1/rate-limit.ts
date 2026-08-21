@@ -67,6 +67,20 @@ export const POLICIES = {
    * alphabet.
    */
   directorySearch: { name: "public_directory_search", windowSeconds: 60, max: 30 },
+  /**
+   * The closed beta's own two endpoints. Per actor.
+   *
+   * These are the only routes an account that has not been let in can reach,
+   * which makes them the only authenticated surface open to the population we
+   * have explicitly decided not to trust yet. Leaving the one door unlocked
+   * because it is small is how the small door becomes the interesting one.
+   *
+   * The read is generous because the waiting screen is something a person
+   * refreshes; the write is tight because saving a note is an act somebody
+   * performs a handful of times and never in a loop.
+   */
+  accessRead: { name: "access_read", windowSeconds: 60, max: 60 },
+  accessCommand: { name: "access_command", windowSeconds: 60, max: 10 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 export type RateLimitStatus = "ok" | "limited" | "degraded";
