@@ -308,7 +308,10 @@ export async function recordValidation(
           ${row.sampleSize}, ${row.top1Accuracy}, ${row.expectedCalibrationError},
           ${row.brierScore}
         )
-        on conflict (calibration_component_version_id, provider, speed, rating_band_low)
+        on conflict (
+          calibration_component_version_id, model_component_version_id,
+          provider, speed, rating_band_low
+        )
           do nothing
         returning id
       `;
