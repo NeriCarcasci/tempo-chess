@@ -3,10 +3,11 @@
 Written for whoever picks this up next, on the assumption they have this
 document and the repository and nothing else.
 
-**Status: the implementation is present; the release proof is incomplete.**
-The offline checks below have run, but the database-backed gates, reviewed
-semantic precision, browser check, and end-to-end proof have not. Read [What is
-not proven](#what-is-not-proven) before treating this as finished.
+**Status: released and measured in production on 2026-08-22.** Every succeeded
+analysis run in the archive has been detected over, and all twelve families are
+observed on real games. Three gate steps were deliberately skipped and reviewed
+semantic precision is still not established, so read [What is not
+proven](#what-is-not-proven) before treating the numbers below as validation.
 
 ## What shipped
 
@@ -150,37 +151,99 @@ nullable or empty. Withholding is the production rollback for a version that
 has already been registered; registration itself is not described here as a
 reversible action.
 
+## What the release proved
+
+Released 2026-08-22 from commit `639e727`, image
+`sha256:52d6f86ba04f03fa75d10bccb82fbadc570de2575ea66271a38d9871f1c88131`, staged
+`--no-traffic --tag=next` and promoted after a smoke check. `forma-api` is on
+revision `forma-api-00039-big` and `forma-analysis` on `forma-analysis-00038-ziz`,
+both at 100% traffic.
+
+Migrations `0038`, `0039` and `0041` are applied, and `0041` carries a ledger row
+so `forma-migrate` will not re-run it. The catalogue registered twelve concepts
+across seventeen versions with zero conflicts, through `concepts:register` rather
+than `analysis:promote`, so no recipe was re-promoted as a side effect of adding
+detectors.
+
+Detection then ran over the whole archive: **333 of 333 succeeded analysis runs,
+zero failures, zero abstentions, zero needing a new run.** It wrote 10,291
+opportunities, and the database delta matched the reported writes exactly on both
+batches -- 361, then 9,930. Every one of those rows carries its own
+`evidence_item_id` and a `run_concept_opportunities` row, so the three counts
+agree at 10,291 each. Every label carries detector version 4, and no other
+version exists.
+
+### The four states, observed rather than asserted
+
+| State | Live instances |
+| --- | --- |
+| Measured with nothing to say | 4 runs carry a manifest and no opportunities -- `published`, empty |
+| Never measured | none left in this archive; exercised by unit tests only |
+| A failed opportunity | 2,515 rows, response observed and `success` false |
+| A censored opportunity | 182 rows: `clock_expired`, `game_ended`, `opponent_resigned` |
+
+No censored row anywhere carries a `success` value, which is section 17.5 holding
+in production rather than in a fixture.
+
+### The four families that had no shadow coverage do fire
+
+The benchmark corpus produced nothing for `pin`, `skewer`, `discovered_attack`
+and `removal_of_defender`, and this document previously said they should be
+withheld until that was resolved. Real games resolve it: all four fire.
+
+| Family | Opportunities | Games | Censored |
+| --- | --- | --- | --- |
+| `trapped_piece` | 505 | 201 | 47 |
+| `double_attack` | 335 | 192 | 52 |
+| `removal_of_defender` | 182 | 123 | 61 |
+| `discovered_attack` | 35 | 33 | 5 |
+| `skewer` | 33 | 31 | 10 |
+| `pin` | 18 | 17 | 2 |
+
+So the corpus was too quiet, not the detectors too strict, and none of the four
+needs withholding on this evidence. `pin` is genuinely rare -- eighteen
+occurrences across three hundred and thirty-three games -- which is consistent
+with the mutual exclusion rule preferring `skewer` when the two geometries
+coincide. That is now a question about how often the shape occurs rather than an
+unknown about whether the detector works.
+
 ## What is not proven
 
 Read this part before calling the project done.
 
-**The end-to-end proof (FOR-139) has not been executed.** It needs a database
-and an engine, and this work was done in a worktree with neither. The procedure
-is below; nobody has run it.
-
-**Three gate steps were not run for this handoff**: `analysis:migration`,
-`analysis:security`, `analysis:integration`. They cover migration behaviour
-against a production-shaped schema, row level security and ownership on the
-review route, and worker retry against the real unique indexes. `concepts:gate`
-names them and exits 2.
-
-**Four families have no shadow coverage**: `pin`, `skewer`,
-`discovered_attack`, `removal_of_defender` produce nothing on the benchmark
-corpus. They are neither validated nor refuted. Either the corpus lacks the
-geometry or the detectors are stricter than it, and which one it is has not been
-established. They should be withheld, or the corpus enriched, before they are
-claimed as validated.
+**Three gate steps have never run**: `analysis:migration`, `analysis:security`,
+`analysis:integration`. They cover migration behaviour against a
+production-shaped schema, row level security and ownership on the review route,
+and worker retry against the real unique indexes. `concepts:gate` names them and
+exits 2. They were skipped by an explicit decision to release without them, not
+because anything else covers them. The production run exercised the same writes
+under `withActor` and against the real unique indexes without failing, but that
+is a successful path rather than a proof of the refusing ones: nothing here has
+shown that a non-owner is turned away, only that an owner is served. Anonymous
+access to the review route returns 401, which is the only access check that was
+actually made.
 
 **Semantic precision has not been reviewed.** FOR-138 asks for 90% reviewed
 precision, meaning a person reading up to fifty labels per family and
-disagreeing with some. The shadow harness produces that sample and decides
-structural validity only. No number anywhere in this project is a reviewed-
-precision figure.
+disagreeing with some. The shadow harness decides structural validity only. No
+number in this document is a reviewed-precision figure. What has changed is that
+there are now 10,291 real labels to sample, which is the corpus that review
+needs and previously did not exist.
 
-**The concept panel has not been seen in a browser.** Its pure parts are tested;
-rendering it needs a synced, analysed, owned game and a session.
+**The concept panel has not been seen in a browser.** Its pure parts are tested
+and its data is now present for every analysed game, but nobody has looked at it.
 
-### The procedure that would prove it
+**The `unavailable` state has no live instance.** Completing the backfill
+measured the last publication that predated the detector, so the distinction
+between "measured and empty" and "never measured" is exercised only by unit
+tests in this archive. A newly analysed game will not recreate it.
+
+### The procedure that would prove the rest
+
+Steps 1, 2 and 4 were carried out against production by the release above, and
+step 8's idempotence was checked by re-running the backfill to completion. Steps
+3, 5, 6 and 7 remain, and they are the ones that need an engine, a session and a
+person.
 
 Against a disposable database with the engine available, set `DATABASE_URL`
 and the required database-role credentials for that database. Keep
