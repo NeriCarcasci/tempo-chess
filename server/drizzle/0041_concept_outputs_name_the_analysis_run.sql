@@ -20,6 +20,12 @@ alter table analysis.run_concept_opportunities enable row level security
 --> statement-breakpoint
 alter table analysis.run_concept_opportunities force row level security
 --> statement-breakpoint
+-- Guarded so re-application is a no-op, like every other migration here.
+-- `create policy` has no IF NOT EXISTS, so without this a forward recovery --
+-- a migration interrupted midway and re-applied from the start -- fails on a
+-- policy that already landed.
+drop policy if exists run_concept_opportunities_owner on analysis.run_concept_opportunities
+--> statement-breakpoint
 create policy run_concept_opportunities_owner on analysis.run_concept_opportunities
   using (exists (
     select 1
