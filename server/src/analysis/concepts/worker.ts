@@ -287,6 +287,8 @@ export async function detectForRun(
           // Read, and there was nothing in it. Complete, not unavailable.
           detection: "complete" satisfies DetectionState,
           opportunities: 0,
+          writtenOpportunities: 0,
+          writtenCensored: 0,
           events: 0,
           labels: 0,
           succeeded: 0,
@@ -480,7 +482,10 @@ export async function detectForRun(
     let succeeded = 0;
     let failed = 0;
     let censored = 0;
+    let writtenOpportunities = 0;
+    let writtenCensored = 0;
     const byConcept = new Map<string, number>();
+    const writtenByConcept = new Map<string, number>();
     const byRole = new Map<string, number>();
     const byCompleteness = new Map<string, number>();
     // Abstentions are counted by reason rather than lumped into one "skipped".
@@ -657,6 +662,12 @@ export async function detectForRun(
           ) returning id
         `;
         if (!opportunity) throw new Error("the concept opportunity vanished on insert");
+        writtenOpportunities += 1;
+        if (!observation.draft.responseObserved) writtenCensored += 1;
+        writtenByConcept.set(
+          observation.conceptSlug,
+          (writtenByConcept.get(observation.conceptSlug) ?? 0) + 1,
+        );
 
         await tx`
           insert into analysis.run_concept_opportunities (analysis_run_id, opportunity_id)
@@ -687,6 +698,11 @@ export async function detectForRun(
       outputSummary: {
         detection: "complete" satisfies DetectionState,
         opportunities: detected.length,
+        // Separate from conclusions: a retry or verification can conclude N
+        // opportunities and insert zero. Backfill reconciliation must report
+        // what this invocation actually wrote, not what already existed.
+        writtenOpportunities,
+        writtenCensored,
         events: groups.length,
         labels: detected.length,
         // Outcomes, kept apart. `censored` is not a failure and adding it to
@@ -696,6 +712,7 @@ export async function detectForRun(
         censored,
         abstentions,
         concepts: Object.fromEntries(byConcept),
+        writtenConcepts: Object.fromEntries(writtenByConcept),
         roles: Object.fromEntries(byRole),
         completeness: Object.fromEntries(byCompleteness),
         // Counts and a fingerprint. Nothing here carries a square, a move, a

@@ -40,7 +40,7 @@ export const CONCEPT_BUDGETS = {
   /**
    * One 80-ply game through every detector.
    *
-   * The recorded baseline on the machine this was written on is 33.5ms for 57
+   * The recorded baseline on the machine this was written on is 32.2ms for 53
    * observations. 500ms is roughly fifteen times that, which tolerates a much
    * slower runner while still catching an order-of-magnitude change in the
    * shape of the work. The first budget written here was 4,000ms, which is a
@@ -49,8 +49,8 @@ export const CONCEPT_BUDGETS = {
    */
   perGameMs: 500,
   /** What the baseline measured, so the next reader knows what moved. */
-  baselineMs: 33.5,
-  baselineObservations: 57,
+  baselineMs: 32.2,
+  baselineObservations: 53,
   /** Plies in the shaped game, so the two numbers below are readable. */
   plies: 80,
 } as const;
@@ -120,7 +120,7 @@ function shapedFacts(): GameFacts {
     const line = next === undefined
       ? [transition.playedMoveUci]
       : [transition.playedMoveUci, next];
-    candidatesByPly.set(transition.fromPly + 1, [
+    candidatesByPly.set(transition.fromPly, [
       { rank: 1, uci: line[0]!, expectedScore: 0.5, pv: line },
     ]);
   }
@@ -145,26 +145,39 @@ function main(): void {
     "the shaped game did not reach its full length, so the measurement is of something smaller",
   );
 
-  // One untimed pass first. The first call through any of this pays for module
-  // initialisation and JIT warmup, and measuring that measures Node rather than
-  // the detector.
-  const warm = detectGame(facts);
+  // Several untimed passes let the hot detector code, not Node's first-call
+  // compilation, become the thing being measured. Several timed passes then
+  // use the median so one scheduler pause on a shared runner does not turn the
+  // budget into noise.
+  const warmCounts = Array.from({ length: 3 }, () => detectGame(facts).length);
+  assert.equal(new Set(warmCounts).size, 1, "warmup passes disagreed on the detector output");
 
-  const started = process.hrtime.bigint();
-  const found = detectGame(facts);
-  const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
-
+  const measurements: number[] = [];
+  let found = detectGame(facts);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const started = process.hrtime.bigint();
+    found = detectGame(facts);
+    measurements.push(Number(process.hrtime.bigint() - started) / 1e6);
+  }
   assert.equal(
     found.length,
-    warm.length,
-    "two passes over one game disagreed, which is a determinism failure rather than a timing one",
+    warmCounts[0],
+    "warm and measured passes disagreed, which is a determinism failure rather than a timing one",
   );
+  assert.equal(
+    found.length,
+    CONCEPT_BUDGETS.baselineObservations,
+    "the shaped workload changed; review and re-baseline the budget before accepting its timing",
+  );
+  const ordered = [...measurements].sort((left, right) => left - right);
+  const elapsedMs = ordered[Math.floor(ordered.length / 2)]!;
 
   const verdict = elapsedMs <= CONCEPT_BUDGETS.perGameMs ? "within" : "OVER";
   console.log(
     `concepts:performance  ${CONCEPT_BUDGETS.plies}-ply game, `
-    + `${found.length} observations, ${elapsedMs.toFixed(1)}ms `
-    + `(budget ${CONCEPT_BUDGETS.perGameMs}ms) — ${verdict}`,
+    + `${found.length} observations, ${elapsedMs.toFixed(1)}ms median `
+    + `(${measurements.map((value) => value.toFixed(1)).join(", ")}ms; `
+    + `budget ${CONCEPT_BUDGETS.perGameMs}ms) — ${verdict}`,
   );
 
   assert.ok(

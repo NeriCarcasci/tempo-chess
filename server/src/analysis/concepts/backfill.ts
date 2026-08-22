@@ -2,11 +2,11 @@
  * `npm run concepts:backfill` — measure games that were analysed before the
  * detector existed, or before a concept it now knows about did.
  *
- * Every game in this environment already has a succeeded analysis run with its
- * transitions assessed and its position graph materialized. Replanning them
- * would repeat the screening and deep searches, which are the expensive part
- * and whose output has not changed. The detector reads that output, so this
- * walks the runs that already succeeded and calls exactly the same
+ * The archive has succeeded analysis runs whose position graphs are already
+ * materialized. Replanning them would repeat the screening and deep searches,
+ * which are the expensive part and whose output has not changed. The detector
+ * reads that output, so this walks the runs that already succeeded and calls
+ * exactly the same
  * `detectForRun` the worker calls — not a second implementation, and not a
  * shortcut past the actor binding.
  *
@@ -22,8 +22,8 @@
  * # In bounded batches, for a large archive.
  * PROFILE_ID=<uuid> npm run concepts:backfill -- --limit=100
  *
- * # Also re-run already-measured runs, to reconcile their counts. Writes nothing
- * # new when they agree, and names them when they do not.
+ * # Also re-run already-measured runs, to reconcile their counts. Existing
+ * # evidence is never rewritten; missing provenance links may be appended.
  * PROFILE_ID=<uuid> npm run concepts:backfill -- --verify
  * ```
  *
@@ -58,8 +58,10 @@
 import postgres from "postgres";
 import { detectForRun } from "./worker.js";
 import { withActor } from "../../db/actor.js";
+import { WorkFailure } from "../../ops/retry.js";
 import {
   OptionError,
+  exitCodeFor,
   parseOptions,
   reconcile,
   reportLines,
@@ -92,16 +94,13 @@ try {
   // and ninety-six of them -- which is exactly what it did the first time it
   // ran, under a comment claiming it was bound.
   const candidates = await withActor(client, options.profileId, (tx) =>
-    tx<{ run_id: string; subject_game_id: string; has_manifest: boolean; has_assessments: boolean }[]>`
+    tx<{ run_id: string; subject_game_id: string; has_manifest: boolean }[]>`
       select r.id as run_id,
              r.subject_game_id,
              exists (
                select 1 from analysis.run_artifacts a
                where a.run_id = r.id and a.family = 'concept_opportunities'
-             ) as has_manifest,
-             exists (
-               select 1 from analysis.transition_assessments t where t.analysis_run_id = r.id
-             ) as has_assessments
+             ) as has_manifest
       from analysis.runs r
       join chess.subject_games g on g.id = r.subject_game_id
       join app.analysis_subjects s on s.id = g.subject_id
@@ -117,7 +116,6 @@ try {
       runId: row.run_id,
       subjectGameId: row.subject_game_id,
       hasManifest: row.has_manifest,
-      hasAssessments: row.has_assessments,
     })),
     options,
   );
@@ -155,26 +153,33 @@ try {
           reason?: string;
           checksum?: string;
           opportunities?: number;
+          writtenOpportunities?: number;
           censored?: number;
+          writtenCensored?: number;
           abstentions?: { unregisteredConcept?: number; unrecordableDraft?: number };
           concepts?: Record<string, number>;
+          writtenConcepts?: Record<string, number>;
         };
-        counts.opportunities += summary.opportunities ?? 0;
-        counts.censored += summary.censored ?? 0;
+        counts.opportunities += summary.writtenOpportunities ?? 0;
+        counts.censored += summary.writtenCensored ?? 0;
         counts.unregisteredConcept += summary.abstentions?.unregisteredConcept ?? 0;
         counts.unrecordableDraft += summary.abstentions?.unrecordableDraft ?? 0;
-        for (const [slug, count] of Object.entries(summary.concepts ?? {})) {
+        for (const [slug, count] of Object.entries(summary.writtenConcepts ?? {})) {
           counts.byConcept[slug] = (counts.byConcept[slug] ?? 0) + count;
         }
-        outcomes.push(summary.detection === "abstained"
-          ? { kind: "abstained", runId: candidate.runId, reason: summary.reason ?? "unstated" }
-          : {
+        if (summary.detection === "abstained") {
+          const reason = summary.reason ?? "unstated";
+          outcomes.push({ kind: "abstained", runId: candidate.runId, reason });
+          console.error(`run ${candidate.runId} abstained: ${reason}`);
+        } else {
+          outcomes.push({
             kind: "completed",
             runId: candidate.runId,
             checksum: summary.checksum ?? null,
-            opportunities: summary.opportunities ?? 0,
-            censored: summary.censored ?? 0,
+            opportunities: summary.writtenOpportunities ?? 0,
+            censored: summary.writtenCensored ?? 0,
           });
+        }
       } catch (error) {
         // One unreadable game must not stop the other hundred and ninety-five,
         // and each run is its own transaction so a failure here leaves nothing
@@ -182,12 +187,12 @@ try {
         const code = (error as { code?: string }).code
           ?? (error as { failureCode?: string }).failureCode
           ?? (error as Error).name;
-        if (String(code).includes("concept_manifest_drift")
-          || String((error as Error).message).includes("manifest disagrees")) {
+        if (error instanceof WorkFailure && error.code === "concept_manifest_drift") {
           // Expected, and not a failure: this build concludes something
           // different from what the run recorded, and an immutable manifest
           // means that needs a new run rather than an edit of this one.
           outcomes.push({ kind: "needs_new_run", runId: candidate.runId });
+          console.error(`run ${candidate.runId} needs a new analysis run: concept manifest drift`);
         } else {
           outcomes.push({ kind: "failed", runId: candidate.runId, code: String(code) });
           console.error(`run ${candidate.runId} failed: ${code}`);
@@ -197,7 +202,13 @@ try {
     }
   }
 
-  const report = summarise(candidates.length, skipped, outcomes, counts);
+  const report = summarise(
+    candidates.length,
+    skipped,
+    outcomes,
+    counts,
+    options.dryRun ? selected.length : 0,
+  );
   for (const line of reportLines(report, options)) console.log(line);
 
   const [after] = await withActor(client, options.profileId, (tx) =>
@@ -211,17 +222,14 @@ try {
     `reconciled   ${wrote} new opportunity rows visible to this actor, `
     + `${report.opportunities} reported written`,
   );
-  if (!options.dryRun && wrote !== report.opportunities) {
-    // Not fatal, and worth saying loudly: the two disagree when something wrote
-    // rows this command did not, or when a row it wrote is not visible to the
-    // actor that wrote it.
+  const databaseDeltaMatches = options.dryRun || wrote === report.opportunities;
+  if (!databaseDeltaMatches) {
     console.error("reconciled   the database delta and the reported writes disagree");
   }
 
   const check = reconcile(report);
   for (const problem of check.problems) console.error(`unreconciled ${problem}`);
-  if (!check.ok) process.exitCode = 1;
-  if (report.failed > 0) process.exitCode = 1;
+  process.exitCode = exitCodeFor(report, check.ok, databaseDeltaMatches);
 } finally {
   await client.end({ timeout: 5 });
 }

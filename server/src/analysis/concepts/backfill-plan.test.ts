@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   classify,
+  exitCodeFor,
   OptionError,
   parseOptions,
   reconcile,
@@ -25,7 +26,6 @@ import {
 const candidate = (over: Partial<RunCandidate> & { runId: string }): RunCandidate => ({
   subjectGameId: `game-${over.runId}`,
   hasManifest: false,
-  hasAssessments: true,
   ...over,
 });
 
@@ -74,30 +74,29 @@ test("the flags that exist do what they say", () => {
 // Selection
 // ---------------------------------------------------------------------------
 
-test("a run with nothing to read is ineligible, not failed", () => {
-  assert.equal(classify(candidate({ runId: "a", hasAssessments: false })), "ineligible");
+test("a missing manifest is selected without an assessment precondition", () => {
+  assert.equal(classify(candidate({ runId: "a" })), "detect");
   assert.equal(classify(candidate({ runId: "b" })), "detect");
   assert.equal(classify(candidate({ runId: "c", hasManifest: true })), "verify");
 });
 
-test("the default mode selects only runs that have never been measured", () => {
+test("the default mode selects every run that has never been measured", () => {
   const { selected, skipped } = selectRuns([
     candidate({ runId: "a" }),
     candidate({ runId: "b", hasManifest: true }),
-    candidate({ runId: "c", hasAssessments: false }),
+    candidate({ runId: "c" }),
   ], options());
-  assert.deepEqual(selected.map((run) => run.runId), ["a"]);
+  assert.deepEqual(selected.map((run) => run.runId), ["a", "c"]);
   assert.equal(skipped.verify, 1);
-  assert.equal(skipped.ineligible, 1);
 });
 
-test("verify mode adds the measured ones, and still leaves the unreadable alone", () => {
+test("verify mode adds measured runs and zero-assessment runs", () => {
   const { selected } = selectRuns([
     candidate({ runId: "a" }),
     candidate({ runId: "b", hasManifest: true }),
-    candidate({ runId: "c", hasAssessments: false }),
+    candidate({ runId: "c" }),
   ], options({ mode: "verify" }));
-  assert.deepEqual(selected.map((run) => run.runId), ["a", "b"]);
+  assert.deepEqual(selected.map((run) => run.runId), ["a", "b", "c"]);
 });
 
 test("an interrupted batch resumes where it stopped", () => {
@@ -142,15 +141,37 @@ test("every selected run is completed, abstained, named for a new run, or failed
     { kind: "needs_new_run", runId: "c" },
     { kind: "failed", runId: "d", code: "boom" },
   ];
-  const report = summarise(6, { detect: 0, verify: 1, ineligible: 1 }, outcomes, counts);
+  const report = summarise(5, { detect: 0, verify: 1 }, outcomes, counts);
   assert.equal(report.eligible, 4);
+  assert.deepEqual(reconcile(report), { ok: true, problems: [] });
+  assert.equal(exitCodeFor(report, true, true), 1, "a real failed run takes precedence");
+});
+
+test("an abstained run is named but is not complete success", () => {
+  const report = summarise(1, { detect: 0, verify: 0 }, [
+    { kind: "abstained", runId: "a", reason: "malformed_transition_evidence" },
+  ], counts);
+  assert.equal(exitCodeFor(report, true, true), 2);
+});
+
+test("a dry run accounts for selected runs as planned, never completed", () => {
+  const report = summarise(
+    3,
+    { detect: 1, verify: 0 },
+    [],
+    counts,
+    2,
+  );
+  assert.equal(report.eligible, 2);
+  assert.equal(report.planned, 2);
+  assert.equal(report.completed, 0);
   assert.deepEqual(reconcile(report), { ok: true, problems: [] });
 });
 
 test("a run that vanished without an outcome is caught", () => {
   // The failure this exists for: a backfill that loses runs silently is worse
   // than one that does not run, because it reports success.
-  const report = summarise(2, { detect: 0, verify: 0, ineligible: 0 }, [], counts);
+  const report = summarise(2, { detect: 0, verify: 0 }, [], counts);
   report.eligible = 2;
   const check = reconcile(report);
   assert.equal(check.ok, false);
@@ -158,7 +179,7 @@ test("a run that vanished without an outcome is caught", () => {
 });
 
 test("runs considered must equal those selected plus those skipped", () => {
-  const report = summarise(10, { detect: 1, verify: 1, ineligible: 1 }, [
+  const report = summarise(10, { detect: 1, verify: 1 }, [
     { kind: "completed", runId: "a", checksum: null, opportunities: 0, censored: 0 },
   ], counts);
   const check = reconcile(report);
@@ -169,10 +190,15 @@ test("a run needing a new analysis run is not counted as a failure", () => {
   // It is the expected answer for a game measured under an older catalogue, and
   // counting it as a failure would make a healthy backfill look broken and
   // hide the ones that really did fail.
-  const report = summarise(1, { detect: 0, verify: 0, ineligible: 0 }, [
+  const report = summarise(1, { detect: 0, verify: 0 }, [
     { kind: "needs_new_run", runId: "a" },
   ], counts);
   assert.equal(report.failed, 0);
   assert.equal(report.needsNewRun, 1);
   assert.equal(reconcile(report).ok, true);
+  assert.equal(
+    exitCodeFor(report, true, true),
+    2,
+    "operator action is outstanding, so automation must not read this as complete success",
+  );
 });

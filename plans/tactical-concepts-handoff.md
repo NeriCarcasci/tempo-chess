@@ -3,14 +3,15 @@
 Written for whoever picks this up next, on the assumption they have this
 document and the repository and nothing else.
 
-**Status: the code is complete and the functional proof is not.** Everything
-that can be verified without a database has been, and everything that cannot is
-named below with the command that would do it. Read [What is not
-proven](#what-is-not-proven) before treating this as finished.
+**Status: the implementation is present; the release proof is incomplete.**
+The offline checks below have run, but the database-backed gates, reviewed
+semantic precision, browser check, and end-to-end proof have not. Read [What is
+not proven](#what-is-not-proven) before treating this as finished.
 
 ## What shipped
 
-Twelve concept families, six corrected and six new.
+Twelve concept families: five corrected, one reconfirmed without a version
+change, and six new.
 
 | Family | Version | Notes |
 | --- | --- | --- |
@@ -30,8 +31,9 @@ Twelve concept families, six corrected and six new.
 Detector implementation version: **4** (recorded on every `event_concepts` row).
 
 `plans/tactical-concepts-contracts.md` is the authoritative statement of what
-each family may claim. If the code and that document disagree, the document is
-what gets corrected first.
+each family may claim. If the code and that document disagree, correct the code
+unless a higher-authority acceptance criterion requires the contract itself to
+be reconciled.
 
 ## Migrations
 
@@ -49,7 +51,15 @@ merely had nowhere typed to live.
 
 ## Commands
 
-Run from `./server` unless stated.
+From a clean checkout, install both dependency trees first:
+
+```bash
+npm ci
+cd server
+npm ci
+```
+
+Run the server commands below from `./server` unless stated.
 
 ```bash
 npm run concepts:gate          # the focused correctness gate — see below
@@ -71,17 +81,25 @@ npm run api:types              # after any /v1 change, alongside server v1:opena
 and **2** when it could not run its database steps. Two is not success. With no
 `DATABASE_URL` it runs seven of ten steps and names the three it skipped.
 
-## Measured
+## Offline evidence and limits
 
-* **Detector cost**: 33.5 ms for 57 observations on an 80-ply game with stored
-  candidate lines. Budget 500 ms, about fifteen times the baseline — loose
-  enough for a slow runner, tight enough to catch a change in the shape of the
-  work rather than a percentage.
-* **Shadow validation**: 3,097 labels over 240 game-readings (120 games, each
-  read as White with stored lines and as Black without). All 3,097 are
-  structurally valid: legal focal move, every named square occupied on the board
-  it refers to, correct actor colour, replayable verification lines, ordered ply
-  ranges, no duplicate occurrence-and-role. Artefact: `server/concepts-shadow.json`.
+These are results from the committed offline harness, not production
+measurements and not release proof.
+
+* **Detector cost reference**: the gate records a 32.2 ms median for 53
+  observations on an 80-ply shaped game, after three warmups and across five
+  timed passes. Budget 500 ms, about fifteen times that reference — loose enough
+  for a slow runner while still catching an order-of-magnitude change in the
+  work. Each invocation prints its own measurement; do not substitute this
+  reference for the result of the release run.
+* **Shadow structural checks**: 6,197 labels over 480 readings (120 games, each
+  read as both subject colours, with and without stored lines). All 6,197 passed
+  the implemented structural checks: legal focal move, named square occupancy
+  on the board each fact refers to, actor and affected colour, replayable
+  verification lines, ordered ply ranges, and duplicate occurrence-and-role.
+  This does not establish semantic precision. Artefact and review sample:
+  `server/concepts-shadow.json`. The command exits 3 because four families were
+  unobserved.
 
 ## Backfill
 
@@ -95,7 +113,8 @@ PROFILE_ID=<uuid> npm run concepts:backfill
 # Bounded, for a large archive. Re-run the same command to continue.
 PROFILE_ID=<uuid> npm run concepts:backfill -- --limit=100
 
-# Reconcile already-measured runs without changing them.
+# Reconcile already-measured conclusions without rewriting evidence. This may
+# append provenance links or missing labels for rows that already exist.
 PROFILE_ID=<uuid> npm run concepts:backfill -- --verify
 ```
 
@@ -107,7 +126,9 @@ A run whose manifest disagrees with this build's conclusions is reported as
 needing a **new analysis run** and is not modified. That is the design, not a
 failure: a manifest is immutable, and a different conclusion about a game is a
 new run rather than an edit of the old one. Plan those through the ordinary
-analysis pipeline.
+analysis pipeline. The command exits **2** while any such action or unreadable
+run is outstanding; it exits **1** on a failed run or reconciliation mismatch
+and **0** only when the selected operation completed without either condition.
 
 ## Rollback and disabling
 
@@ -124,10 +145,10 @@ be wrong — there is no delete, by design, because `forma_analysis` may not
 delete evidence and a worker that could would be able to quietly rewrite what a
 report was based on.
 
-To roll back further, stop registering the new concept versions: an unpromoted
-version is not resolved by the worker, so nothing is recorded against it.
 Migrations do not need reverting; they are additive and their columns are
-nullable or empty.
+nullable or empty. Withholding is the production rollback for a version that
+has already been registered; registration itself is not described here as a
+reversible action.
 
 ## What is not proven
 
@@ -137,10 +158,11 @@ Read this part before calling the project done.
 and an engine, and this work was done in a worktree with neither. The procedure
 is below; nobody has run it.
 
-**Three gate steps have never run**: `analysis:migration`, `analysis:security`,
-`analysis:integration`. They cover migration behaviour against a production-
-shaped schema, row level security and ownership on the review route, and worker
-retry against the real unique indexes. `concepts:gate` names them and exits 2.
+**Three gate steps were not run for this handoff**: `analysis:migration`,
+`analysis:security`, `analysis:integration`. They cover migration behaviour
+against a production-shaped schema, row level security and ownership on the
+review route, and worker retry against the real unique indexes. `concepts:gate`
+names them and exits 2.
 
 **Four families have no shadow coverage**: `pin`, `skewer`,
 `discovered_attack`, `removal_of_defender` produce nothing on the benchmark
@@ -160,15 +182,20 @@ rendering it needs a synced, analysed, owned game and a session.
 
 ### The procedure that would prove it
 
-Against a disposable database with the engine available:
+Against a disposable database with the engine available, set `DATABASE_URL`
+and the required database-role credentials for that database. Keep
+`FORMA_WITHHELD_CONCEPTS` unset unless the proof is explicitly for a withheld
+release:
 
 1. `npm run db:migrate` from `./server`, on an empty database and again on a
    copy carrying E13 v1 rows. Both must succeed, and the second must leave every
    existing `concept_opportunities` row untouched.
-2. `npm run analysis:promote` to register the catalogue. Expect twelve concepts,
-   six created at version 2 and six at version 1, and zero conflicting.
-3. Sync and analyse one owned game containing at least two tactical families —
-   the corpus archetypes `open-centre` and `pawn-race` are the likeliest.
+2. `npm run analysis:promote` to register the catalogue. Expect twelve concepts:
+   five at version 2 and seven at version 1, and zero conflicting.
+3. Link a disposable test account, sync it through the ordinary provider flow,
+   and analyse one owned provider game whose board you have inspected and which
+   contains at least two tactical families. The benchmark corpus ids are not
+   provider game ids and cannot be used for this step.
 4. Confirm in the database: one `chess_events` row per occurrence, an
    `event_concepts` row per label carrying detector version 4, one
    `concept_opportunities` row per observation with its own `evidence_item_id`,
@@ -178,8 +205,11 @@ Against a disposable database with the engine available:
    `success` and a reason. As a non-owner: 404, identical to an absent game.
 6. Open the game screen at those plies and read the panel.
 7. Check the profile page names the new families without a frontend change.
-8. Re-run detection and the backfill. Row counts and the detection checksum must
-   be identical, and `concepts:backfill --verify` must report zero written.
+8. Record the concept row counts and detection checksum, then run
+   `PROFILE_ID=<uuid> npm run concepts:backfill -- --verify` twice. Both runs
+   must report zero new opportunity rows; the recorded row counts and checksum
+   must remain identical. Missing provenance links may be appended on the first
+   verification, but no evidence row may be deleted or rewritten.
 
 Then prove the four states that are easy to get wrong: a measured game with no
 concepts (`sections.events: published`, empty array), a publication from before
@@ -187,7 +217,6 @@ the detector existed (`unavailable`), a failed opportunity, and a censored one.
 
 ## Issues
 
-FOR-121 through FOR-139, nineteen in total, are implemented. FOR-139 is
-implemented as far as code allows and its functional proof is outstanding, which
-is why the project is not marked complete here. Nothing was silently dropped;
-what is not done is listed above.
+FOR-121 through FOR-138 have implementation in this branch. FOR-139's release
+handoff is present, but its functional proof is outstanding. The project is not
+complete; the unproved work is listed above.

@@ -6,8 +6,8 @@
  * for. They cannot prove it stays quiet everywhere else, because a fixture is a
  * position somebody chose. This runs all twelve families over the committed
  * benchmark corpus — a hundred and twenty games across openings, middlegames
- * and endgames, both colours, quiet and tactical and winning and losing — and
- * adjudicates what comes out.
+ * and endgames, each read as both colours and both with and without stored
+ * lines — and adjudicates what comes out.
  *
  * ## What this can decide, and what it cannot
  *
@@ -28,10 +28,10 @@
  * It does **not** decide semantic precision. "Is this fork worth naming to a
  * player" is a judgement about chess, and the 90% reviewed-precision bar in
  * FOR-138 means a person reading labels and disagreeing with some of them. This
- * harness produces the sample that review works from — every emitted label with
- * the position, the move, the facts and the payoff — and says plainly that the
- * review has not happened. A number invented here and called precision would be
- * the exact failure the whole project is built to avoid.
+ * harness produces up to fifty review records per family with the position, the
+ * move, the facts and the outcome, and says plainly that the review has not
+ * happened. A number invented here and called precision would be the exact
+ * failure the whole project is built to avoid.
  *
  * ## Coverage is reported apart from precision
  *
@@ -96,6 +96,26 @@ interface FamilyResult {
   censored: number;
   gamesFired: Set<string>;
   defects: Defect[];
+  reviewSample: ReviewSample[];
+}
+
+interface ReviewSample {
+  readonly game: string;
+  readonly subjectColor: "white" | "black";
+  readonly storedLines: boolean;
+  readonly focalPly: number;
+  readonly beforeFen: string | null;
+  readonly afterFen: string | null;
+  readonly move: string | null;
+  readonly actor: DetectedOpportunity["event"]["actor"];
+  readonly affected: DetectedOpportunity["event"]["affected"];
+  readonly role: DetectedOpportunity["draft"]["role"];
+  readonly facts: DetectedOpportunity["event"]["facts"];
+  readonly confidence: number | null;
+  readonly responsePly: number | null;
+  readonly responseObserved: boolean;
+  readonly success: boolean | null;
+  readonly censoredReason: DetectedOpportunity["draft"]["censoredReason"];
 }
 
 /**
@@ -124,7 +144,11 @@ function scoreAt(ply: number): number {
   return Math.min(0.98, Math.max(0.02, 0.5 + swing));
 }
 
-function factsFor(pgn: string, withPvs: boolean): GameFacts | null {
+function factsFor(
+  pgn: string,
+  withPvs: boolean,
+  subjectColor: "white" | "black",
+): GameFacts | null {
   const replay = new PgnChess();
   try {
     replay.loadPgn(pgn);
@@ -168,18 +192,14 @@ function factsFor(pgn: string, withPvs: boolean): GameFacts | null {
       const line = next === undefined
         ? [transition.playedMoveUci]
         : [transition.playedMoveUci, next.lan];
-      candidatesByPly.set(transition.fromPly + 1, [
+      candidatesByPly.set(transition.fromPly, [
         { rank: 1, uci: line[0]!, expectedScore: 0.5, pv: line },
       ]);
     }
   }
 
-  // The subject is White for half the corpus and Black for the other half, so
-  // both the `execute` and the `respond` side of every family is exercised. A
-  // harness that only ever made the subject White would validate one of the two
-  // roles each detector emits.
   return {
-    subjectColor: withPvs ? "white" : "black",
+    subjectColor,
     speed: "blitz",
     playedAt: new Date("2026-08-01T00:00:00Z"),
     termination: "resign",
@@ -214,8 +234,18 @@ function adjudicate(
   if (found.event.startPly > found.event.focalPly || found.event.focalPly > found.event.endPly) {
     at("ply_range", `${found.event.startPly}/${found.event.focalPly}/${found.event.endPly}`);
   }
-  if (found.event.endPly > facts.positions.length) {
+  const lastPly = Math.max(...facts.positions.map((position) => position.ply));
+  if (found.event.endPly > lastPly) {
     at("ply_range", `end ply ${found.event.endPly} is past the end of the game`);
+  }
+  if (found.draft.opportunityPly !== found.event.focalPly) {
+    at(
+      "ply_range",
+      `opportunity ply ${found.draft.opportunityPly} does not match focal ply ${found.event.focalPly}`,
+    );
+  }
+  if (found.draft.responsePly !== null && found.draft.responsePly > lastPly) {
+    at("ply_range", `response ply ${found.draft.responsePly} is past the end of the game`);
   }
 
   // Most families put their focal ply on the move that created the occurrence.
@@ -234,10 +264,31 @@ function adjudicate(
     }
     // The actor is whoever moved. A label that says otherwise has attributed
     // somebody's move to the other player.
-    const expectedActor = transition.actorColor === facts.subjectColor ? "subject" : "opponent";
+    const mover = transition.actorColor === facts.subjectColor ? "subject" : "opponent";
     const tactical = (TACTICAL_FAMILIES as readonly string[]).includes(found.conceptSlug);
-    if (tactical && found.event.actor !== expectedActor) {
+    const expectedActor = tactical
+      ? mover
+      : found.event.eventType === "material_exposed"
+        ? "opponent"
+        : found.event.eventType === "winning_position_reached"
+          ? null
+          : "subject";
+    const expectedAffected = tactical
+      ? (mover === "subject" ? "opponent" : "subject")
+      : found.event.eventType === "material_offered"
+        ? "opponent"
+        : "subject";
+    if (found.event.actor !== expectedActor) {
       at("wrong_colour", `actor ${found.event.actor} but ${transition.actorColor} moved`);
+    }
+    if (found.event.affected !== expectedAffected) {
+      at("wrong_colour", `affected ${found.event.affected}, expected ${expectedAffected}`);
+    }
+  }
+  if (found.event.eventType === "winning_position_reached") {
+    if (found.event.actor !== null) at("wrong_colour", "a reached position has no actor");
+    if (found.event.affected !== "subject") {
+      at("wrong_colour", `affected ${found.event.affected}, expected subject`);
     }
   }
 
@@ -257,27 +308,65 @@ function adjudicate(
     front: "after",
     rear: "after",
     attacker: "after",
-    defender: "after",
+    defender: found.event.eventType === "removal_of_defender" ? "before" : "after",
     discoveredPiece: "after",
     uncoveredTarget: "after",
     moverTo: "after",
+    moverTarget: "after",
+    followUp: "after",
     to: "after",
     squareAfter: "after",
     from: "before",
-    square: found.event.eventType === "material_exposed" ? "before" : "after",
+    square: found.event.eventType === "material_exposed"
+      || found.event.eventType === "material_offered" ? "before" : "after",
   };
-  if (after && before) {
-    for (const [key, when] of Object.entries(SQUARE_FACTS)) {
-      const value = found.event.facts[key];
-      if (typeof value !== "number") continue;
-      if (value < 0 || value > 63) { at("fabricated_evidence", `${key}=${value} is not a square`); continue; }
-      const board = when === "before" ? before : after;
-      if (!board.pieceAt(value as never)) {
-        at("fabricated_evidence", `${key} names ${value}, which is empty ${when} the move`);
+  for (const [key, when] of Object.entries(SQUARE_FACTS)) {
+    const value = found.event.facts[key];
+    if (typeof value !== "number") continue;
+    if (value < 0 || value > 63) { at("fabricated_evidence", `${key}=${value} is not a square`); continue; }
+    const board = when === "before" ? before : after;
+    if (!board) {
+      at("unreadable_position", `no ${when} position for ${key}`);
+    } else if (!board.pieceAt(value as never)) {
+      at("fabricated_evidence", `${key} names ${value}, which is empty ${when} the move`);
+    }
+  }
+  const targets = found.event.facts.targets;
+  if (Array.isArray(targets)) {
+    for (const value of targets) {
+      if (typeof value !== "number" || value < 0 || value > 63) {
+        at("fabricated_evidence", `targets contains ${String(value)}, which is not a square`);
+      } else if (!after) {
+        at("unreadable_position", "no after position for targets");
+      } else if (!after.pieceAt(value as never)) {
+        at("fabricated_evidence", `targets names ${value}, which is empty after the move`);
       }
     }
-    const line = found.event.facts.verificationLine;
-    if (Array.isArray(line) && line.length > 0) {
+  }
+  const attackers = found.event.facts.attackers;
+  if (Array.isArray(attackers)) {
+    for (const value of attackers) {
+      if (typeof value !== "number" || value < 0 || value > 63) {
+        at("fabricated_evidence", `attackers contains ${String(value)}, which is not a square`);
+      } else if (!after) {
+        at("unreadable_position", "no after position for attackers");
+      } else if (!after.pieceAt(value as never)) {
+        at("fabricated_evidence", `attackers names ${value}, which is empty after the move`);
+      }
+    }
+  }
+  const bestDefence = found.event.facts.bestDefence;
+  if (typeof bestDefence === "string") {
+    const move = parseUci(bestDefence);
+    if (!after || !move || !after.isLegal(move)) {
+      at("illegal_line", `bestDefence ${bestDefence} is not legal after the focal move`);
+    }
+  }
+  const line = found.event.facts.verificationLine;
+  if (Array.isArray(line) && line.length > 0) {
+    if (!after) {
+      at("unreadable_position", "no after position for verificationLine");
+    } else {
       const replay = after.position.clone();
       for (const uci of line) {
         const move = typeof uci === "string" ? parseUci(uci) : null;
@@ -304,51 +393,86 @@ function main(): void {
 
   for (const game of corpus) {
     for (const withPvs of [true, false]) {
-      const facts = factsFor(game.pgn, withPvs);
-      if (!facts) continue;
-      games += 1;
-      const index = new PositionIndex(facts.positions);
-      const runId = `${game.id}:${withPvs ? "pv" : "nopv"}`;
-      for (const found of detectGame(facts, { withheld })) {
-      labels += 1;
-      const result = results.get(found.conceptSlug) ?? {
-        emitted: 0, structurallyValid: 0, censored: 0, gamesFired: new Set<string>(), defects: [],
-      };
-      result.emitted += 1;
-      result.gamesFired.add(runId);
-      if (!found.draft.responseObserved) result.censored += 1;
+      for (const subjectColor of ["white", "black"] as const) {
+        const facts = factsFor(game.pgn, withPvs, subjectColor);
+        if (!facts) continue;
+        games += 1;
+        const index = new PositionIndex(facts.positions);
+        const runId = `${game.id}:${subjectColor}:${withPvs ? "pv" : "nopv"}`;
+        for (const found of detectGame(facts, { withheld })) {
+          labels += 1;
+          const result = results.get(found.conceptSlug) ?? {
+            emitted: 0, structurallyValid: 0, censored: 0, gamesFired: new Set<string>(),
+            defects: [], reviewSample: [],
+          };
+          result.emitted += 1;
+          result.gamesFired.add(runId);
+          if (!found.draft.responseObserved) result.censored += 1;
 
-      const identity = `${runId}|${found.event.detectionKey}|${found.conceptSlug}|${found.draft.role}`;
-      if (identities.has(identity)) {
-        duplicates.push({
-          game: runId, slug: found.conceptSlug, role: found.draft.role,
-          focalPly: found.event.focalPly, kind: "duplicate_event",
-          detail: found.event.detectionKey,
-        });
-      }
-      identities.add(identity);
+          const identity = `${runId}|${found.event.detectionKey}|${found.conceptSlug}|${found.draft.role}`;
+          if (identities.has(identity)) {
+            duplicates.push({
+              game: runId, slug: found.conceptSlug, role: found.draft.role,
+              focalPly: found.event.focalPly, kind: "duplicate_event",
+              detail: found.event.detectionKey,
+            });
+          }
+          identities.add(identity);
 
-      const defects = adjudicate(runId, facts, index, found);
-      if (defects.length === 0) result.structurallyValid += 1;
-      else result.defects.push(...defects);
-      results.set(found.conceptSlug, result);
+          const defects = adjudicate(runId, facts, index, found);
+          if (defects.length === 0) result.structurallyValid += 1;
+          else result.defects.push(...defects);
+          const modeCount = result.reviewSample.filter((sample) =>
+            sample.subjectColor === subjectColor && sample.storedLines === withPvs).length;
+          const modeQuota = subjectColor === "white" ? 13 : 12;
+          if (modeCount < modeQuota) {
+            const transition = facts.transitions.find((row) => row.fromPly === found.event.focalPly);
+            result.reviewSample.push({
+              game: runId,
+              subjectColor,
+              storedLines: withPvs,
+              focalPly: found.event.focalPly,
+              beforeFen: index.at(found.event.focalPly)?.fen ?? null,
+              afterFen: index.at(found.event.focalPly + 1)?.fen ?? null,
+              move: transition?.playedMoveUci ?? null,
+              actor: found.event.actor,
+              affected: found.event.affected,
+              role: found.draft.role,
+              facts: found.event.facts,
+              confidence: found.event.confidence,
+              responsePly: found.draft.responsePly,
+              responseObserved: found.draft.responseObserved,
+              success: found.draft.success,
+              censoredReason: found.draft.censoredReason,
+            });
+          }
+          results.set(found.conceptSlug, result);
+        }
       }
     }
   }
 
   const summary = {
-    corpusGames: games,
+    corpusGames: corpus.length,
+    readings: games,
     labels,
-    withheld: [...withheld],
-    families: Object.fromEntries([...results].map(([slug, result]) => [slug, {
-      emitted: result.emitted,
-      structurallyValid: result.structurallyValid,
-      structuralPrecision: result.emitted === 0 ? null : result.structurallyValid / result.emitted,
-      censored: result.censored,
-      coverageGames: result.gamesFired.size,
-      defects: result.defects.slice(0, 50),
-      defectCount: result.defects.length,
-    }])),
+    withheld: [...withheld].sort(),
+    families: Object.fromEntries(ALL_FAMILIES.map((slug) => {
+      const result = results.get(slug);
+      return [slug, {
+        status: withheld.has(slug) ? "withheld" : result ? "observed" : "unobserved",
+        emitted: result?.emitted ?? 0,
+        structuralChecks: {
+          passed: result?.structurallyValid ?? 0,
+          total: result?.emitted ?? 0,
+        },
+        censored: result?.censored ?? 0,
+        coverageReadings: result?.gamesFired.size ?? 0,
+        defects: result?.defects.slice(0, 50) ?? [],
+        defectCount: result?.defects.length ?? 0,
+        reviewSample: result?.reviewSample ?? [],
+      }];
+    })),
     duplicates,
     // Said in the artefact itself, not only in the console, because the
     // artefact is what gets attached to a ticket and read later.
@@ -361,18 +485,19 @@ function main(): void {
   const path = "concepts-shadow.json";
   writeFileSync(path, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
 
-  console.log(`concepts:shadow  ${games} corpus games, ${labels} labels`);
+  console.log(
+    `concepts:shadow  ${corpus.length} corpus games, ${games} colour/evidence readings, ${labels} labels`,
+  );
   for (const family of ALL_FAMILIES) {
     const result = results.get(family);
     if (!result) {
       console.log(`  ${family.padEnd(22)} not observed in this corpus`);
       continue;
     }
-    const precision = result.emitted === 0 ? 0 : result.structurallyValid / result.emitted;
     console.log(
       `  ${family.padEnd(22)} ${String(result.emitted).padStart(5)} labels  `
-      + `${(precision * 100).toFixed(1)}% structurally valid  `
-      + `${result.gamesFired.size}/${games} games  ${result.censored} censored`
+      + `${result.structurallyValid}/${result.emitted} passed structural checks  `
+      + `${result.gamesFired.size}/${games} readings  ${result.censored} censored`
       + (result.defects.length > 0 ? `  ${result.defects.length} DEFECTS` : ""),
     );
   }
@@ -395,15 +520,22 @@ function main(): void {
   // apparent evidence. FOR-138 asks for exactly this to be said out loud.
   const unobserved = ALL_FAMILIES.filter((family) =>
     !withheld.has(family) && (results.get(family)?.emitted ?? 0) === 0);
-  if (unobserved.length > 0) {
+  const withheldFamilies = ALL_FAMILIES.filter((family) => withheld.has(family));
+  if (unobserved.length > 0 || withheldFamilies.length > 0) {
     console.log("");
-    console.log(`concepts:shadow  ${unobserved.length} families produced nothing on this corpus:`);
-    for (const family of unobserved) console.log(`  ${family}`);
-    console.log(
-      "                 They are neither validated nor refuted here. Either the corpus does "
-      + "not contain the geometry they look for, or they are stricter than it. Shipping them "
-      + "as validated would be a claim this run does not support.",
-    );
+    if (unobserved.length > 0) {
+      console.log(`concepts:shadow  ${unobserved.length} families produced nothing on this corpus:`);
+      for (const family of unobserved) console.log(`  ${family}`);
+      console.log(
+        "                 They are neither validated nor refuted here. Either the corpus does "
+        + "not contain the geometry they look for, or they are stricter than it. Shipping them "
+        + "as validated would be a claim this run does not support.",
+      );
+    }
+    if (withheldFamilies.length > 0) {
+      console.log(`concepts:shadow  ${withheldFamilies.length} families were withheld and NOT RUN:`);
+      for (const family of withheldFamilies) console.log(`  ${family}`);
+    }
     // Distinct from a defect exit: nothing is wrong, and nothing is proven.
     process.exit(3);
   }

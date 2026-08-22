@@ -27,17 +27,13 @@ export type Disposition =
   /** Never measured. The backfill's proper target. */
   | "detect"
   /** Measured already. Re-run only to reconcile, never to change. */
-  | "verify"
-  /** Not analysable: the run has no assessed transitions to read. */
-  | "ineligible";
+  | "verify";
 
 export interface RunCandidate {
   readonly runId: string;
   readonly subjectGameId: string;
   /** True when the run already carries a concept artifact manifest. */
   readonly hasManifest: boolean;
-  /** True when the run has transition assessments the detector can read. */
-  readonly hasAssessments: boolean;
 }
 
 export type BackfillMode =
@@ -91,7 +87,9 @@ export function parseOptions(argv: readonly string[], env: Record<string, string
 
 /** What this run is for, given what it already has. */
 export function classify(candidate: RunCandidate): Disposition {
-  if (!candidate.hasAssessments) return "ineligible";
+  // Zero assessments is still a complete, empty detector conclusion. The
+  // worker records a zero-row manifest for it so the review can distinguish
+  // `published: []` from `unavailable`; selection must not hide it here.
   return candidate.hasManifest ? "verify" : "detect";
 }
 
@@ -100,7 +98,7 @@ export function selectRuns(
   candidates: readonly RunCandidate[],
   options: BackfillOptions,
 ): { readonly selected: RunCandidate[]; readonly skipped: Record<Disposition, number> } {
-  const skipped: Record<Disposition, number> = { detect: 0, verify: 0, ineligible: 0 };
+  const skipped: Record<Disposition, number> = { detect: 0, verify: 0 };
   const selected: RunCandidate[] = [];
 
   // Sorted by run id rather than by discovery order: an interrupted batch is
@@ -128,7 +126,7 @@ export function selectRuns(
 export type RunOutcome =
   /** Detection ran and recorded a manifest. */
   | { readonly kind: "completed"; readonly runId: string; readonly checksum: string | null; readonly opportunities: number; readonly censored: number }
-  /** Detection ran and had nothing it could read. Measured, and empty. */
+  /** Detection could not read the evidence; explicitly named, never failed. */
   | { readonly kind: "abstained"; readonly runId: string; readonly reason: string }
   /**
    * This build concludes something different from what the run recorded.
@@ -144,6 +142,8 @@ export type RunOutcome =
 export interface BackfillReport {
   considered: number;
   eligible: number;
+  /** Selected but deliberately not executed by a dry run. */
+  planned: number;
   completed: number;
   abstained: number;
   needsNewRun: number;
@@ -160,10 +160,12 @@ export function summarise(
   skipped: Record<Disposition, number>,
   outcomes: readonly RunOutcome[],
   counts: { opportunities: number; censored: number; unregisteredConcept: number; unrecordableDraft: number; byConcept: Record<string, number> },
+  planned = 0,
 ): BackfillReport {
   return {
     considered,
-    eligible: outcomes.length,
+    eligible: outcomes.length + planned,
+    planned,
     completed: outcomes.filter((outcome) => outcome.kind === "completed").length,
     abstained: outcomes.filter((outcome) => outcome.kind === "abstained").length,
     needsNewRun: outcomes.filter((outcome) => outcome.kind === "needs_new_run").length,
@@ -189,14 +191,15 @@ export function summarise(
  */
 export function reconcile(report: BackfillReport): { ok: boolean; problems: string[] } {
   const problems: string[] = [];
-  const accounted = report.completed + report.abstained + report.needsNewRun + report.failed;
+  const accounted = report.planned + report.completed + report.abstained
+    + report.needsNewRun + report.failed;
   if (accounted !== report.eligible) {
     problems.push(
       `${report.eligible} runs were selected but ${accounted} are accounted for; `
       + `${report.eligible - accounted} vanished without an outcome`,
     );
   }
-  const skippedTotal = report.skipped.detect + report.skipped.verify + report.skipped.ineligible;
+  const skippedTotal = report.skipped.detect + report.skipped.verify;
   if (report.eligible + skippedTotal !== report.considered) {
     problems.push(
       `${report.considered} runs were considered but ${report.eligible + skippedTotal} were `
@@ -209,18 +212,28 @@ export function reconcile(report: BackfillReport): { ok: boolean; problems: stri
   return { ok: problems.length === 0, problems };
 }
 
+/** Machine-readable outcome: action-required is not a complete success. */
+export function exitCodeFor(
+  report: BackfillReport,
+  reconciled: boolean,
+  databaseDeltaMatches: boolean,
+): 0 | 1 | 2 {
+  if (!reconciled || !databaseDeltaMatches || report.failed > 0) return 1;
+  return report.needsNewRun > 0 || report.abstained > 0 ? 2 : 0;
+}
+
 /** The report as lines, for an operator reading a terminal. */
 export function reportLines(report: BackfillReport, options: BackfillOptions): string[] {
   const lines = [
     `mode         ${options.mode}${options.dryRun ? " (dry run — nothing was written)" : ""}`,
     `considered   ${report.considered} analysed runs`,
     `selected     ${report.eligible}`,
+    ...(report.planned > 0 ? [`  planned    ${report.planned} (not executed)`] : []),
     `  completed  ${report.completed}`,
     `  abstained  ${report.abstained}`,
     `  new run    ${report.needsNewRun} (this build concludes differently; plan a new analysis run)`,
     `  failed     ${report.failed}`,
-    `skipped      ${report.skipped.detect} unmeasured, ${report.skipped.verify} measured, `
-      + `${report.skipped.ineligible} with nothing to read`,
+    `skipped      ${report.skipped.detect} unmeasured, ${report.skipped.verify} measured`,
     `written      ${report.opportunities} opportunities (${report.censored} censored)`,
   ];
   if (report.abstentions.unregisteredConcept > 0) {

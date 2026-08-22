@@ -20,7 +20,14 @@ import {
   conceptVersionHash,
   type ConceptDefinition,
 } from "./catalogue.js";
-import { detectGame, eventKey, type GameFacts, type PositionFact, type TransitionFact } from "./detect.js";
+import {
+  detectGame,
+  eventKey,
+  withheldFrom,
+  type GameFacts,
+  type PositionFact,
+  type TransitionFact,
+} from "./detect.js";
 
 // ---------------------------------------------------------------------------
 // Versions belong to concepts, not to the catalogue
@@ -148,6 +155,27 @@ test("the same game detects the same keys, in the same order, every time", () =>
   const second = detectGame(game).map((found) => found.event.detectionKey);
   assert.deepEqual(first, second);
   assert.ok(first.length > 0, "the fixture game produced nothing to compare");
+});
+
+test("withholding names one concept family, not its shared detector", () => {
+  const game = busyGame();
+  const all = detectGame(game);
+  assert.ok(all.some((found) => found.conceptSlug === "critical_moment"));
+  assert.ok(all.some((found) => found.conceptSlug === "only_move"));
+
+  const withheld = detectGame(game, { withheld: new Set(["critical_moment"]) });
+  assert.ok(!withheld.some((found) => found.conceptSlug === "critical_moment"));
+  assert.ok(
+    withheld.some((found) => found.conceptSlug === "only_move"),
+    "withholding one family must not stop the other output of the decision detector",
+  );
+});
+
+test("an unknown withheld family fails closed instead of producing it", () => {
+  assert.throws(
+    () => withheldFrom({ FORMA_WITHHELD_CONCEPTS: "material_saftey" }),
+    /unknown concept families/,
+  );
 });
 
 test("one moment is one key, however many things are measured about it", () => {

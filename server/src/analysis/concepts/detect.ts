@@ -25,6 +25,7 @@
 import { parseUci } from "chessops/util";
 import type { CensorReason } from "../observations.js";
 import {
+  conceptBySlug,
   CRITICALITY_THRESHOLD,
   MATERIAL_THRESHOLD_CP,
   WINNING_THRESHOLD,
@@ -712,7 +713,7 @@ export const DETECTORS: readonly Detector[] = Object.freeze([
  */
 export interface DetectionOptions {
   /**
-   * Families to withhold, by detector name.
+   * Concept families to withhold, by catalogue slug.
    *
    * FOR-138 requires that a family failing validation can be disabled on its
    * own while the rest of the MVP keeps working, and that disabling one deletes
@@ -732,10 +733,10 @@ export function detectGame(
   options: DetectionOptions = {},
 ): DetectedOpportunity[] {
   const context: DetectorContext = { game, index: new PositionIndex(game.positions) };
-  const running = options.withheld
-    ? DETECTORS.filter((detector) => !options.withheld!.has(detector.name))
-    : DETECTORS;
-  return running.flatMap((detector) => detector.detect(context));
+  const detected = DETECTORS.flatMap((detector) => detector.detect(context));
+  return options.withheld
+    ? detected.filter((observation) => !options.withheld!.has(observation.conceptSlug))
+    : detected;
 }
 
 /**
@@ -747,5 +748,10 @@ export function detectGame(
 export function withheldFrom(env: Record<string, string | undefined>): ReadonlySet<string> {
   const raw = env.FORMA_WITHHELD_CONCEPTS?.trim();
   if (!raw) return new Set();
-  return new Set(raw.split(",").map((name) => name.trim()).filter(Boolean));
+  const withheld = new Set(raw.split(",").map((name) => name.trim()).filter(Boolean));
+  const unknown = [...withheld].filter((slug) => !conceptBySlug(slug));
+  if (unknown.length > 0) {
+    throw new Error(`unknown concept families in FORMA_WITHHELD_CONCEPTS: ${unknown.join(", ")}`);
+  }
+  return withheld;
 }
