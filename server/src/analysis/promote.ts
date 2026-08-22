@@ -55,7 +55,7 @@ import { analyzeFens, probeEngineIdentity } from "../engine/stockfish.js";
 import { ENGINE_COMPONENT_KEYS, TRANSITION_ASSESSMENT_FAMILY } from "../engine/contract.js";
 import { registerEngineVersions } from "../engine/profiles.js";
 import { registerRecipeVersion } from "./versions.js";
-import { registerCatalogue } from "./concepts/register.js";
+import { registerCatalogue, summarizeRegistration } from "./concepts/register.js";
 import { SUBJECT_REPORT_FAMILIES } from "../estimates/worker.js";
 import { promoteRecipe, recordValidationRun, registerValidationDataset } from "./validation.js";
 import { createHash } from "node:crypto";
@@ -144,16 +144,25 @@ async function main(): Promise<void> {
   //     about what Forma says it can see, so it belongs in the same operator
   //     command as engine identity and recipe promotion rather than in a code
   //     path that fires when a container boots.
-  const concepts = await registerCatalogue(client);
-  const fresh = concepts.filter((concept) => concept.created).length;
-  say("concepts", `${concepts.length} registered (${fresh} new)`);
-  const drifted = concepts.filter((concept) => concept.hashMismatch);
+  const registration = summarizeRegistration(await registerCatalogue(client));
+  // Explicit counts rather than "6 registered (0 new)", which said the same
+  // thing whether nothing needed doing or a version bump had silently failed.
+  say(
+    "concepts",
+    `${registration.concepts.length} declared: ${registration.created} created, `
+    + `${registration.existing} already current, ${registration.conflicting} conflicting`,
+  );
+  for (const concept of registration.concepts.filter((entry) => entry.outcome === "created")) {
+    say("concept", `${concept.slug} @v${concept.versionNo}`);
+  }
+  const drifted = registration.concepts.filter((concept) => concept.hashMismatch);
   if (drifted.length > 0) {
-    // The rule changed without the catalogue version changing. Refusing is the
+    // The rule changed without that concept's version changing. Refusing is the
     // point: the stored version is what a season of evidence points at, and
     // rewriting it in place would redefine every observation already recorded.
     throw new Error(
-      `these concepts changed their rule without a version bump: ${drifted.map((c) => c.slug).join(", ")}`,
+      "these concepts changed their rule without a version bump: "
+      + drifted.map((concept) => `${concept.slug} @v${concept.versionNo}`).join(", "),
     );
   }
 

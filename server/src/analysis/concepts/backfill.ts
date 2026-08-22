@@ -14,8 +14,15 @@
  * -- not a second implementation, and not a shortcut past the actor binding.
  *
  * Idempotent, because evidence is append-only: `detectForRun` declines to write
- * a second copy for a run that already has one. Running it twice is safe and
- * the second run writes nothing.
+ * a second copy of an observation it already recorded. Running it twice is safe
+ * and the second run writes nothing.
+ *
+ * What changed in FOR-122 is what "already recorded" means. It used to mean the
+ * run had *any* opportunity, so this command could never deliver a newly added
+ * concept to a game the previous version had already touched -- the only way to
+ * pick one up was to delete evidence, which `forma_analysis` cannot do. It now
+ * means that exact observation, under that exact concept version, so a second
+ * pass fills in what is missing and reports the rest as already present.
  *
  * Usage: PROFILE_ID=<uuid> npm run concepts:backfill
  */
@@ -59,6 +66,8 @@ try {
 
   let opportunities = 0;
   let censored = 0;
+  let skipped = 0;
+  let alreadyPresent = 0;
   let failed = 0;
   const byConcept = new Map<string, number>();
 
@@ -68,10 +77,14 @@ try {
       const summary = result.outputSummary as {
         opportunities?: number;
         censored?: number;
+        skipped?: number;
+        alreadyPresent?: number;
         concepts?: Record<string, number>;
       };
       opportunities += summary.opportunities ?? 0;
       censored += summary.censored ?? 0;
+      skipped += summary.skipped ?? 0;
+      alreadyPresent += summary.alreadyPresent ?? 0;
       for (const [slug, count] of Object.entries(summary.concepts ?? {})) {
         byConcept.set(slug, (byConcept.get(slug) ?? 0) + count);
       }
@@ -87,7 +100,13 @@ try {
     if ((index + 1) % 25 === 0) console.log(`progress   ${index + 1}/${runs.length}`);
   }
 
+  // Counted separately on purpose. "Wrote nothing" has three very different
+  // causes -- everything was already there, the catalogue in this database is
+  // behind this build, or the run could not be read -- and one number for all
+  // three is how a backfill that silently did nothing gets called a success.
   console.log(`written    ${opportunities} opportunities (${censored} censored)`);
+  console.log(`present    ${alreadyPresent} observations already recorded`);
+  if (skipped > 0) console.log(`skipped    ${skipped} drafts (unregistered concept or unrecordable)`);
   if (failed > 0) console.log(`failed     ${failed} runs`);
   for (const [slug, count] of [...byConcept].sort((a, b) => b[1] - a[1])) {
     console.log(`  ${slug.padEnd(24)} ${count}`);

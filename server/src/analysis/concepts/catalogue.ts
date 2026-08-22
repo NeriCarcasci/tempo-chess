@@ -1,5 +1,10 @@
 /**
- * The named ideas Forma measures, version 1.
+ * The named ideas Forma measures.
+ *
+ * Each entry carries its own version. `plans/tactical-concepts-contracts.md` is
+ * the authoritative statement of what every one of them may claim; this file is
+ * that matrix in executable form, and if the two disagree the matrix is what
+ * gets corrected first.
  *
  * E13 built the vocabulary (`analysis/observations.ts`), the tables, and the
  * whole consumer side — `estimates/aggregate.ts` reads opportunities, turns
@@ -33,13 +38,19 @@
  *
  * ## Why `recognize` and `execute` are separate rows
  *
- * §17.4, and the reason the epic exists. A player who saw the critical move and
- * calculated it wrong has a different problem from one who never considered it,
- * and a single "accuracy" number describes neither. `critical_moment` is the
- * one concept where both halves are separately observable from what the engine
- * already recorded: whether the played move was among the lines the search
- * retained (they were looking at a real candidate) is a different fact from
- * whether it was good enough (they chose well among them).
+ * §17.4, and the reason the epic exists. A player who found the critical move
+ * and calculated it wrong has a different problem from one who never played
+ * anything like it, and a single "accuracy" number describes neither.
+ * `critical_moment` is the one concept where both halves are separately
+ * observable from what the engine already recorded: whether the played move was
+ * among the candidates the search retained is a different fact from whether it
+ * was within tolerance.
+ *
+ * Both are facts about the search and the move, not about the player's mind.
+ * v1 described the first as "finding a move worth considering", which reads as
+ * a claim about what they were thinking; the engine cannot see that and neither
+ * can this. What it can see is whether the move they chose was one the search
+ * took seriously, which is worth knowing and is all that is claimed.
  */
 
 import { createHash } from "node:crypto";
@@ -53,6 +64,16 @@ export interface ConceptDefinition {
   readonly family: string;
   readonly category: ConceptCategory;
   readonly displayName: string;
+  /**
+   * The version of *this* concept, not of the catalogue.
+   *
+   * It used to be one number for all of them, which meant correcting one rule
+   * minted a new version of every other concept as a side effect -- six new
+   * rows, five of them describing a rule that had not changed, and evidence
+   * split across versions for no reason anyone could later reconstruct.
+   * Bumping this bumps one concept. See FOR-122.
+   */
+  readonly versionNo: number;
   /** Written for the player whose game it describes, not for the detector. */
   readonly humanDefinition: string;
   readonly supportedRoles: readonly ConceptRole[];
@@ -74,90 +95,147 @@ export const WINNING_THRESHOLD = 0.75;
 /** Expected score, from the subject's side, at which a position is "worse". */
 export const WORSE_THRESHOLD = 0.35;
 
+/**
+ * The spread between the best and worst retained candidate at which a decision
+ * is critical.
+ *
+ * v1 had no threshold, and `criticality` is non-null whenever the search
+ * retained two lines. So every position the deep search reached became "a
+ * moment where the moves available led to genuinely different games" --
+ * including positions where both retained lines were equal and nothing was at
+ * stake. The concept measured "did the deep search run here", which is a fact
+ * about the pipeline rather than about the game.
+ *
+ * 0.10 against `TOLERANCE_RULE.expectedScoreTolerance` of 0.02: two moves
+ * within 0.02 are already defined as indistinguishable, and a choice that moves
+ * the expected result by five times that much is one a player can be said to
+ * have faced.
+ */
+export const CRITICALITY_THRESHOLD = 0.10;
+
 export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
   {
     slug: "material_safety",
     family: "material",
     category: "tactical",
+    versionNo: 2,
     displayName: "Keeping your pieces safe",
     humanDefinition:
       "One of your pieces was available to be taken for less than it is worth, and you were to move. "
-      + "This measures whether you noticed and dealt with it.",
+      + "This measures whether you dealt with that piece.",
     supportedRoles: ["respond"],
     evidenceSourceKind: "deterministic",
     detectorContract: {
       method: "static_exchange_evaluation",
       trigger:
-        "before the subject's move, some subject piece can be captured by the opponent with SEE >= threshold",
-      success:
-        "after the subject's move, no subject piece can be captured by the opponent with SEE >= threshold",
+        "before the subject's move, a specific subject piece on square S can be captured by the "
+        + "opponent with SEE >= threshold",
+      focus:
+        "the exposure of that one piece, tracked across the move -- if the subject moved it, the "
+        + "square follows the piece",
+      success: "after the move, that same piece cannot be captured with SEE >= threshold",
+      failure: "the exposure persists and the engine judged the move outside tolerance",
+      abstain:
+        "the exposure persists but the engine judged the move acceptable. A sound sacrifice is not "
+        + "a hung piece, and static exchange alone cannot tell them apart",
       thresholdCp: MATERIAL_THRESHOLD_CP,
       note:
-        "Trigger and success are both read from the board, so this does not depend on the engine "
-        + "having reached the position.",
+        "v1 asked whether *any* subject piece was exposed after the move, so saving the hanging "
+        + "knight while a pawn became loose scored as a failure, and every deliberate sacrifice "
+        + "scored as one too.",
     },
   },
   {
     slug: "free_material",
     family: "material",
     category: "tactical",
+    versionNo: 2,
     displayName: "Taking what is offered",
     humanDefinition:
       "Your opponent left something available to be taken for less than it is worth. "
-      + "This measures whether you took it.",
+      + "This measures whether you took it, or played something at least as good.",
     supportedRoles: ["recognize"],
     evidenceSourceKind: "deterministic",
     detectorContract: {
       method: "static_exchange_evaluation",
       trigger:
         "before the subject's move, some opponent piece can be captured by the subject with SEE >= threshold",
-      success: "the move played was a capture with SEE >= threshold",
+      success:
+        "the move played was a capture with SEE >= threshold, or the engine judged the move played "
+        + "within tolerance -- a stronger move is not a missed offer",
+      failure:
+        "the move was not a material-winning capture, was outside tolerance, and the engine's best "
+        + "move was itself a material-winning capture",
+      abstain:
+        "the move was outside tolerance but the engine's best move was not a material-winning "
+        + "capture. That proves the played move was suboptimal, not that this offer was why",
       thresholdCp: MATERIAL_THRESHOLD_CP,
       note:
-        "Success requires taking material, not merely playing a good move. A better move may exist; "
-        + "this concept is only about whether the offer was seen and accepted.",
+        "v1 scored any non-capture as a failure, so a mate in one, a winning zwischenzug and a "
+        + "stronger recapture all counted as missing free material. v2 only records a miss when "
+        + "the engine evidence specifically verifies a material-winning capture as best.",
     },
   },
   {
     slug: "critical_moment",
     family: "decision",
     category: "tactical",
+    versionNo: 2,
     displayName: "Positions that decide the game",
     humanDefinition:
       "A moment where the moves available led to genuinely different games. "
-      + "Recognising one is finding a move worth considering; executing is choosing well among them.",
+      + "One half of this is whether the move you played was one the engine was seriously "
+      + "considering; the other is whether it was good enough.",
     supportedRoles: ["recognize", "execute"],
     evidenceSourceKind: "engine",
     detectorContract: {
       method: "engine_transition_assessment",
-      trigger: "the transition carries a criticality score, which the deep search records",
-      recognize: "the move played was among the lines the search retained (played_move_rank is set)",
+      trigger:
+        "criticality >= criticalityThreshold, where criticality is the spread between the best and "
+        + "worst candidate the deep search retained",
+      criticalityThreshold: CRITICALITY_THRESHOLD,
+      recognize:
+        "the move played was among the candidates the search retained (played_move_rank is set). "
+        + "This is a fact about the search, not about what the player thought",
       execute: "the move played was within the objective tolerance (played_move_acceptable)",
+      abstain:
+        "criticality is null -- fewer than two lines were retained, so the position has no spread "
+        + "to measure -- or the spread is below the threshold",
       note:
-        "Only positions the deep search reached carry criticality, so this measures decisions at "
-        + "moments already judged worth a closer look, not every move of the game.",
+        "v1 emitted whenever criticality was non-null, which is whenever the search returned two "
+        + "lines. A position where every retained line was equal counted as a moment that decided "
+        + "the game, so the concept partly measured where the deep search happened to run.",
     },
   },
   {
     slug: "only_move",
     family: "decision",
     category: "defensive",
-    displayName: "Finding the only move",
+    versionNo: 2,
+    displayName: "Finding the move that held",
     humanDefinition:
-      "A position where exactly one move held and everything else lost ground. "
-      + "This measures whether you found it.",
+      "A position where, of the moves the engine examined, exactly one held and the rest lost "
+      + "ground. This measures whether you found it.",
     supportedRoles: ["recognize"],
     evidenceSourceKind: "engine",
     detectorContract: {
       method: "engine_transition_assessment",
-      trigger: "only_move is true on the transition",
+      trigger: "only_move is true: exactly one retained candidate was within tolerance",
       success: "played_move_acceptable",
+      coverage:
+        "absolute when the search retained as many lines as the position has legal moves, searched "
+        + "otherwise. The claim is about the moves examined, never about every legal move",
+      abstain: "only_move is null -- a search that retained fewer than two lines has no answer",
+      note:
+        "v1 said exactly one move held and everything else lost ground, which asserts a proof over "
+        + "all legal moves that a MultiPV search does not perform.",
     },
   },
   {
     slug: "winning_conversion",
     family: "conversion",
     category: "conversion",
+    versionNo: 2,
     displayName: "Converting a winning position",
     humanDefinition:
       "You reached a position that should win. This measures whether it still should by the time "
@@ -166,7 +244,9 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
     evidenceSourceKind: "engine",
     detectorContract: {
       method: "expected_score_trajectory",
-      trigger: `the subject's expected score first reaches ${WINNING_THRESHOLD}`,
+      trigger:
+        `the subject's expected score first reaches ${WINNING_THRESHOLD} after some transition. `
+        + "The opportunity begins in that position, not in the one they moved from",
       success: `the subject's expected score after their final move is at least ${WINNING_THRESHOLD}`,
       censored:
         "if the subject made no move after reaching the winning position -- the opponent resigned or "
@@ -178,6 +258,7 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
     slug: "worse_position_defence",
     family: "resilience",
     category: "defensive",
+    versionNo: 1,
     displayName: "Defending a worse position",
     humanDefinition:
       "You were worse and had to keep the game alive. This measures whether your moves held the "
@@ -195,9 +276,6 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
   },
 ]);
 
-/** The version this catalogue describes. A change to any rule is a new one. */
-export const CATALOGUE_VERSION_NO = 1;
-
 /**
  * The hash a concept version is pinned by.
  *
@@ -205,13 +283,19 @@ export const CATALOGUE_VERSION_NO = 1;
  * contract are what determine whether two observations mean the same thing, and
  * the display name is not. Renaming "Taking what is offered" must not orphan a
  * season of evidence.
+ *
+ * `versionNo` now comes from the definition rather than from one number shared
+ * by the whole catalogue. For every v1 concept the hashed input is byte for byte
+ * what it was, so this change registers nothing new and invalidates nothing --
+ * which is the point. What it buys is that bumping `critical_moment` to 2 leaves
+ * the other five hashes alone.
  */
 export function conceptVersionHash(definition: ConceptDefinition): string {
   return createHash("sha256")
     .update(
       JSON.stringify({
         slug: definition.slug,
-        versionNo: CATALOGUE_VERSION_NO,
+        versionNo: definition.versionNo,
         roles: [...definition.supportedRoles].sort(),
         evidenceSourceKind: definition.evidenceSourceKind,
         detector: definition.detectorContract,

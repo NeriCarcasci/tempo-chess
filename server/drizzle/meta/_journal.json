@@ -260,6 +260,20 @@
       "when": 1787580180000,
       "tag": "0037_terminal_positions_are_decided",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1787580240000,
+      "tag": "0038_concepts_are_versioned_one_at_a_time",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1787580300000,
+      "tag": "0039_an_opportunity_points_at_its_own_evidence",
+      "breakpoints": true
     }
   ]
 }
