@@ -1019,7 +1019,7 @@
     },
     "/v1/dashboard": {
       "get": {
-        "description": "The published dashboard for your own subject: skill estimates with their intervals and sample sizes, findings with their evidence, the trajectory bins, and the rating profile. This is the report that was published rather than a fresh computation, so it always agrees with the findings stored beside it. Estimates carry a null value and a reason when the evidence is too thin, and censored chances are reported separately from failures because a chance the player never got is not a chance they missed.",
+        "description": "The published dashboard for your own subject: skill estimates with their intervals and sample sizes, findings with their evidence, a pooled rate per phase of the game, the trajectory bins, and the rating profile. This is the report that was published rather than a fresh computation, so it always agrees with the findings stored beside it. Estimates carry a null value and a reason when the evidence is too thin, and censored chances are reported separately from failures because a chance the player never got is not a chance they missed. Every count in `phases` is over the frozen cohort named by `phases.gamesInCohort`, which is smaller than the account's synced history.",
         "operationId": "getDashboard",
         "parameters": [
           {
@@ -1140,6 +1140,16 @@
                                   }
                                 ]
                               },
+                              "phase": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "rawSampleSize": {
                                 "type": "number"
                               },
@@ -1161,6 +1171,7 @@
                               "dimensionKey",
                               "displayName",
                               "frame",
+                              "phase",
                               "windowKind",
                               "estimate",
                               "intervalLow",
@@ -1268,6 +1279,128 @@
                             "type": "object"
                           },
                           "type": "array"
+                        },
+                        "phases": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "gamesInCohort": {
+                              "type": "number"
+                            },
+                            "phases": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "chances": {
+                                    "type": "number"
+                                  },
+                                  "coverageStatus": {
+                                    "type": "string"
+                                  },
+                                  "gamesReaching": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "intervalHigh": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "intervalLow": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "observed": {
+                                    "type": "number"
+                                  },
+                                  "phase": {
+                                    "type": "string"
+                                  },
+                                  "phaseReachRate": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "rate": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "setAside": {
+                                    "type": "number"
+                                  },
+                                  "taken": {
+                                    "type": "number"
+                                  },
+                                  "unavailableReason": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "phase",
+                                  "chances",
+                                  "observed",
+                                  "taken",
+                                  "setAside",
+                                  "rate",
+                                  "intervalLow",
+                                  "intervalHigh",
+                                  "coverageStatus",
+                                  "unavailableReason",
+                                  "gamesReaching",
+                                  "phaseReachRate"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "state": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "gamesInCohort",
+                            "phases"
+                          ],
+                          "type": "object"
                         },
                         "publicationId": {
                           "type": "string"
@@ -1412,6 +1545,13 @@
                               ],
                               "type": "string"
                             },
+                            "phases": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
                             "ratingProfile": {
                               "enum": [
                                 "published",
@@ -1430,6 +1570,7 @@
                           "required": [
                             "estimates",
                             "findings",
+                            "phases",
                             "trajectory",
                             "ratingProfile",
                             "goal",
@@ -1580,6 +1721,7 @@
                         "sections",
                         "estimates",
                         "findings",
+                        "phases",
                         "trajectory",
                         "ratingProfile",
                         "coverageWarnings",

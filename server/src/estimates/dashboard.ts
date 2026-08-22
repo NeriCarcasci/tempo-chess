@@ -1,3 +1,4 @@
+import { conceptBySlug, describeConceptRole } from "../analysis/concepts/catalogue.js";
 import type { Queryable } from "../db/queryable.js";
 import type { CoverageStatus, FindingType } from "./contract.js";
 
@@ -16,10 +17,45 @@ import type { CoverageStatus, FindingType } from "./contract.js";
 
 export type SectionState = "published" | "unavailable";
 
+/** The order a game meets them, which is the order a reader expects. */
+const PHASE_DISPLAY_ORDER: readonly string[] = ["opening", "middlegame", "endgame"];
+
+/**
+ * What to call a dimension on screen.
+ *
+ * Resolved from the catalogue at read time rather than read out of
+ * `skill_dimensions.display_name`, for a reason that only shows up in a live
+ * database: that table is immutable and keyed by dimension and estimator
+ * version, so the rows written when the name was `material_safety (respond)`
+ * keep that name for as long as the estimator version does. A screen fed from
+ * the column would go on showing a database key to a customer no matter how
+ * many times the catalogue was reworded.
+ *
+ * That is also what `conceptVersionHash` was designed for: the display name is
+ * deliberately outside it so a rename does not orphan a season of evidence.
+ * Resolving here is the other half of that decision.
+ *
+ * Falls back to the stored name, and then to a plain phrase, but never to
+ * something with an underscore in it.
+ */
+function readableName(
+  conceptSlug: string | null,
+  role: string | null,
+  stored: string,
+): string {
+  if (conceptSlug !== null && role !== null && conceptBySlug(conceptSlug) !== undefined) {
+    return describeConceptRole(conceptSlug, role).label;
+  }
+  if (!/_/.test(stored)) return stored;
+  return "a measurement this build cannot name";
+}
+
 export interface EstimateView {
   dimensionKey: string;
   displayName: string;
   frame: string;
+  /** Set on the pooled per-phase estimates, null on the per-concept ones. */
+  phase: string | null;
   windowKind: string;
   /** Null with a reason, never a placeholder number. */
   estimate: number | null;
@@ -32,6 +68,68 @@ export interface EstimateView {
   unavailableReason: string | null;
   delta: number | null;
   improvementProbability: number | null;
+}
+
+/**
+ * One phase of the game, as a card.
+ *
+ * On the dashboard rather than on its own route, and for one reason: the
+ * dashboard is a read of a published report, so everything on it was computed
+ * from the same frozen snapshot in the same run. A separate endpoint computing
+ * phase rates live would let the phase cards and the findings beside them
+ * disagree about the same games, which is the failure the whole publication
+ * pointer exists to prevent.
+ *
+ * `taken` over `observed` is a pooled hit rate across every concept that fires
+ * in this phase, not a skill. The concepts are not the same mix in every phase,
+ * so the three rates are descriptions of what happened rather than a ranking of
+ * the player's phases — the `inconsistency` finding is the one thing allowed to
+ * make that comparison, and it does it over concepts shared by both phases.
+ */
+export interface PhaseView {
+  phase: string;
+  /** Every chance recorded in this phase, censored ones included. */
+  chances: number;
+  /** Of those, the ones the player actually had a move at. */
+  observed: number;
+  /** Of `observed`, the ones that went well. */
+  taken: number;
+  /**
+   * Chances that ended before the player was on move.
+   *
+   * Named `setAside` rather than folded into a failure count: a chance the
+   * opponent's resignation removed is not a chance the player missed, and the
+   * card has to be able to show that it was excluded.
+   */
+  setAside: number;
+  /** Null with a reason rather than a placeholder, as everywhere else. */
+  rate: number | null;
+  intervalLow: number | null;
+  intervalHigh: number | null;
+  coverageStatus: CoverageStatus;
+  unavailableReason: string | null;
+  /**
+   * Games in the cohort that reached this phase, from the trajectory.
+   *
+   * Null when there is no trajectory to read it from. An endgame rate over
+   * eighty games and an opening rate over three hundred are not comparable at
+   * a glance, and a card that shows only the rate is lying by omission.
+   */
+  gamesReaching: number | null;
+  phaseReachRate: number | null;
+}
+
+export interface PhasesView {
+  state: SectionState;
+  /**
+   * The games every number in this section is over.
+   *
+   * The report is built from a frozen cohort, which is smaller than the
+   * account's synced history. Two screens that quote different denominators
+   * without saying so read as two products.
+   */
+  gamesInCohort: number;
+  phases: PhaseView[];
 }
 
 export interface FindingView {
@@ -97,6 +195,7 @@ export interface Dashboard {
   sections: {
     estimates: SectionState;
     findings: SectionState;
+    phases: SectionState;
     trajectory: SectionState;
     ratingProfile: SectionState;
     /** E17 owns the goal. Named here so a client sees a state, not a gap. */
@@ -105,6 +204,7 @@ export interface Dashboard {
   };
   estimates: EstimateView[];
   findings: FindingView[];
+  phases: PhasesView;
   trajectory: TrajectoryView;
   ratingProfile: RatingProfileView;
   coverageWarnings: string[];
@@ -144,6 +244,9 @@ export async function readDashboard(
       dimension_key: string;
       display_name: string;
       frame: string;
+      phase: string | null;
+      role: string | null;
+      concept_slug: string | null;
       window_kind: string;
       estimate: string | null;
       interval_low: string | null;
@@ -161,13 +264,18 @@ export async function readDashboard(
       estimator_component_version_id: string;
     }[]
   >`
-    select d.dimension_key, d.display_name, d.frame, e.window_kind, e.estimate,
+    select d.dimension_key, d.display_name, d.frame, d.phase, d.role,
+           c.slug as concept_slug, e.window_kind, e.estimate,
            e.interval_low, e.interval_high, e.raw_sample_size, e.effective_sample_size,
            e.success_count, e.failure_count, e.graded_count, e.censored_count,
            e.coverage_status, e.unavailable_reason, e.delta, e.improvement_probability,
            e.estimator_component_version_id
     from analysis.player_skill_estimates e
     join analysis.skill_dimensions d on d.id = e.skill_dimension_id
+    -- The concept behind the dimension, so the name a reader sees comes from
+    -- the catalogue rather than from a row written months ago.
+    left join analysis.concept_versions cv on cv.id = d.concept_version_id
+    left join analysis.concepts c on c.id = cv.concept_id
     where e.analysis_run_id = ${publication.run_id}
     order by d.frame, d.dimension_key
   `;
@@ -266,8 +374,9 @@ export async function readDashboard(
 
   const estimateViews: EstimateView[] = estimates.map((row) => ({
     dimensionKey: row.dimension_key,
-    displayName: row.display_name,
+    displayName: readableName(row.concept_slug, row.role, row.display_name),
     frame: row.frame,
+    phase: row.phase,
     windowKind: row.window_kind,
     estimate: row.estimate === null ? null : Number(row.estimate),
     intervalLow: row.interval_low === null ? null : Number(row.interval_low),
@@ -312,6 +421,43 @@ export async function readDashboard(
     ),
   };
 
+  // The reach rate is written identically onto every bin of a phase, so the
+  // first bin carries it for the whole phase. Reading it from the trajectory
+  // rather than recounting games here is what keeps the phase cards and the
+  // curve above them quoting the same denominator.
+  const reachByPhase = new Map<string, number>();
+  for (const row of binRows) {
+    if (!reachByPhase.has(row.phase)) reachByPhase.set(row.phase, Number(row.phase_reach_rate));
+  }
+  const cohortGames = trajectorySnapshot?.included_game_count ?? 0;
+  const phaseViews: PhaseView[] = estimateViews
+    .filter((view) => view.phase !== null)
+    .map((view) => {
+      const reachRate = reachByPhase.get(view.phase!) ?? null;
+      return {
+        phase: view.phase!,
+        chances: view.rawSampleSize,
+        observed: view.rawSampleSize - view.coverage.censored,
+        taken: view.coverage.success,
+        setAside: view.coverage.censored,
+        rate: view.estimate,
+        intervalLow: view.intervalLow,
+        intervalHigh: view.intervalHigh,
+        coverageStatus: view.coverageStatus,
+        unavailableReason: view.unavailableReason,
+        gamesReaching:
+          reachRate === null || cohortGames === 0 ? null : Math.round(reachRate * cohortGames),
+        phaseReachRate: reachRate,
+      };
+    })
+    .sort((a, b) => PHASE_DISPLAY_ORDER.indexOf(a.phase) - PHASE_DISPLAY_ORDER.indexOf(b.phase));
+
+  const phases: PhasesView = {
+    state: phaseViews.length > 0 ? "published" : "unavailable",
+    gamesInCohort: cohortGames,
+    phases: phaseViews,
+  };
+
   return {
     subjectId: input.subjectId,
     publicationId: publication.publication_id,
@@ -320,6 +466,7 @@ export async function readDashboard(
     sections: {
       estimates: estimateViews.length > 0 ? "published" : "unavailable",
       findings: findingRows.length > 0 ? "published" : "unavailable",
+      phases: phases.state,
       trajectory: trajectory.state,
       ratingProfile: poolRows.length > 0 ? "published" : "unavailable",
       // Later epics. Named so a client reads a state rather than inferring one
@@ -342,6 +489,7 @@ export async function readDashboard(
       explanation: row.safety_state === "passed" ? row.rendered_text : null,
       explanationState: row.safety_state,
     })),
+    phases,
     trajectory,
     ratingProfile: {
       state: poolRows.length > 0 ? "published" : "unavailable",

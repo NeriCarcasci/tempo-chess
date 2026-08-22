@@ -15,7 +15,27 @@ import {
   FINDING_POLICY,
   FRAMES,
   FINDING_TYPES,
+  PHASE_CONTRAST_POLICY,
+  SPECIFICITY_POLICY,
 } from "./contract.js";
+import {
+  CONCEPT_CATALOGUE,
+  describeConceptRole,
+} from "../analysis/concepts/catalogue.js";
+import { buildPhaseContrast } from "./phases.js";
+import {
+  binomialUpperTail,
+  findConcentration,
+  moveNumberOf,
+  pickExample,
+  sideOf,
+  failuresOf,
+  observedOf,
+  successesOf,
+  MOVE_BANDS,
+  type Moment,
+  type Phase,
+} from "./specificity.js";
 import { betaCdf, betaQuantile, logGamma, probabilityGreater } from "./beta.js";
 import {
   compare,
@@ -34,9 +54,12 @@ import {
 } from "./trajectory.js";
 import {
   controlFalseDiscovery,
+  dedupeAcrossFrames,
   deriveCandidates,
+  derivePhaseContrast,
   selectPublished,
   structuredInputHash,
+  tierFor,
   type CandidateFinding,
   type DimensionInput,
 } from "./findings.js";
@@ -443,16 +466,95 @@ test("the original adverse change survives any recovery", () => {
 // Findings
 // ---------------------------------------------------------------------------
 
+function moment(over: Partial<Moment> = {}): Moment {
+  return {
+    gameId: "game-a",
+    ply: 30,
+    phase: "middlegame",
+    openingFamily: null,
+    occurredAt: CUTOFF,
+    censored: false,
+    success: true,
+    playedMoveUci: "g1f3",
+    bestMoveUci: "d1d8",
+    departurePly: null,
+    openingName: null,
+    evidenceItemId: "1",
+    ...over,
+  };
+}
+
+/**
+ * A subset and a reference that differ only in where the failures fell.
+ *
+ * `inBucket` failures land in the named phase, `elsewhere` failures land in the
+ * other two, and the reference carries the same chances plus the successes that
+ * make the baseline share what it is.
+ */
+function spread(options: {
+  bucket: Phase;
+  bucketFailures: number;
+  bucketSuccesses: number;
+  otherFailures: number;
+  otherSuccesses: number;
+}): { subject: Moment[]; reference: Moment[] } {
+  const others: Phase[] = (["opening", "middlegame", "endgame"] as Phase[]).filter(
+    (phase) => phase !== options.bucket,
+  );
+  const reference: Moment[] = [];
+  let index = 0;
+  const push = (phase: Phase, success: boolean): void => {
+    reference.push(
+      moment({
+        gameId: `game-${index}`,
+        ply: 30,
+        phase,
+        success,
+        occurredAt: new Date(CUTOFF.getTime() - index * 86_400_000),
+      }),
+    );
+    index += 1;
+  };
+  for (let i = 0; i < options.bucketFailures; i += 1) push(options.bucket, false);
+  for (let i = 0; i < options.bucketSuccesses; i += 1) push(options.bucket, true);
+  for (let i = 0; i < options.otherFailures; i += 1) push(others[i % 2]!, false);
+  for (let i = 0; i < options.otherSuccesses; i += 1) push(others[i % 2]!, true);
+  return { subject: failuresOf(reference), reference: observedOf(reference) };
+}
+
+function candidate(over: Partial<CandidateFinding> = {}): CandidateFinding {
+  return {
+    dimensionKey: "d0",
+    findingType: "strength",
+    claimFamily: "concept_success",
+    conceptSlug: "material_safety",
+    role: "respond",
+    frame: "objective",
+    rawProbability: 0.99,
+    adjustedProbability: null,
+    confidenceTier: "low",
+    priority: 50,
+    weight: 1,
+    claim: {},
+    context: {},
+    published: false,
+    droppedReason: null,
+    ...over,
+  };
+}
+
 function dimension(over: Partial<DimensionInput> = {}): DimensionInput {
   return {
-    dimensionKey: "fork_recognition",
-    frame: "peer_current",
-    conceptSlug: "fork",
-    role: "recognize",
+    dimensionKey: "material_safety_respond_objective",
+    frame: "objective",
+    conceptSlug: "material_safety",
+    role: "respond",
     claimFamily: "concept_success",
     result: available(45, 50),
     comparison: null,
     failureCount: 0,
+    description: describeConceptRole("material_safety", "respond"),
+    moments: [],
     ...over,
   };
 }
@@ -528,19 +630,14 @@ test("repeated failures of one concept are their own finding", () => {
 });
 
 test("false-discovery control drops the weakest of many claims", () => {
-  const candidates: CandidateFinding[] = Array.from({ length: 20 }, (_, i) => ({
-    dimensionKey: `d${i}`,
-    findingType: "strength" as const,
-    claimFamily: "concept_success",
-    // One strong claim among nineteen marginal ones.
-    rawProbability: i === 0 ? 0.999 : 0.55,
-    adjustedProbability: null,
-    confidenceTier: "low" as const,
-    priority: 50,
-    claim: {},
-    published: false,
-    droppedReason: null,
-  }));
+  const candidates: CandidateFinding[] = Array.from({ length: 20 }, (_, i) =>
+    candidate({
+      dimensionKey: `d${i}`,
+      conceptSlug: `c${i}`,
+      // One strong claim among nineteen marginal ones.
+      rawProbability: i === 0 ? 0.999 : 0.55,
+    }),
+  );
   const controlled = controlFalseDiscovery(candidates);
   assert.equal(controlled.filter((c) => c.published).length, 1);
   assert.equal(controlled.find((c) => c.dimensionKey === "d0")!.published, true);
@@ -550,39 +647,64 @@ test("false-discovery control drops the weakest of many claims", () => {
 });
 
 test("coverage gaps are exempt from correction and from the display cap", () => {
-  const gaps: CandidateFinding[] = Array.from({ length: 30 }, (_, i) => ({
-    dimensionKey: `gap${i}`,
-    findingType: "insufficient_evidence" as const,
-    claimFamily: "concept_success",
-    rawProbability: 1,
-    adjustedProbability: null,
-    confidenceTier: "low" as const,
-    priority: 10,
-    claim: {},
-    published: true,
-    droppedReason: null,
-  }));
+  const gaps: CandidateFinding[] = Array.from({ length: 30 }, (_, i) =>
+    candidate({
+      dimensionKey: `gap${i}`,
+      conceptSlug: `c${i}`,
+      findingType: "insufficient_evidence",
+      rawProbability: 1,
+      priority: 10,
+      published: true,
+    }),
+  );
   const { published } = selectPublished(controlFalseDiscovery(gaps));
   assert.equal(published.length, 30, "coverage gaps were capped away");
 });
 
 test("the display cap bounds real claims and says what it withheld", () => {
-  const claims: CandidateFinding[] = Array.from({ length: 40 }, (_, i) => ({
-    dimensionKey: `d${i}`,
-    findingType: "strength" as const,
-    claimFamily: "concept_success",
-    rawProbability: 0.999,
-    adjustedProbability: 0.99,
-    confidenceTier: "high" as const,
-    priority: 50,
-    claim: {},
-    published: true,
-    droppedReason: null,
-  }));
+  const claims: CandidateFinding[] = Array.from({ length: 40 }, (_, i) =>
+    candidate({
+      dimensionKey: `d${i}`,
+      conceptSlug: `c${i}`,
+      rawProbability: 0.999,
+      adjustedProbability: 0.99,
+      confidenceTier: "high",
+      published: true,
+    }),
+  );
   const { published, withheld } = selectPublished(claims);
   assert.equal(published.length, FINDING_POLICY.maxPublishedFindings);
   assert.equal(withheld.length, 40 - FINDING_POLICY.maxPublishedFindings);
   for (const item of withheld) assert.ok(item.droppedReason?.includes("cap"));
+});
+
+test("what is published is ranked by how much of it there is, not alphabetically", () => {
+  // Same type, same certainty after correction. Before, the tie fell through to
+  // the dimension key, so "you missed the only move twice" outranked "you lost
+  // material twenty-nine times" because `a` sorts before `m`.
+  const claims: CandidateFinding[] = [
+    candidate({ dimensionKey: "a_rare", conceptSlug: "a", weight: 2, published: true, adjustedProbability: 0.99 }),
+    candidate({ dimensionKey: "m_common", conceptSlug: "m", weight: 29, published: true, adjustedProbability: 0.99 }),
+  ];
+  const { published } = selectPublished(claims);
+  assert.equal(published[0]!.dimensionKey, "m_common");
+});
+
+test("the published priority is a total order, not a per-type constant", () => {
+  const claims: CandidateFinding[] = Array.from({ length: 4 }, (_, i) =>
+    candidate({
+      dimensionKey: `d${i}`,
+      conceptSlug: `c${i}`,
+      weight: 10 - i,
+      published: true,
+      adjustedProbability: 0.99,
+    }),
+  );
+  const priorities = selectPublished(claims).published.map((c) => c.priority);
+  assert.equal(new Set(priorities).size, priorities.length, "two findings shared a priority");
+  for (let i = 1; i < priorities.length; i += 1) {
+    assert.ok(priorities[i - 1]! > priorities[i]!, "the ranking was not strictly descending");
+  }
 });
 
 test("the structured-input hash ignores key order and notices a changed fact", () => {
@@ -603,6 +725,483 @@ test("the structured-input hash ignores key order and notices a changed fact", (
   });
   assert.equal(a, b);
   assert.notEqual(a, c);
+});
+
+// ---------------------------------------------------------------------------
+// Specificity: whether a finding may say where it happens
+// ---------------------------------------------------------------------------
+
+test("a move number is the move a player would call it", () => {
+  assert.equal(moveNumberOf(0), 1, "ply 0 is White's first move");
+  assert.equal(moveNumberOf(1), 1, "ply 1 is Black's reply to move 1");
+  assert.equal(moveNumberOf(2), 2);
+  assert.equal(moveNumberOf(45), 23);
+  assert.equal(sideOf(0), "white");
+  assert.equal(sideOf(45), "black");
+});
+
+test("the binomial tail matches values that can be checked by hand", () => {
+  // P(X >= 1 | 1, p) is p, and P(X >= n | n, p) is p^n.
+  assert.ok(near(binomialUpperTail(1, 1, 0.3), 0.3, 1e-9));
+  assert.ok(near(binomialUpperTail(3, 3, 0.5), 0.125, 1e-9));
+  // P(X >= 1 | 4, 0.5) is 1 - 0.5^4.
+  assert.ok(near(binomialUpperTail(1, 4, 0.5), 1 - 0.0625, 1e-9));
+  assert.equal(binomialUpperTail(0, 10, 0.5), 1, "at least zero always happens");
+  assert.equal(binomialUpperTail(11, 10, 0.5), 0, "more than everything never happens");
+});
+
+test("a handful of failures is never a concentration, however lopsided", () => {
+  const { subject, reference } = spread({
+    bucket: "endgame",
+    bucketFailures: 5,
+    bucketSuccesses: 0,
+    otherFailures: 1,
+    otherSuccesses: 40,
+  });
+  assert.ok(subject.length < SPECIFICITY_POLICY.minSubjectSize);
+  assert.equal(findConcentration(subject, reference), null);
+});
+
+test("failures spread the way the chances are spread name nowhere", () => {
+  // The trap: most chances occur in the middlegame, so most failures do too.
+  // Saying "your problem is the middlegame" here is a fact about chess.
+  const { subject, reference } = spread({
+    bucket: "middlegame",
+    bucketFailures: 30,
+    bucketSuccesses: 30,
+    otherFailures: 20,
+    otherSuccesses: 20,
+  });
+  const found = findConcentration(subject, reference);
+  assert.equal(found, null, `claimed ${found?.label} from an even failure rate`);
+});
+
+test("failures that really bunch are named, with the count behind them", () => {
+  const { subject, reference } = spread({
+    bucket: "endgame",
+    bucketFailures: 24,
+    bucketSuccesses: 6,
+    otherFailures: 10,
+    otherSuccesses: 50,
+  });
+  const found = findConcentration(subject, reference);
+  assert.ok(found, "a two-to-one difference in failure rate was not found");
+  assert.equal(found!.kind, "phase");
+  assert.equal(found!.label, "the endgame");
+  assert.equal(found!.count, 24);
+  assert.equal(found!.total, subject.length);
+  assert.ok(found!.count / found!.total / found!.baselineShare >= SPECIFICITY_POLICY.minLiftRatio);
+});
+
+test("a bucket that holds nearly every chance is refused rather than named", () => {
+  const { subject, reference } = spread({
+    bucket: "middlegame",
+    bucketFailures: 40,
+    bucketSuccesses: 50,
+    otherFailures: 1,
+    otherSuccesses: 4,
+  });
+  assert.ok(subject.length >= SPECIFICITY_POLICY.minSubjectSize);
+  const found = findConcentration(subject, reference);
+  assert.equal(found, null, "named a phase that contains almost all of the chances");
+});
+
+test("censored chances are never evidence of a location", () => {
+  const moments = [
+    ...Array.from({ length: 20 }, (_, i) =>
+      moment({ gameId: `g${i}`, phase: "endgame", censored: true, success: null }),
+    ),
+    ...Array.from({ length: 9 }, (_, i) =>
+      moment({ gameId: `h${i}`, phase: "opening", success: false }),
+    ),
+    ...Array.from({ length: 30 }, (_, i) =>
+      moment({ gameId: `k${i}`, phase: "opening", success: true }),
+    ),
+  ];
+  assert.equal(failuresOf(moments).length, 9);
+  assert.equal(successesOf(moments).length, 30);
+  assert.equal(observedOf(moments).length, 39, "a censored chance was counted as evidence");
+  // The endgame holds twenty of the sixty-nine recorded chances and none of the
+  // evidence. It must not be reachable as a location.
+  const found = findConcentration(failuresOf(moments), observedOf(moments));
+  assert.ok(found === null || found.key !== "endgame");
+});
+
+test("move bands are the five fixed ones, and the last is open", () => {
+  assert.equal(MOVE_BANDS.length, 5);
+  assert.equal(MOVE_BANDS[0]!.low, 1);
+  assert.equal(MOVE_BANDS[4]!.high, null, "the last band must not stop at move 40");
+  for (let i = 1; i < MOVE_BANDS.length; i += 1) {
+    assert.equal(MOVE_BANDS[i]!.low, MOVE_BANDS[i - 1]!.high! + 1, "the bands leave a gap");
+  }
+});
+
+test("a move band is claimed only when the failures land in it", () => {
+  const reference: Moment[] = [];
+  for (let i = 0; i < 60; i += 1) {
+    // Chances are spread evenly over the first sixty moves; failures are not.
+    const ply = i * 2;
+    const inBand = moveNumberOf(ply) >= 11 && moveNumberOf(ply) <= 20;
+    reference.push(
+      moment({
+        gameId: `g${i}`,
+        ply,
+        phase: "middlegame",
+        success: inBand ? i % 6 !== 0 && false : i % 5 !== 0,
+        occurredAt: new Date(CUTOFF.getTime() - i * 86_400_000),
+      }),
+    );
+  }
+  const found = findConcentration(failuresOf(reference), observedOf(reference));
+  assert.ok(found, "a band holding every failure was not found");
+  assert.equal(found!.kind, "move_band");
+  assert.equal(found!.label, "moves 11 to 20");
+  assert.equal(found!.moveBand?.low, 11);
+  assert.equal(found!.moveBand?.high, 20);
+});
+
+test("an opening name with a digit in it is not used as a location", () => {
+  // The renderer holds back any number the claim does not support, and it
+  // cannot tell "4.O-O" from a statistic. A family it cannot quote is dropped
+  // rather than smuggled through by loosening the check.
+  const reference: Moment[] = [];
+  for (let i = 0; i < 40; i += 1) {
+    reference.push(
+      moment({
+        gameId: `g${i}`,
+        ply: 14,
+        phase: "opening",
+        openingFamily: i < 24 ? "Ruy Lopez, Berlin 4.O-O" : "French Defense",
+        success: i < 24 ? false : true,
+      }),
+    );
+  }
+  const found = findConcentration(failuresOf(reference), observedOf(reference));
+  assert.ok(
+    found === null || found.kind !== "opening_family",
+    "quoted an opening family containing a digit",
+  );
+});
+
+test("the example is the most recent moment inside the concentration", () => {
+  const inside = moment({
+    gameId: "recent",
+    phase: "endgame",
+    success: false,
+    occurredAt: new Date(CUTOFF.getTime() - 86_400_000),
+  });
+  const older = moment({
+    gameId: "older",
+    phase: "endgame",
+    success: false,
+    occurredAt: new Date(CUTOFF.getTime() - 30 * 86_400_000),
+  });
+  const outside = moment({
+    gameId: "outside",
+    phase: "opening",
+    success: false,
+    occurredAt: CUTOFF,
+  });
+  const concentration = findConcentration(
+    ...(() => {
+      const { subject, reference } = spread({
+        bucket: "endgame",
+        bucketFailures: 24,
+        bucketSuccesses: 6,
+        otherFailures: 10,
+        otherSuccesses: 50,
+      });
+      return [subject, reference] as const;
+    })(),
+  )!;
+  assert.ok(concentration);
+  const picked = pickExample([outside, older, inside], concentration);
+  assert.equal(picked?.gameId, "recent", "the example contradicted the sentence above it");
+});
+
+test("choosing an example is deterministic when two moments share an instant", () => {
+  const a = moment({ gameId: "b-game", ply: 10, success: false });
+  const b = moment({ gameId: "a-game", ply: 10, success: false });
+  assert.equal(pickExample([a, b], null)?.gameId, pickExample([b, a], null)?.gameId);
+});
+
+// ---------------------------------------------------------------------------
+// Phase as a dimension of its own
+// ---------------------------------------------------------------------------
+
+function stratum(n: number, successes: number): Observation[] {
+  return Array.from({ length: n }, (_, i) => ({
+    occurredAt: CUTOFF,
+    score: i < successes ? 1 : 0,
+    censored: false,
+    graded: false,
+  }));
+}
+
+test("two phases are not compared on concepts only one of them has", () => {
+  const strata = new Map<Phase, Map<string, Observation[]>>([
+    ["opening", new Map([["material_safety_respond", stratum(60, 24)]])],
+    // The endgame's chances are a concept the opening never sees, so there is
+    // nothing to compare and the pooled rates are not comparable either.
+    ["endgame", new Map([["winning_conversion_convert", stratum(60, 48)]])],
+  ]);
+  assert.equal(buildPhaseContrast(strata, CUTOFF), null);
+});
+
+test("a small difference between phases is not worth telling anybody", () => {
+  const strata = new Map<Phase, Map<string, Observation[]>>([
+    [
+      "opening",
+      new Map([
+        ["a_respond", stratum(400, 200)],
+        ["b_recognize", stratum(400, 200)],
+      ]),
+    ],
+    [
+      "endgame",
+      new Map([
+        ["a_respond", stratum(400, 212)],
+        ["b_recognize", stratum(400, 212)],
+      ]),
+    ],
+  ]);
+  const contrast = buildPhaseContrast(strata, CUTOFF);
+  assert.equal(contrast, null, "published a three-point gap as a finding");
+});
+
+test("a real spread between phases is found, on shared kinds of chance only", () => {
+  const strata = new Map<Phase, Map<string, Observation[]>>([
+    [
+      "opening",
+      new Map([
+        ["material_safety_respond", stratum(900, 396)],
+        ["free_material_recognize", stratum(460, 212)],
+        ["opening_only_thing", stratum(200, 100)],
+      ]),
+    ],
+    [
+      "middlegame",
+      new Map([
+        ["material_safety_respond", stratum(2600, 1404)],
+        ["free_material_recognize", stratum(1400, 770)],
+      ]),
+    ],
+    [
+      "endgame",
+      new Map([
+        ["material_safety_respond", stratum(700, 469)],
+        ["free_material_recognize", stratum(300, 198)],
+        ["winning_conversion_convert", stratum(300, 240)],
+      ]),
+    ],
+  ]);
+  const contrast = buildPhaseContrast(strata, CUTOFF);
+  assert.ok(contrast, "a twenty-point spread over thousands of chances was not found");
+  assert.equal(contrast!.weakest, "opening");
+  assert.equal(contrast!.strongest, "endgame");
+  assert.deepEqual(
+    [...contrast!.sharedStrata],
+    ["free_material_recognize", "material_safety_respond"],
+    "a concept only one phase has was pooled into the comparison",
+  );
+  assert.equal(contrast!.comparedPairs, 3);
+  assert.ok(contrast!.probability > 0.99);
+  // The estimate is over the shared strata, so it excludes the 200 opening-only
+  // chances. Anything larger means an unshared stratum leaked in.
+  assert.equal(contrast!.weakestEstimate.coverage.raw, 1360);
+});
+
+test("the phase contrast is corrected for having looked at every pair", () => {
+  const strata = new Map<Phase, Map<string, Observation[]>>([
+    [
+      "opening",
+      new Map([
+        ["a_respond", stratum(40, 14)],
+        ["b_recognize", stratum(40, 14)],
+      ]),
+    ],
+    [
+      "endgame",
+      new Map([
+        ["a_respond", stratum(40, 22)],
+        ["b_recognize", stratum(40, 22)],
+      ]),
+    ],
+  ]);
+  const contrast = buildPhaseContrast(strata, CUTOFF)!;
+  assert.ok(contrast);
+  assert.equal(contrast.comparedPairs, 1, "only one pair was comparable");
+  const wider = new Map(strata);
+  wider.set(
+    "middlegame",
+    new Map([
+      ["a_respond", stratum(40, 18)],
+      ["b_recognize", stratum(40, 18)],
+    ]),
+  );
+  const corrected = buildPhaseContrast(wider, CUTOFF)!;
+  assert.equal(corrected.comparedPairs, 3);
+  assert.ok(
+    corrected.probability < contrast.probability,
+    "searching three pairs was as cheap as searching one",
+  );
+});
+
+test("the phase contrast is an inconsistency finding, ranked above the rest", () => {
+  const strata = new Map<Phase, Map<string, Observation[]>>([
+    [
+      "opening",
+      new Map([
+        ["a_respond", stratum(400, 176)],
+        ["b_recognize", stratum(400, 180)],
+      ]),
+    ],
+    [
+      "endgame",
+      new Map([
+        ["a_respond", stratum(400, 268)],
+        ["b_recognize", stratum(400, 264)],
+      ]),
+    ],
+  ]);
+  const contrast = buildPhaseContrast(strata, CUTOFF)!;
+  const finding = derivePhaseContrast({
+    contrast,
+    sharedConceptLabels: ["Keeping your pieces safe", "Taking what is offered"],
+    claimFamily: "phase_contrast",
+  });
+  assert.equal(finding.findingType, "inconsistency");
+  assert.ok(finding.priority > 90, "the largest true thing in the report was ranked below a verdict");
+  const text = renderTemplate({ findingType: finding.findingType, claim: finding.claim });
+  assert.equal(checkRendering(text, finding.claim).state, "passed", text);
+  assert.ok(text.includes("the opening") && text.includes("the endgame"), text);
+});
+
+// ---------------------------------------------------------------------------
+// Confidence, and collapsing the frames
+// ---------------------------------------------------------------------------
+
+test("false-discovery control alone cannot produce anything but a high tier", () => {
+  // Why the tier had to stop being a restatement of the probability: BH at
+  // q=0.1 cannot publish a claim whose p-value exceeds 0.1, so every published
+  // finding had probability at least 0.9 and every one came out `high`.
+  const claims = Array.from({ length: 8 }, (_, i) =>
+    candidate({ dimensionKey: `d${i}`, conceptSlug: `c${i}`, rawProbability: 0.9 + i * 0.01 }),
+  );
+  for (const kept of controlFalseDiscovery(claims).filter((c) => c.published)) {
+    assert.ok(kept.rawProbability >= 1 - FINDING_POLICY.falseDiscoveryRate);
+  }
+});
+
+test("the tier reports how much evidence there is, not how the correction went", () => {
+  // Same rate, three sample sizes. The old tier called all three `high`.
+  assert.equal(tierFor(available(300, 1000)), "high");
+  assert.equal(tierFor(available(9, 30)), "moderate");
+  assert.equal(tierFor(available(3, 10)), "low", "ten observations was called confident");
+});
+
+test("one concept measured under two frames is one finding, not two", () => {
+  const objective = candidate({
+    dimensionKey: "material_safety_respond_objective",
+    findingType: "foundational_miss",
+    frame: "objective",
+    rawProbability: 0.97,
+  });
+  const personal = candidate({
+    dimensionKey: "material_safety_respond_personal_current",
+    findingType: "foundational_miss",
+    frame: "personal_current",
+    rawProbability: 0.99,
+  });
+  const deduped = dedupeAcrossFrames([objective, personal]);
+  const kept = deduped.filter((c) => c.droppedReason === null);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0]!.frame, "objective", "the frame was chosen by whichever scored better");
+});
+
+test("a concept that was measured does not also report a coverage gap", () => {
+  // The recent window is half the evidence, so a concept with a good lifetime
+  // estimate routinely also produces "not enough evidence yet" from the other
+  // frame. That is an artefact of halving the sample, and it is not true.
+  const measured = candidate({
+    dimensionKey: "only_move_recognize_objective",
+    conceptSlug: "only_move",
+    role: "recognize",
+    findingType: "foundational_miss",
+    frame: "objective",
+  });
+  const gap = candidate({
+    dimensionKey: "only_move_recognize_personal_current",
+    conceptSlug: "only_move",
+    role: "recognize",
+    findingType: "insufficient_evidence",
+    frame: "personal_current",
+    published: true,
+  });
+  const { published } = selectPublished(controlFalseDiscovery(dedupeAcrossFrames([measured, gap])));
+  assert.equal(
+    published.filter((c) => c.findingType === "insufficient_evidence").length,
+    0,
+    "reported a coverage gap for a concept the report had just measured",
+  );
+});
+
+test("a concept nothing measured still reports its gap", () => {
+  const gaps = ["objective", "personal_current"].map((frame) =>
+    candidate({
+      dimensionKey: `winning_conversion_convert_${frame}`,
+      conceptSlug: "winning_conversion",
+      role: "convert",
+      findingType: "insufficient_evidence",
+      frame: frame as "objective" | "personal_current",
+      published: true,
+    }),
+  );
+  const { published } = selectPublished(controlFalseDiscovery(dedupeAcrossFrames(gaps)));
+  assert.equal(published.length, 1, "one gap per concept, not one per frame");
+  assert.equal(published[0]!.frame, "objective");
+});
+
+test("an improvement claim is kept in the frame that can make it", () => {
+  const personal = candidate({
+    dimensionKey: "only_move_recognize_personal_current",
+    findingType: "established_improvement",
+    frame: "personal_current",
+  });
+  const stray = candidate({
+    dimensionKey: "only_move_recognize_objective",
+    findingType: "established_improvement",
+    frame: "objective",
+  });
+  const kept = dedupeAcrossFrames([stray, personal]).filter((c) => c.droppedReason === null);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0]!.frame, "personal_current");
+});
+
+test("a duplicate frame is not counted as a hypothesis the correction divides by", () => {
+  // One marginal true claim among five nulls, each concept measured twice. The
+  // Benjamini-Hochberg threshold for the smallest p-value is q/m, so leaving
+  // the duplicates in halves it — and the one real finding in the report is
+  // lost because the report measured everything twice.
+  const pairs = ["a", "b", "c", "d", "e", "f"].flatMap((slug) => [
+    candidate({
+      dimensionKey: `${slug}_objective`,
+      conceptSlug: slug,
+      frame: "objective",
+      rawProbability: slug === "a" ? 0.984 : 0.1,
+    }),
+    candidate({
+      dimensionKey: `${slug}_personal_current`,
+      conceptSlug: slug,
+      frame: "personal_current",
+      rawProbability: 0.1,
+    }),
+  ]);
+  const withDuplicates = controlFalseDiscovery(pairs).filter((c) => c.published);
+  const collapsed = controlFalseDiscovery(dedupeAcrossFrames(pairs)).filter((c) => c.published);
+  assert.equal(withDuplicates.length, 0, "the arrangement under test did not reproduce");
+  assert.equal(collapsed.length, 1, "collapsing the frames did not recover the real finding");
+  assert.equal(collapsed[0]!.conceptSlug, "a");
 });
 
 // ---------------------------------------------------------------------------
@@ -651,13 +1250,83 @@ test("rounding a supported number is allowed; changing it is not", () => {
   assert.ok(!supported.has("55%"));
 });
 
+/** A claim carrying every optional part, so the fullest template is exercised. */
+function fullClaim(): Record<string, unknown> {
+  return {
+    concept: {
+      slug: "material_safety",
+      role: "respond",
+      label: "Keeping your pieces safe",
+      definition: describeConceptRole("material_safety", "respond").definition,
+      opportunity: "save a piece your opponent could have taken",
+      succeeded: "saved it",
+      missed: "left it there",
+    },
+    estimate: 0.29,
+    intervalLow: 0.18,
+    intervalHigh: 0.42,
+    observed: 41,
+    successes: 12,
+    failures: 29,
+    graded: 0,
+    censored: 9,
+    effectiveSample: 22.4,
+    occurrences: 29,
+    delta: 0.14,
+    improvementProbability: 0.97,
+    probabilityFloor: 0.99,
+    reason: "below_minimum_sample",
+    rawSample: 4,
+    where: {
+      kind: "move_band",
+      label: "moves 21 to 30",
+      count: 21,
+      total: 29,
+      moveLow: 21,
+      moveHigh: 30,
+      observedMoveLow: 22,
+      observedMoveHigh: 29,
+    },
+    whereExamined: true,
+    example: {
+      gameId: "0d0a3f5e-0000-4000-8000-000000000000",
+      evidenceItemId: "4711",
+      moveNumber: 23,
+      side: "black",
+      playedMoveUci: "g1f3",
+      bestMoveUci: "d1d8",
+      openingName: "Scotch Game: Classical Variation",
+      departureMoveNumber: 11,
+    },
+  };
+}
+
 test("every template renders and passes its own check", () => {
   for (const findingType of FINDING_TYPES) {
+    const claim = fullClaim();
+    const text = renderTemplate({ findingType, claim });
+    const check = checkRendering(text, claim, {
+      improvementClaimAllowed:
+        findingType === "established_improvement" || findingType === "early_improvement_signal",
+    });
+    assert.equal(check.state, "passed", `${findingType}: ${check.note ?? ""} ${check.unsupported.join(",")}`);
+    assert.ok(text.length > 40, `${findingType} rendered almost nothing: ${text}`);
+  }
+});
+
+test("every template renders from a claim carrying only the minimum", () => {
+  // A concept the catalogue has never heard of, no location, no example. The
+  // sentence gets shorter; it must not get broken or leak an identifier.
+  for (const findingType of FINDING_TYPES) {
     const claim = {
-      dimension: "fork recognition",
-      estimate: 0.62,
-      intervalLow: 0.5,
-      intervalHigh: 0.74,
+      concept: describeConceptRole("not_a_real_concept", "respond"),
+      estimate: 0.5,
+      intervalLow: 0.3,
+      intervalHigh: 0.7,
+      censored: 0,
+      where: null,
+      whereExamined: false,
+      example: null,
     };
     const text = renderTemplate({ findingType, claim });
     const check = checkRendering(text, claim, {
@@ -666,6 +1335,67 @@ test("every template renders and passes its own check", () => {
     });
     assert.equal(check.state, "passed", `${findingType}: ${check.note ?? ""} ${check.unsupported.join(",")}`);
   }
+});
+
+test("no template can put a database key in front of a reader", () => {
+  // The bug this whole path exists to fix: a live report read
+  // "critical_moment_recognize_objective is costing you: 22% of your chances".
+  const slugLike = /\b[a-z0-9]+(?:_[a-z0-9]+)+\b/;
+  for (const findingType of FINDING_TYPES) {
+    for (const claim of [fullClaim(), { concept: describeConceptRole("material_safety", "respond") }]) {
+      const text = renderTemplate({ findingType, claim });
+      assert.ok(!slugLike.test(text), `${findingType} rendered an identifier: ${text}`);
+    }
+  }
+});
+
+test("a rate is never stated without the sample and the interval behind it", () => {
+  const claim = fullClaim();
+  for (const findingType of ["strength", "foundational_miss"] as const) {
+    const text = renderTemplate({ findingType, claim });
+    assert.ok(text.includes("41 chances"), `${findingType} dropped the sample size: ${text}`);
+    assert.ok(text.includes("18%") && text.includes("42%"), `${findingType} dropped the interval: ${text}`);
+  }
+});
+
+test("a chance the player never got is reported, not folded into the failures", () => {
+  const text = renderTemplate({ findingType: "foundational_miss", claim: fullClaim() });
+  assert.ok(
+    text.includes("9 further chances ended before you had a move"),
+    `the censored chances were silently excluded: ${text}`,
+  );
+});
+
+test("a probability is never rounded up into certainty", () => {
+  const claim = { ...fullClaim(), improvementProbability: 0.9998 };
+  const text = renderTemplate({ findingType: "established_improvement", claim });
+  assert.ok(!text.includes("100%"), text);
+  assert.ok(text.includes("over 99%"), text);
+  assert.equal(checkRendering(text, claim, { improvementClaimAllowed: true }).state, "passed");
+});
+
+test("the catalogue words every role it says it supports", () => {
+  for (const concept of CONCEPT_CATALOGUE) {
+    for (const role of concept.supportedRoles) {
+      const described = describeConceptRole(concept.slug, role);
+      assert.ok(described.narrative, `${concept.slug}/${role} has no reader-facing wording`);
+      assert.notEqual(described.label, concept.slug);
+      for (const clause of [
+        described.narrative!.opportunity,
+        described.narrative!.succeeded,
+        described.narrative!.missed,
+      ]) {
+        assert.ok(clause.length > 0);
+        assert.ok(!/_/.test(clause), `${concept.slug}/${role} wording contains an identifier`);
+      }
+    }
+  }
+});
+
+test("a concept this build cannot name is described, not printed as a key", () => {
+  const described = describeConceptRole("some_future_concept", "respond");
+  assert.ok(!described.label.includes("some_future_concept"));
+  assert.equal(described.narrative, null);
 });
 
 // ---------------------------------------------------------------------------
