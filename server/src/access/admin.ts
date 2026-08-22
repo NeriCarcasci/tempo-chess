@@ -9,17 +9,28 @@
  *
  * ## What is deliberately absent
  *
- * There is no query here that reads a game, a move, a position, an evaluation,
- * the body of a report, a goal or a practice attempt, and 0039 grants no policy
- * that would let one work. An operator can see that somebody linked an account,
- * that a report exists, and which stage their onboarding reached. They cannot
- * read that person's chess.
+ * There is no query here that reads a game, a move, the body of a report, a
+ * goal or a practice attempt, and 0039 grants no policy that would let one
+ * work. An operator can see that somebody linked an account, that a report
+ * exists, and which stage their onboarding reached. Verified against the live
+ * database with the operator context bound: `chess.subject_games` and
+ * `analysis.runs` both read zero, which is everything that attributes chess to
+ * a person.
  *
- * That is a decision rather than an oversight, and the rule behind it is: prefer
- * the count when the count answers the question. "Has this person got a report"
- * is what an approval queue and a stuck-onboarding page actually ask. "What does
- * their report say" is not a question the people running Forma need answered in
- * order to run it, so the data to answer it is not reachable from here.
+ * The precise claim is worth stating, because a looser one would be wrong.
+ * `analysis.position_evaluations` and `chess.core_positions` are readable, and
+ * were before this file existed: they carry no row level security because they
+ * are a position-keyed cache with no person column at all. A row there says
+ * what an engine thinks of a FEN, not who reached it. Attribution lives in
+ * `subject_games` and `runs`, and both are closed here. So an operator can
+ * learn that a position has been evaluated and cannot learn whose game it came
+ * from.
+ *
+ * The rule behind the rest is: prefer the count when the count answers the
+ * question. "Has this person got a report" is what an approval queue and a
+ * stuck-onboarding page actually ask. "What does their report say" is not a
+ * question the people running Forma need answered in order to run it, so the
+ * data to answer it is not reachable from here.
  *
  * The one identifier that is legible is the email address, because a decision
  * about who to let in cannot be made about an anonymous uuid. It is read from
