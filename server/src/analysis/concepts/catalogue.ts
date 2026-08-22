@@ -48,6 +48,33 @@ import type { ConceptCategory, ConceptRole } from "../observations.js";
 /** Where the evidence for an observation comes from. Mirrors the column check. */
 export type EvidenceSourceKind = "engine" | "deterministic" | "human_model";
 
+/**
+ * How one role of one concept reads in a sentence written for the player.
+ *
+ * `estimates/render.ts` builds a finding's prose from templates and had nothing
+ * to name the subject with except the dimension key, so a report told a paying
+ * customer that `critical_moment_recognize_objective` was costing them 22% of
+ * their chances — an internal column name and a bare number.
+ *
+ * Three clauses rather than one, because a finding says three different things
+ * about the same role and each needs a different grammatical shape: what a
+ * chance at it was, what doing it right looked like, and what going wrong
+ * looked like. Deriving the last two from the first by negation produces "you
+ * did not deal with it", which is limp where the concrete verb is not.
+ *
+ * These are display text, and deliberately outside `conceptVersionHash` for the
+ * same reason `displayName` is: rewording a sentence for a reader must not
+ * orphan a season of evidence recorded under the old wording.
+ */
+export interface RoleNarrative {
+  /** Completes "chances to …". */
+  readonly opportunity: string;
+  /** Completes "you … 12 times". Past tense, no subject. */
+  readonly succeeded: string;
+  /** Completes "9 times you …". Past tense, no subject. */
+  readonly missed: string;
+}
+
 export interface ConceptDefinition {
   readonly slug: string;
   readonly family: string;
@@ -56,6 +83,14 @@ export interface ConceptDefinition {
   /** Written for the player whose game it describes, not for the detector. */
   readonly humanDefinition: string;
   readonly supportedRoles: readonly ConceptRole[];
+  /**
+   * Reader-facing wording for each supported role.
+   *
+   * A role with no entry renders as the concept's display name alone, which is
+   * a poorer sentence but never a slug. `estimates:unit` asserts that every
+   * supported role of every concept has one, so the fallback stays theoretical.
+   */
+  readonly roleNarratives: Readonly<Partial<Record<ConceptRole, RoleNarrative>>>;
   readonly evidenceSourceKind: EvidenceSourceKind;
   /**
    * What the detector actually tests, in enough detail to reproduce it. Stored
@@ -84,6 +119,13 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       "One of your pieces was available to be taken for less than it is worth, and you were to move. "
       + "This measures whether you noticed and dealt with it.",
     supportedRoles: ["respond"],
+    roleNarratives: {
+      respond: {
+        opportunity: "save a piece your opponent could have taken",
+        succeeded: "saved it",
+        missed: "left it there",
+      },
+    },
     evidenceSourceKind: "deterministic",
     detectorContract: {
       method: "static_exchange_evaluation",
@@ -106,6 +148,13 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       "Your opponent left something available to be taken for less than it is worth. "
       + "This measures whether you took it.",
     supportedRoles: ["recognize"],
+    roleNarratives: {
+      recognize: {
+        opportunity: "take material your opponent had left hanging",
+        succeeded: "took it",
+        missed: "played something else",
+      },
+    },
     evidenceSourceKind: "deterministic",
     detectorContract: {
       method: "static_exchange_evaluation",
@@ -127,6 +176,18 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       "A moment where the moves available led to genuinely different games. "
       + "Recognising one is finding a move worth considering; executing is choosing well among them.",
     supportedRoles: ["recognize", "execute"],
+    roleNarratives: {
+      recognize: {
+        opportunity: "notice that a position was worth real thought",
+        succeeded: "spotted it",
+        missed: "played on without seeing the moment",
+      },
+      execute: {
+        opportunity: "choose well in a position that decided something",
+        succeeded: "chose well",
+        missed: "picked the wrong one of the moves in front of you",
+      },
+    },
     evidenceSourceKind: "engine",
     detectorContract: {
       method: "engine_transition_assessment",
@@ -147,6 +208,13 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       "A position where exactly one move held and everything else lost ground. "
       + "This measures whether you found it.",
     supportedRoles: ["recognize"],
+    roleNarratives: {
+      recognize: {
+        opportunity: "find the single move that held",
+        succeeded: "found it",
+        missed: "played one of the moves that did not hold",
+      },
+    },
     evidenceSourceKind: "engine",
     detectorContract: {
       method: "engine_transition_assessment",
@@ -163,6 +231,13 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       "You reached a position that should win. This measures whether it still should by the time "
       + "you stopped moving.",
     supportedRoles: ["convert"],
+    roleNarratives: {
+      convert: {
+        opportunity: "finish a game you had already won",
+        succeeded: "finished it",
+        missed: "let it slip back",
+      },
+    },
     evidenceSourceKind: "engine",
     detectorContract: {
       method: "expected_score_trajectory",
@@ -183,6 +258,13 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       "You were worse and had to keep the game alive. This measures whether your moves held the "
       + "position rather than accelerating the slide.",
     supportedRoles: ["respond"],
+    roleNarratives: {
+      respond: {
+        opportunity: "hold a position you were already worse in",
+        succeeded: "held it",
+        missed: "made it heavier",
+      },
+    },
     evidenceSourceKind: "engine",
     detectorContract: {
       method: "engine_transition_assessment",
@@ -222,4 +304,45 @@ export function conceptVersionHash(definition: ConceptDefinition): string {
 
 export function conceptBySlug(slug: string): ConceptDefinition | undefined {
   return CONCEPT_CATALOGUE.find((concept) => concept.slug === slug);
+}
+
+/** Everything a sentence about one concept in one role needs. */
+export interface ConceptDescription {
+  readonly slug: string;
+  readonly role: string;
+  /** "Keeping your pieces safe". Never a slug. */
+  readonly label: string;
+  readonly definition: string;
+  readonly narrative: RoleNarrative | null;
+}
+
+/**
+ * The reader-facing description of one concept in one role.
+ *
+ * Falls back rather than throwing, and the fallback is still not a slug: an
+ * observation recorded under a concept this build of the catalogue has never
+ * heard of is a real possibility — a detector can be promoted ahead of the
+ * code that reads it — and the honest answer then is a plain phrase, not the
+ * database key. `estimates/render.ts` treats a null narrative as "say the
+ * label and nothing more", which loses detail without ever leaking an
+ * identifier.
+ */
+export function describeConceptRole(slug: string, role: string): ConceptDescription {
+  const concept = conceptBySlug(slug);
+  if (!concept) {
+    return {
+      slug,
+      role,
+      label: "something Forma measures but this build cannot name",
+      definition: "",
+      narrative: null,
+    };
+  }
+  return {
+    slug,
+    role,
+    label: concept.displayName,
+    definition: concept.humanDefinition,
+    narrative: concept.roleNarratives[role as ConceptRole] ?? null,
+  };
 }

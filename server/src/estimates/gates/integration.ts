@@ -299,6 +299,77 @@ try {
     assert.equal(dashboard!.sections.connections, "unavailable");
   });
 
+  await report.check("a phase card carries its interval, its counts and its denominator", async () => {
+    const dashboard = await readDashboard(sql, {
+      subjectId: game.subjectId,
+      ownerProfileId: game.ownerUserId,
+    });
+    if (dashboard!.phases.state === "unavailable") {
+      assert.equal(dashboard!.phases.phases.length, 0);
+      return;
+    }
+    assert.ok(dashboard!.phases.gamesInCohort > 0, "the phase cards name no denominator");
+    for (const phase of dashboard!.phases.phases) {
+      assert.equal(
+        phase.rate === null,
+        phase.unavailableReason !== null,
+        `${phase.phase} has neither a rate nor a reason, or both`,
+      );
+      if (phase.rate !== null) {
+        assert.ok(phase.intervalLow !== null && phase.intervalHigh !== null, "a bare rate");
+      }
+      assert.equal(
+        phase.observed + phase.setAside,
+        phase.chances,
+        "a chance was neither observed nor set aside",
+      );
+      assert.ok(phase.taken <= phase.observed, "more chances taken than were observed");
+    }
+  });
+
+  await report.check("nothing a reader sees is a database key", async () => {
+    const dashboard = await readDashboard(sql, {
+      subjectId: game.subjectId,
+      ownerProfileId: game.ownerUserId,
+    });
+    // `critical_moment_recognize_objective is costing you: 22% of your chances`
+    // was in the live database. The dimension key belongs in `dimensionKey`, and
+    // nowhere a person reads.
+    const slugLike = /\b[a-z0-9]+(?:_[a-z0-9]+)+\b/;
+    for (const estimate of dashboard!.estimates) {
+      assert.ok(
+        !slugLike.test(estimate.displayName),
+        `an estimate's display name is an identifier: ${estimate.displayName}`,
+      );
+    }
+    for (const finding of dashboard!.findings) {
+      if (finding.explanation === null) continue;
+      assert.ok(
+        !slugLike.test(finding.explanation),
+        `a finding's prose contains an identifier: ${finding.explanation}`,
+      );
+    }
+  });
+
+  await report.check("a finding's first evidence row is the moment its prose names", async () => {
+    const dashboard = await readDashboard(sql, {
+      subjectId: game.subjectId,
+      ownerProfileId: game.ownerUserId,
+    });
+    for (const finding of dashboard!.findings) {
+      const example = (finding.claim as { example?: { evidenceItemId?: unknown } | null }).example;
+      if (!example || typeof example.evidenceItemId !== "string") continue;
+      const lead = finding.evidence.find((item) => item.displayRank === 0);
+      assert.ok(lead, "a finding with an example cited no evidence");
+      assert.equal(
+        lead!.evidenceItemId,
+        example.evidenceItemId,
+        "the finding showed one moment and linked to another",
+      );
+      assert.equal(lead!.role, "example");
+    }
+  });
+
   await report.check("the dashboard names what is missing rather than hiding it", async () => {
     const dashboard = await readDashboard(sql, {
       subjectId: game.subjectId,

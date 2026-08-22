@@ -213,7 +213,7 @@ export interface paths {
         };
         /**
          * Every measurement behind your published profile
-         * @description The published dashboard for your own subject: skill estimates with their intervals and sample sizes, findings with their evidence, the trajectory bins, and the rating profile. This is the report that was published rather than a fresh computation, so it always agrees with the findings stored beside it. Estimates carry a null value and a reason when the evidence is too thin, and censored chances are reported separately from failures because a chance the player never got is not a chance they missed.
+         * @description The published dashboard for your own subject: skill estimates with their intervals and sample sizes, findings with their evidence, a pooled rate per phase of the game, the trajectory bins, and the rating profile. This is the report that was published rather than a fresh computation, so it always agrees with the findings stored beside it. Estimates carry a null value and a reason when the evidence is too thin, and censored chances are reported separately from failures because a chance the player never got is not a chance they missed. Every count in `phases` is over the frozen cohort named by `phases.gamesInCohort`, which is smaller than the account's synced history.
          */
         get: operations["getDashboard"];
         put?: never;
@@ -1946,6 +1946,7 @@ export interface operations {
                                 improvementProbability: number | null;
                                 intervalHigh: number | null;
                                 intervalLow: number | null;
+                                phase: string | null;
                                 rawSampleSize: number;
                                 unavailableReason: string | null;
                                 windowKind: string;
@@ -1967,6 +1968,25 @@ export interface operations {
                                 id: string;
                                 priority: number;
                             }[];
+                            phases: {
+                                gamesInCohort: number;
+                                phases: {
+                                    chances: number;
+                                    coverageStatus: string;
+                                    gamesReaching: number | null;
+                                    intervalHigh: number | null;
+                                    intervalLow: number | null;
+                                    observed: number;
+                                    phase: string;
+                                    phaseReachRate: number | null;
+                                    rate: number | null;
+                                    setAside: number;
+                                    taken: number;
+                                    unavailableReason: string | null;
+                                }[];
+                                /** @enum {string} */
+                                state: "published" | "unavailable";
+                            };
                             publicationId: string;
                             publishedAt: string;
                             ratingProfile: {
@@ -1995,6 +2015,8 @@ export interface operations {
                                 findings: "published" | "unavailable";
                                 /** @enum {string} */
                                 goal: "published" | "unavailable";
+                                /** @enum {string} */
+                                phases: "published" | "unavailable";
                                 /** @enum {string} */
                                 ratingProfile: "published" | "unavailable";
                                 /** @enum {string} */

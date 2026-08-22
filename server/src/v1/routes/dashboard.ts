@@ -51,6 +51,8 @@ const estimateSchema = z.object({
   dimensionKey: z.string(),
   displayName: z.string(),
   frame: z.string(),
+  /** Set on the pooled per-phase rows, null on the per-concept ones. */
+  phase: z.string().nullable(),
   windowKind: z.string(),
   /**
    * Null with a reason, never a placeholder. A dimension nobody has enough
@@ -82,6 +84,39 @@ const findingSchema = z.object({
   /** Null when the renderer's own check refused the text it produced. */
   explanation: z.string().nullable(),
   explanationState: z.string().nullable(),
+});
+
+/**
+ * The three phase cards.
+ *
+ * A pooled hit rate per phase, with the interval and the counts it came from,
+ * plus how many games in the cohort reached the phase at all. Every field
+ * except the rate exists so the card cannot be read as more than it is: an
+ * endgame figure over eighty games and an opening figure over three hundred
+ * are not the same kind of number, and a client that only received the rate
+ * would have no way to say so.
+ */
+const phasesSchema = z.object({
+  state: z.enum(["published", "unavailable"]),
+  /** The frozen cohort every count below is over, not the whole synced history. */
+  gamesInCohort: z.number(),
+  phases: z.array(
+    z.object({
+      phase: z.string(),
+      chances: z.number(),
+      observed: z.number(),
+      taken: z.number(),
+      /** Chances that ended before the player was on move. Never failures. */
+      setAside: z.number(),
+      rate: z.number().nullable(),
+      intervalLow: z.number().nullable(),
+      intervalHigh: z.number().nullable(),
+      coverageStatus: z.string(),
+      unavailableReason: z.string().nullable(),
+      gamesReaching: z.number().nullable(),
+      phaseReachRate: z.number().nullable(),
+    }),
+  ),
 });
 
 const trajectorySchema = z.object({
@@ -140,6 +175,7 @@ const dashboardSchema = z.object({
   sections: z.object({
     estimates: sectionState,
     findings: sectionState,
+    phases: sectionState,
     trajectory: sectionState,
     ratingProfile: sectionState,
     goal: sectionState,
@@ -147,6 +183,7 @@ const dashboardSchema = z.object({
   }),
   estimates: z.array(estimateSchema),
   findings: z.array(findingSchema),
+  phases: phasesSchema,
   trajectory: trajectorySchema,
   ratingProfile: ratingProfileSchema,
   coverageWarnings: z.array(z.string()),
@@ -164,11 +201,13 @@ const dashboardRoute: RouteDefinition<never, never, z.infer<typeof dashboardSche
   summary: "Every measurement behind your published profile",
   description:
     "The published dashboard for your own subject: skill estimates with their intervals and sample "
-    + "sizes, findings with their evidence, the trajectory bins, and the rating profile. This is the "
-    + "report that was published rather than a fresh computation, so it always agrees with the "
-    + "findings stored beside it. Estimates carry a null value and a reason when the evidence is too "
-    + "thin, and censored chances are reported separately from failures because a chance the player "
-    + "never got is not a chance they missed.",
+    + "sizes, findings with their evidence, a pooled rate per phase of the game, the trajectory bins, "
+    + "and the rating profile. This is the report that was published rather than a fresh computation, "
+    + "so it always agrees with the findings stored beside it. Estimates carry a null value and a "
+    + "reason when the evidence is too thin, and censored chances are reported separately from "
+    + "failures because a chance the player never got is not a chance they missed. Every count in "
+    + "`phases` is over the frozen cohort named by `phases.gamesInCohort`, which is smaller than the "
+    + "account's synced history.",
   kind: "read",
   auth: "required",
   envelope: "resource",

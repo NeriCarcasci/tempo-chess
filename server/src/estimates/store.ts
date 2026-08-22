@@ -10,6 +10,7 @@ import {
   ALIGNMENT_POLICY,
   ESTIMATOR_POLICY,
   FINDING_POLICY,
+  SPECIFICITY_POLICY,
   type Frame,
   type WindowKind,
 } from "./contract.js";
@@ -135,8 +136,12 @@ export async function registerEstimateComponents(sql: Sql): Promise<RegisteredEs
   const findingRules = await registerComponentVersion(sql, {
     componentKey: ESTIMATE_COMPONENT_KEYS.findingRules,
     version: FINDING_POLICY.version,
-    implementationSha256: hash("findings", FINDING_POLICY),
-    configuration: FINDING_POLICY,
+    // The specificity thresholds decide which findings are allowed to name a
+    // phase, a move band or an opening, so they are part of what produced the
+    // output and belong in the hash. Leaving them out would let a change in
+    // what the product is willing to assert pass as the same version.
+    implementationSha256: hash("findings", { FINDING_POLICY, SPECIFICITY_POLICY }),
+    configuration: { ...FINDING_POLICY, specificity: SPECIFICITY_POLICY },
     deterministic: true,
     dependencies: [
       {
@@ -155,9 +160,13 @@ export async function registerEstimateComponents(sql: Sql): Promise<RegisteredEs
   });
   const renderer = await registerComponentVersion(sql, {
     componentKey: ESTIMATE_COMPONENT_KEYS.renderer,
-    version: "template_renderer_v1",
-    implementationSha256: hash("renderer", { templates: "v1" }),
-    configuration: { templates: "v1", model: null },
+    // v2 says the concept's name instead of its database key, and composes the
+    // sample, the location and one example moment into the sentence. A new
+    // version rather than an edit: an explanation stored last month has to keep
+    // pointing at the renderer that actually produced it.
+    version: "template_renderer_v2",
+    implementationSha256: hash("renderer", { templates: "v2" }),
+    configuration: { templates: "v2", model: null },
     deterministic: true,
   });
 
@@ -344,7 +353,7 @@ export async function writeFinding(
     ) values (
       ${input.analysisRunId}, ${input.subjectId}, ${write.playerSkillEstimateId},
       ${candidate.findingType}, ${write.conceptVersionId}, ${write.role},
-      ${jsonParam({})}::jsonb, ${candidate.priority}, ${candidate.confidenceTier},
+      ${jsonParam(candidate.context)}::jsonb, ${candidate.priority}, ${candidate.confidenceTier},
       ${jsonParam(candidate.claim)}::jsonb, ${candidate.claimFamily},
       ${candidate.adjustedProbability === null ? null : input.correctionComponentVersionId},
       ${candidate.adjustedProbability}
