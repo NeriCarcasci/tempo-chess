@@ -80,6 +80,7 @@ jobs:
           npm run positions:unit
           npm run artifacts:unit
           npm run sync:unit
+          npm run sync:pagination
           npm run ingest:test
           npm run backfill:unit
           npm run engine:unit
