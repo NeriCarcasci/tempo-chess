@@ -97,6 +97,29 @@
       "timeoutSeconds": 900
     },
     {
+      "name": "forma-maia",
+      "ingress": "internal",
+      "allowUnauthenticated": false,
+      "serviceAccount": "forma-maia@tempo-chess-neri.iam.gserviceaccount.com",
+      "databaseRole": "forma_maia",
+      "databaseSecret": "forma-maia-db-url",
+      "audience": "forma-maia",
+      "urlEnv": "FORMA_MAIA_URL",
+      "capabilities": [
+        "model_inference"
+      ],
+      "executes": [
+        "cpu_interactive_model"
+      ],
+      "maxInstances": 2,
+      "containerConcurrency": 1,
+      "poolSize": 1,
+      "peakConnections": 2,
+      "cpu": "2",
+      "memory": "2Gi",
+      "timeoutSeconds": 90
+    },
+    {
       "name": "forma-analysis",
       "ingress": "internal",
       "allowUnauthenticated": false,
@@ -113,10 +136,10 @@
         "aggregation",
         "publication"
       ],
-      "maxInstances": 3,
+      "maxInstances": 2,
       "containerConcurrency": 2,
       "poolSize": 2,
-      "peakConnections": 6,
+      "peakConnections": 4,
       "cpu": "2",
       "memory": "2Gi",
       "timeoutSeconds": 900
@@ -152,16 +175,23 @@
       "maxAttempts": 3
     },
     {
+      "name": "maia-play",
+      "target": "forma-maia",
+      "maxConcurrentDispatches": 2,
+      "maxDispatchesPerSecond": 2,
+      "maxAttempts": 3
+    },
+    {
       "name": "analysis",
       "target": "forma-analysis",
-      "maxConcurrentDispatches": 4,
-      "maxDispatchesPerSecond": 4,
+      "maxConcurrentDispatches": 3,
+      "maxDispatchesPerSecond": 3,
       "maxAttempts": 5
     },
     {
       "name": "maintenance",
       "target": "forma-analysis",
-      "maxConcurrentDispatches": 2,
+      "maxConcurrentDispatches": 1,
       "maxDispatchesPerSecond": 1,
       "maxAttempts": 3
     }

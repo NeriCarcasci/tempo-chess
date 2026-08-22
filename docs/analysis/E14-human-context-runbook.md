@@ -145,6 +145,11 @@ it is also the reason the feature is not yet visible in production. Adding the
 binary to the worker image is the next step, and it is an image change, not a
 code change.
 
+The Maia-1/Lc0 deployment path remains intentionally inactive. New CPU-only
+continuation work uses Maia-3 5M and is documented in
+`docs/analysis/maia3-continuations.md`; it requires its own benchmark and
+production lifecycle event and may not reuse this Maia-1 calibration.
+
 ## Withdrawing it
 
 Three levers, in increasing severity. None of them rewrites a result.

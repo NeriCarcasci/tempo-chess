@@ -39,6 +39,8 @@ export const POLICIES = {
    * behind a changing address run the worker pool flat.
    */
   interactiveEvaluation: { name: "interactive_evaluation", windowSeconds: 60, max: 30 },
+  /** CPU model work. A human cannot reasonably make more than twenty replies a minute. */
+  maiaContinuation: { name: "maia_continuation", windowSeconds: 60, max: 20 },
   /**
    * One bot move in a game against the engine. Per actor, for the same reason
    * as the evaluation above: engine time is spent by whoever is signed in.

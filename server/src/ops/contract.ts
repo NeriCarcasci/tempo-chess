@@ -46,6 +46,7 @@ export const RESOURCE_CLASSES = [
   "ingestion",
   "cpu_engine",
   "cpu_model",
+  "cpu_interactive_model",
   "gpu_model",
   "aggregation",
   "publication",
@@ -81,6 +82,9 @@ export const WORKFLOW_KINDS = [
   // operation with an owner and a work item, and it is not a game analysis --
   // labelling it one would make "how many game analyses ran today" wrong.
   "position_evaluation",
+  // CPU human-policy work for scenario continuations. It is not an objective
+  // evaluation and not evidence from a historical game.
+  "position_continuation",
 ] as const;
 export type WorkflowKind = (typeof WORKFLOW_KINDS)[number];
 
@@ -110,6 +114,7 @@ export const QUEUES = [
   "stockfish-screen",
   "stockfish-deep",
   "analysis",
+  "maia-play",
   "maintenance",
 ] as const;
 export type Queue = (typeof QUEUES)[number];

@@ -49,6 +49,7 @@ export const DEPLOYMENT_ROLES = [
   "forma_ops",
   "forma_ingestion",
   "forma_stockfish",
+  "forma_maia",
   "forma_analysis",
 ] as const;
 export type DeploymentRole = (typeof DEPLOYMENT_ROLES)[number];

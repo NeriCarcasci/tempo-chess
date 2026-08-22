@@ -135,6 +135,13 @@ export const RUNTIME_ROLES: readonly RoleEntry[] = [
     actorContext: false,
   },
   {
+    name: "forma_maia",
+    purpose:
+      "Interactive human-policy worker role. Reads canonical positions and promoted Maia identity, writes anonymous policy cache rows, and advances its own durable attempts.",
+    usage: ["chess", "analysis", "ops"],
+    actorContext: false,
+  },
+  {
     name: "forma_analysis",
     purpose:
       "Deterministic analysis, estimation, finding, coaching, and publication worker role. Writes subject-owned derived outputs and the social projections it publishes.",

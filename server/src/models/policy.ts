@@ -44,6 +44,20 @@ export interface PolicyDistribution {
   entropyIsLowerBound: boolean;
 }
 
+/** A stable policy draw: retries with the same seed cannot choose another move. */
+export function stablePolicyMove(policy: PolicyDistribution, seed: string): string {
+  if (policy.moves.length === 0) throw new Error("cannot sample an empty policy");
+  const bytes = createHash("sha256").update(seed).digest();
+  const draw = bytes.readUInt32BE(0) / 0x1_0000_0000;
+  const availableMass = policy.moves.reduce((sum, move) => sum + move.probability, 0);
+  let cursor = draw * availableMass;
+  for (const move of policy.moves) {
+    cursor -= move.probability;
+    if (cursor < 0) return move.uci;
+  }
+  return policy.moves.at(-1)!.uci;
+}
+
 const UCI = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
 
 /**

@@ -6,6 +6,7 @@ import { ADMIN_ROUTES } from "./admin.js";
 import { ARTIFACT_ROUTES } from "./artifacts.js";
 import { CASE_STUDY_ROUTES } from "./case-studies.js";
 import { DASHBOARD_ROUTES } from "./dashboard.js";
+import { CONTINUATION_ROUTES } from "./continuations.js";
 import { DIRECTORY_ROUTES } from "./directory.js";
 import { GAME_ROUTES } from "./games.js";
 import { IDENTITY_ROUTES } from "./identity.js";
@@ -46,6 +47,7 @@ const PRODUCT_ROUTES = [
   ...OPENING_ROUTES,
   ...OPENING_BOOK_ROUTES,
   ...DASHBOARD_ROUTES,
+  ...CONTINUATION_ROUTES,
 ] as unknown as RouteDefinition<never, never, never>[];
 
 /**

@@ -22,7 +22,7 @@ import { allowedTaskTypes } from "./handlers.js";
 import { registerEngineHandlers } from "../engine/worker.js";
 import { registerEstimateHandlers } from "../estimates/worker.js";
 import { registerGoalHandlers } from "../goals/progress-worker.js";
-import { registerModelHandlers } from "../models/worker.js";
+import { registerContinuationHandlers, registerModelHandlers } from "../models/worker.js";
 import { registerConceptHandlers } from "../analysis/concepts/worker.js";
 import { registerOnboardingHandlers } from "../onboarding/worker.js";
 import { registerPositionHandlers } from "../positions/worker.js";
@@ -33,6 +33,7 @@ export type DeploymentName =
   | "forma-ops"
   | "forma-ingestion"
   | "forma-stockfish"
+  | "forma-maia"
   | "forma-analysis";
 
 /**
@@ -61,6 +62,12 @@ export function registerDeploymentHandlers(deployment: string): string[] {
       registerEstimateHandlers();
       registerOnboardingHandlers();
       registerGoalHandlers();
+      break;
+
+    case "forma-maia":
+      // Interactive human-policy serving is isolated from offline analysis so
+      // cold starts or player bursts cannot consume onboarding capacity.
+      registerContinuationHandlers();
       break;
 
     case "forma-ingestion":
@@ -92,6 +99,7 @@ export function registerDeploymentHandlers(deployment: string): string[] {
 export function registerAllHandlers(): string[] {
   registerEngineHandlers("both");
   registerModelHandlers();
+  registerContinuationHandlers();
   registerConceptHandlers();
   registerPositionHandlers();
   registerEstimateHandlers();

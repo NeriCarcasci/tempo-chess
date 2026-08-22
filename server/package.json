@@ -71,7 +71,7 @@
     "engine:api": "tsx src/engine/gates/api.ts",
     "analysis:promote": "tsx src/analysis/promote.ts",
     "analysis:live": "tsx src/analysis/observations.live.ts",
-    "models:unit": "tsx src/models/models.test.ts",
+    "models:unit": "tsx src/models/models.test.ts && node --test --import tsx src/models/maia3.test.ts",
     "models:holdout": "tsx src/models/fetch-holdout.ts",
     "models:benchmark": "tsx src/models/benchmark.ts",
     "models:integration": "tsx src/models/gates/integration.ts",
