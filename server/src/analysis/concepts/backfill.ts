@@ -66,7 +66,8 @@ try {
 
   let opportunities = 0;
   let censored = 0;
-  let skipped = 0;
+  let unregistered = 0;
+  let unrecordable = 0;
   let alreadyPresent = 0;
   let failed = 0;
   const byConcept = new Map<string, number>();
@@ -77,13 +78,14 @@ try {
       const summary = result.outputSummary as {
         opportunities?: number;
         censored?: number;
-        skipped?: number;
+        abstentions?: { unregisteredConcept?: number; unrecordableDraft?: number };
         alreadyPresent?: number;
         concepts?: Record<string, number>;
       };
       opportunities += summary.opportunities ?? 0;
       censored += summary.censored ?? 0;
-      skipped += summary.skipped ?? 0;
+      unregistered += summary.abstentions?.unregisteredConcept ?? 0;
+      unrecordable += summary.abstentions?.unrecordableDraft ?? 0;
       alreadyPresent += summary.alreadyPresent ?? 0;
       for (const [slug, count] of Object.entries(summary.concepts ?? {})) {
         byConcept.set(slug, (byConcept.get(slug) ?? 0) + count);
@@ -106,7 +108,10 @@ try {
   // three is how a backfill that silently did nothing gets called a success.
   console.log(`written    ${opportunities} opportunities (${censored} censored)`);
   console.log(`present    ${alreadyPresent} observations already recorded`);
-  if (skipped > 0) console.log(`skipped    ${skipped} drafts (unregistered concept or unrecordable)`);
+  // Named separately: a catalogue this database has not registered is an
+  // operator problem, and a draft the validators rejected is a detector bug.
+  if (unregistered > 0) console.log(`unregistered ${unregistered} drafts against concepts this database does not have`);
+  if (unrecordable > 0) console.log(`unrecordable ${unrecordable} drafts the validators refused`);
   if (failed > 0) console.log(`failed     ${failed} runs`);
   for (const [slug, count] of [...byConcept].sort((a, b) => b[1] - a[1])) {
     console.log(`  ${slug.padEnd(24)} ${count}`);

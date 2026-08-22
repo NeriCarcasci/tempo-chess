@@ -29,6 +29,7 @@
  * the failure presents as "you have no data".
  */
 
+import { createHash } from "node:crypto";
 import type { Sql } from "postgres";
 import { withActor } from "../../db/actor.js";
 import { jsonParam } from "../../db/json.js";
@@ -43,6 +44,7 @@ import {
   groupByEvent,
   DETECTOR_VERSION,
   type CandidateLine,
+  type DetectedOpportunity,
   type GameFacts,
   type PositionFact,
   type TransitionFact,
@@ -50,6 +52,46 @@ import {
 import { publishedMaterializationRun } from "../../engine/recipe.js";
 
 export const DETECT_TASK = "analysis_detect_concepts";
+
+/**
+ * Whether the detector ran, and if not, why.
+ *
+ * The distinction FOR-132 turns on. A game the detector read and found nothing
+ * in is *complete* -- it has been measured, and the answer is that nothing
+ * happened worth recording. A game it could not read is *abstained*. Reporting
+ * both as "no concepts" would let an unmeasured game masquerade as a clean one,
+ * and a player would be shown an empty report either way with no means of
+ * telling which they were looking at.
+ */
+export type DetectionState = "complete" | "abstained";
+
+/**
+ * A stable fingerprint of what the detector concluded about one game.
+ *
+ * Over the detected output rather than over the rows written, so it does not
+ * move when the same conclusions are written a second time or when database
+ * identities differ between environments. Two runs of the same detector version
+ * over the same game produce the same string; a change in the string means a
+ * change in what Forma believes about that game.
+ *
+ * Sorted before hashing because the checksum must not depend on detector
+ * ordering -- that is a separate contract, tested separately, and folding it in
+ * here would make an ordering change look like an evidence change.
+ */
+export function detectionChecksum(detected: readonly DetectedOpportunity[]): string {
+  const lines = detected
+    .map((found) => [
+      found.event.detectionKey,
+      found.conceptSlug,
+      found.draft.role,
+      found.draft.responseObserved ? "observed" : "censored",
+      found.draft.success === null ? "null" : String(found.draft.success),
+      found.draft.censoredReason ?? "",
+      found.event.completeness,
+    ].join("|"))
+    .sort();
+  return createHash("sha256").update(lines.join("\n")).digest("hex");
+}
 
 interface Payload {
   readonly runId?: unknown;
@@ -174,7 +216,13 @@ export async function detectForRun(
       // Nothing to read is not nothing to say, but it is nothing to measure.
       return {
         outputRef: `run:${runId}`,
-        outputSummary: { opportunities: 0, reason: "no_assessed_transitions" },
+        outputSummary: {
+          // Read, and there was nothing in it. Complete, not unavailable.
+          detection: "complete" satisfies DetectionState,
+          opportunities: 0,
+          reason: "no_assessed_transitions",
+          checksum: detectionChecksum([]),
+        },
       };
     }
     const transitionsAreUsable = transitions.every((row) =>
@@ -190,7 +238,12 @@ export async function detectForRun(
       // and coercing an unknown colour to Black would make the stronger claim.
       return {
         outputRef: `run:${runId}`,
-        outputSummary: { opportunities: 0, reason: "malformed_transition_evidence" },
+        outputSummary: {
+          // Could not be read. Distinct from having been read and found empty.
+          detection: "abstained" satisfies DetectionState,
+          opportunities: 0,
+          reason: "malformed_transition_evidence",
+        },
       };
     }
 
@@ -338,13 +391,23 @@ export async function detectForRun(
     const resolveColor = (side: "subject" | "opponent" | null): string | null =>
       side === null ? null : side === "subject" ? game.subject_color : opponentColor;
 
+    const detected = groups.flatMap((group) => group.observations);
+
     let written = 0;
     let censored = 0;
-    let skipped = 0;
     let alreadyPresent = 0;
     let events = 0;
     let labels = 0;
+    let succeeded = 0;
+    let failed = 0;
     const byConcept = new Map<string, number>();
+    const byRole = new Map<string, number>();
+    const byCompleteness = new Map<string, number>();
+    // Abstentions are counted by reason rather than lumped into one "skipped".
+    // "The catalogue in this database is behind the build" and "the detector
+    // proposed a row that would have been a lie" are different operator
+    // problems, and one number for both hides whichever is happening.
+    const abstentions = { unregisteredConcept: 0, unrecordableDraft: 0 };
 
     for (const group of groups) {
       const { detectionKey } = group.event;
@@ -366,14 +429,14 @@ export async function detectForRun(
           // The catalogue in the database is behind this build. Skipping is the
           // conservative answer: an unregistered concept has no definition a
           // player could be shown, so evidence against it could not be explained.
-          skipped += 1;
+          abstentions.unregisteredConcept += 1;
           continue;
         }
         // The validators exist so a detector cannot write a row that lies. They
         // are checked here, on the way in, rather than trusted.
         if (!isRecordableOpportunity(observation.draft)
           || !difficultyIsUncontaminated(observation.draft.difficulty)) {
-          skipped += 1;
+          abstentions.unrecordableDraft += 1;
           continue;
         }
         if (knownOpportunities.has(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`)) {
@@ -469,20 +532,38 @@ export async function detectForRun(
         knownOpportunities.add(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`);
         written += 1;
         if (!observation.draft.responseObserved) censored += 1;
+        else if (observation.draft.success) succeeded += 1;
+        else failed += 1;
         byConcept.set(observation.conceptSlug, (byConcept.get(observation.conceptSlug) ?? 0) + 1);
+        byRole.set(observation.draft.role, (byRole.get(observation.draft.role) ?? 0) + 1);
+        byCompleteness.set(
+          group.event.completeness,
+          (byCompleteness.get(group.event.completeness) ?? 0) + 1,
+        );
       }
     }
 
     return {
       outputRef: `run:${runId}`,
       outputSummary: {
+        detection: "complete" satisfies DetectionState,
         opportunities: written,
         events,
         labels,
-        censored,
-        skipped,
         alreadyPresent,
+        // Outcomes, kept apart. `censored` is not a failure and adding it to
+        // one is the arithmetic §17.5 exists to forbid.
+        succeeded,
+        failed,
+        censored,
+        abstentions,
         concepts: Object.fromEntries(byConcept),
+        roles: Object.fromEntries(byRole),
+        completeness: Object.fromEntries(byCompleteness),
+        // Counts and a fingerprint. Nothing here carries a square, a move, a
+        // FEN or a subject identity: a summary is written to logs and to a
+        // publication manifest, and a player's board does not belong in either.
+        checksum: detectionChecksum(detected),
       },
       metrics: { inputCount: transitions.length, outputCount: written },
     };
