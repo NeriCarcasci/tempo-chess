@@ -373,7 +373,7 @@ export interface paths {
         };
         /**
          * The published objective review of one owned game
-         * @description Transition assessments and critical moments for the run the publication pointer currently names. `sections` states what each part of the review can say: `unavailable` means the component has not run, which is different from an empty result. `decisionLoss` is actor-perspective expected score given up, measured against the tolerance rule the run pinned; it is not a `mistake` label.
+         * @description Transition assessments, critical moments and detected concepts for the run the publication pointer currently names. `sections` states what each part of the review can say: `unavailable` means the component has not run, which is different from an empty result -- `events: published` with an empty array is a game that was measured and had nothing in it. Concept `success` is null exactly when `observed` is false, and `censoredReason` says why; a response nobody made is censored, never failed. `decisionLoss` is actor-perspective expected score given up, measured against the tolerance rule the run pinned; it is not a `mistake` label.
          */
         get: operations["getGameReview"];
         put?: never;
@@ -787,6 +787,26 @@ export interface paths {
         get: operations["lookupPlayer"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/positions/continuations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Maia for a human-style reply from a position
+         * @description Validates a standard-chess FEN and uses the promoted CPU Maia-3 policy at one of the supported strengths (800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400). A cached policy returns immediately; a cache miss returns a durable workflow. Repeating a completed request with the same turnKey returns the same sampled move. This is a scenario continuation primitive, not the legacy play surface and not an objective engine evaluation.
+         */
+        post: operations["requestPositionContinuation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1930,6 +1950,18 @@ export interface operations {
                         data: {
                             coverageWarnings: string[];
                             estimates: {
+                                copy: {
+                                    category: string | null;
+                                    conceptSlug: string | null;
+                                    definition: string;
+                                    narrative: {
+                                        missed: string;
+                                        opportunity: string;
+                                        succeeded: string;
+                                    } | null;
+                                    role: string | null;
+                                    roleLabel: string | null;
+                                };
                                 coverage: {
                                     censored: number;
                                     failure: number;
@@ -2813,6 +2845,107 @@ export interface operations {
                                 fromPly: number;
                                 reasons: string[];
                             }[];
+                            events: {
+                                actorColor: ("white" | "black") | null;
+                                affectedColor: ("white" | "black") | null;
+                                /** @enum {string} */
+                                completeness: "complete" | "incomplete" | "censored";
+                                concepts: {
+                                    censoredReason: string | null;
+                                    color: string;
+                                    conceptVersionId: string;
+                                    confidence: number | null;
+                                    definition: string;
+                                    detectorVersion: string;
+                                    difficulty: {
+                                        [key: string]: number;
+                                    } | null;
+                                    displayName: string;
+                                    evidenceItemId: string | null;
+                                    /** @enum {string} */
+                                    evidenceSourceKind: "engine" | "deterministic" | "human_model";
+                                    observed: boolean;
+                                    opportunityPly: number;
+                                    responsePly: number | null;
+                                    role: string;
+                                    score: number | null;
+                                    slug: string;
+                                    success: boolean | null;
+                                    versionNo: number;
+                                }[];
+                                confidence: number | null;
+                                endPly: number;
+                                eventType: string;
+                                facts: {
+                                    acceptable?: boolean;
+                                    acceptableMoveCount?: number | null;
+                                    alternativeVerified?: boolean;
+                                    atRiskCp?: number;
+                                    attacker?: number;
+                                    attackers?: number[];
+                                    bestDefence?: string | null;
+                                    candidateCount?: number | null;
+                                    censored?: string | null;
+                                    converted?: boolean | null;
+                                    coverage?: string;
+                                    criticality?: number;
+                                    defender?: number;
+                                    defenderRole?: string;
+                                    defendersBefore?: number;
+                                    discoveredPiece?: number;
+                                    duty?: string;
+                                    escapesTried?: number[];
+                                    expectedGainCp?: number;
+                                    expectedLossCp?: number;
+                                    expectedScoreBefore?: number;
+                                    followUp?: number;
+                                    followUpCp?: number;
+                                    from?: number;
+                                    front?: number;
+                                    frontIsKing?: boolean;
+                                    frontValueCp?: number;
+                                    kingInvolved?: boolean;
+                                    legalMoveCount?: number | null;
+                                    mate?: boolean;
+                                    mover?: string;
+                                    moverChecks?: boolean;
+                                    moverTarget?: number | null;
+                                    moverTo?: number;
+                                    movesPlayed?: number;
+                                    onOfferCp?: number;
+                                    piece?: string;
+                                    pieceValueCp?: number;
+                                    pinned?: number;
+                                    pinnedValueCp?: number;
+                                    pinner?: number;
+                                    rank?: number | null;
+                                    ray?: number[];
+                                    rear?: number;
+                                    rearValueCp?: number;
+                                    remainingCp?: number;
+                                    removalMethod?: string;
+                                    repliesConsidered?: number;
+                                    resolution?: string;
+                                    resolved?: boolean;
+                                    square?: number;
+                                    squareAfter?: number | null;
+                                    subtype?: string;
+                                    taken?: boolean;
+                                    target?: number;
+                                    targetRole?: string;
+                                    targetValueCp?: number;
+                                    targetValues?: number[];
+                                    targets?: number[];
+                                    to?: number;
+                                    uncoveredTarget?: number;
+                                    uncoveredValueCp?: number;
+                                    verificationLine?: string[] | null;
+                                    verifiedBy?: string;
+                                    winnableCp?: number;
+                                };
+                                focalPly: number;
+                                startPly: number;
+                            }[];
                             gameId: string;
                             moves: {
                                 acceptable: boolean;
@@ -2860,6 +2993,8 @@ export interface operations {
                                 events: "published" | "unavailable";
                                 /** @enum {string} */
                                 explanations: "published" | "unavailable";
+                                /** @enum {string} */
+                                practicalContext: "published" | "unavailable";
                                 /** @enum {string} */
                                 trajectory: "published" | "unavailable";
                                 /** @enum {string} */
@@ -5081,6 +5216,113 @@ export interface operations {
             };
         };
     };
+    requestPositionContinuation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque client-generated value. An identical retry replays the original response; a different request under the same key is a conflict. */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    fen: string;
+                    rating: 800 | 1000 | 1200 | 1400 | 1600 | 1800 | 2000 | 2200 | 2400;
+                    turnKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Ask Maia for a human-style reply from a position */
+            202: {
+                headers: {
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            candidates: {
+                                probability: number;
+                                uci: string;
+                            }[];
+                            moveUci: string | null;
+                            rating: 800 | 1000 | 1200 | 1400 | 1600 | 1800 | 2000 | 2200 | 2400;
+                            /** @enum {string} */
+                            state: "ready" | "scheduled";
+                            workflowId: string | null;
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description The request could not be accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description This idempotency key was already used for a different request */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     evaluatePosition: {
         parameters: {
             query?: never;
@@ -5757,7 +5999,7 @@ export interface operations {
         parameters: {
             query?: {
                 state?: "queued" | "running" | "succeeded" | "failed" | "cancelling" | "cancelled";
-                kind?: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation";
+                kind?: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation";
                 cursor?: string;
                 limit?: string;
             };
@@ -5786,7 +6028,7 @@ export interface operations {
                             } | null;
                             id: string;
                             /** @enum {string} */
-                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation";
+                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation";
                             progress: {
                                 completedWeight: number;
                                 message: string | null;
@@ -5890,7 +6132,7 @@ export interface operations {
                             } | null;
                             id: string;
                             /** @enum {string} */
-                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation";
+                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation";
                             progress: {
                                 completedWeight: number;
                                 message: string | null;
@@ -5991,7 +6233,7 @@ export interface operations {
                             } | null;
                             id: string;
                             /** @enum {string} */
-                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation";
+                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation";
                             progress: {
                                 completedWeight: number;
                                 message: string | null;

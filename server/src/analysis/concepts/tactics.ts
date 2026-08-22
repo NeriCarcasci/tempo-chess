@@ -918,7 +918,7 @@ function detectDiscoveredAttack({ game, index }: DetectorContext): DetectedOppor
           actorColor: actor,
           facts: {
             discoveredPiece: slider,
-            mover: move.from,
+            mover: before.position.board.get(move.from)?.role ?? "unknown",
             moverTo: move.to,
             from: move.from,
             to: move.to,

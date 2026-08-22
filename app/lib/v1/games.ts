@@ -18,7 +18,7 @@
  *     somewhere unpredictable.
  */
 
-import { v1Maybe } from "./client";
+import { v1Data, v1Maybe } from "./client";
 
 export interface GameMove {
   uci: string;
@@ -148,15 +148,32 @@ function readGame(entry: unknown): RecentGame | null {
 export async function fetchRecentGames(limit: number): Promise<RecentGame[]> {
   try {
     const data = await v1Maybe<unknown>("/v1/games/recent", { query: { limit } });
-    // A collection route may answer with the array itself or with `{ games }`.
-    const rows = Array.isArray(data)
-      ? data
-      : Array.isArray((data as { games?: unknown } | null)?.games)
-        ? ((data as { games: unknown[] }).games)
-        : null;
-    if (rows === null) return [];
-    return rows.map(readGame).filter((game): game is RecentGame => game !== null);
+    return gamesFrom(data) ?? [];
   } catch {
     return [];
   }
+}
+
+/** One decoder for the optional and strict reads, so their accepted wire shape cannot drift. */
+function gamesFrom(data: unknown): RecentGame[] | null {
+  // A collection route may answer with the array itself or with `{ games }`.
+  const rows = Array.isArray(data)
+    ? data
+    : Array.isArray((data as { games?: unknown } | null)?.games)
+      ? (data as { games: unknown[] }).games
+      : null;
+  return rows?.map(readGame).filter((game): game is RecentGame => game !== null) ?? null;
+}
+
+/**
+ * The same read for callers that must distinguish an empty archive from a
+ * failed request. Optional dashboard rows use `fetchRecentGames`; identifier
+ * resolution cannot, because swallowing the failure turns "unreachable" into
+ * the stronger claim that the game was never synced.
+ */
+export async function fetchRecentGamesStrict(limit: number): Promise<RecentGame[]> {
+  const data = await v1Data<unknown>("/v1/games/recent", { query: { limit } });
+  const games = gamesFrom(data);
+  if (games === null) throw new Error("the recent-games response has no games array");
+  return games;
 }

@@ -20,6 +20,7 @@ import {
   type PositionFact,
   type TransitionFact,
 } from "./detect.js";
+import { detectionChecksum, eventChecksum } from "./worker.js";
 
 function play(moves: readonly string[], initial = INITIAL_FEN): PositionFact[] {
   const board = Chess.fromSetup(parseFen(initial).unwrap()).unwrap();
@@ -185,4 +186,63 @@ test("a position that became winning attributes the win to nobody", () => {
     "naming an actor here credits the subject for an opponent's mistake",
   );
   assert.equal(winning.event.affected, "subject");
+});
+
+// ---------------------------------------------------------------------------
+// FOR-132: what the worker reports about a game it has read
+// ---------------------------------------------------------------------------
+
+test("the detection checksum is over conclusions, not over row order", () => {
+  // It must not move when the same conclusions are written a second time, and
+  // it must not depend on which order the detectors ran in -- ordering is a
+  // separate contract with its own test, and folding it in here would make an
+  // ordering change look like an evidence change.
+  const facts = game();
+  const detected = detectGame(facts);
+  assert.ok(detected.length > 1, "the fixture produced too little to compare");
+
+  assert.equal(detectionChecksum(detected), detectionChecksum(detectGame(facts)));
+  assert.equal(
+    detectionChecksum(detected),
+    detectionChecksum([...detected].reverse()),
+    "reversing the detector order changed the fingerprint",
+  );
+});
+
+test("a different conclusion is a different checksum", () => {
+  const detected = detectGame(game());
+  const [first, ...rest] = detected;
+  assert.ok(first);
+  const flipped = [
+    { ...first, draft: { ...first.draft, success: !first.draft.success } },
+    ...rest,
+  ];
+  assert.notEqual(
+    detectionChecksum(detected),
+    detectionChecksum(flipped),
+    "a changed success value must change what Forma says it believes",
+  );
+});
+
+test("checksums cover the evidence, not only the identity and outcome", () => {
+  const detected = detectGame(game());
+  const [first, ...rest] = detected;
+  assert.ok(first);
+  const changedFact = [{
+    ...first,
+    event: { ...first.event, facts: { ...first.event.facts, changed: true } },
+  }, ...rest];
+  const changedDifficulty = [{
+    ...first,
+    draft: { ...first.draft, difficulty: { ...(first.draft.difficulty ?? {}), legalReplies: 99 } },
+  }, ...rest];
+  assert.notEqual(eventChecksum(detected), eventChecksum(changedFact));
+  assert.notEqual(detectionChecksum(detected), detectionChecksum(changedDifficulty));
+});
+
+test("a game with nothing in it still has a checksum", () => {
+  // The empty answer is an answer. A run that read a game and found nothing is
+  // complete, and it has to be distinguishable from one that never ran -- which
+  // is why the empty case gets a fingerprint rather than being omitted.
+  assert.match(detectionChecksum([]), /^[0-9a-f]{64}$/);
 });

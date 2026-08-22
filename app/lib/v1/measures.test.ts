@@ -11,10 +11,9 @@
 
 import { describe, expect, test } from "vitest";
 import {
+  CENSORING_NOTE,
   coverageItemText,
   holdings,
-  MEASURES,
-  measureFor,
   measureName,
   orderDimensions,
   summariseReport,
@@ -45,48 +44,24 @@ const counts = (over: Partial<Record<ItemKind, number>> = {}): Record<ItemKind, 
 });
 
 describe("the catalogue", () => {
-  test("every key is the one the coverage route sends", () => {
-    // `readDimensionFacts` strips the frame suffix, so what arrives is
-    // `${concept_slug}_${role}`. A key built any other way looks up to nothing
-    // and the row falls back to a humanised slug without anything failing.
-    for (const measure of MEASURES) {
-      expect(measure.dimensionKey).toBe(`${measure.conceptSlug}_${measure.role}`);
-    }
-  });
-
-  test("no two measures read the same", () => {
-    expect(new Set(MEASURES.map((m) => m.dimensionKey)).size).toBe(MEASURES.length);
-    expect(new Set(MEASURES.map((m) => m.name)).size).toBe(MEASURES.length);
-    expect(new Set(MEASURES.map((m) => m.definition)).size).toBe(MEASURES.length);
-  });
-
-  test("the two halves of a critical moment are named apart", () => {
-    // The whole reason they are separate rows: seeing the move and choosing it
-    // are different failures, and one label for both describes neither.
-    const seeing = measureFor("critical_moment_recognize");
-    const choosing = measureFor("critical_moment_execute");
-    expect(seeing?.name).not.toBe(choosing?.name);
-    expect(seeing?.conceptSlug).toBe(choosing?.conceptSlug);
-  });
-
-  test("only the measure that can censor carries a censoring sentence", () => {
-    // Conversion is the one concept where the subject can never get to answer,
-    // because the opponent resigned. Every other measure judges a move that was
-    // actually played, so a censoring note there would describe nothing.
-    const censoring = MEASURES.filter((m) => m.censoring !== null).map((m) => m.dimensionKey);
-    expect(censoring).toEqual(["winning_conversion_convert"]);
-  });
-
-  test("the censoring sentence says the chances are not held against you", () => {
-    const sentence = measureFor("winning_conversion_convert")!.censoring!;
-    expect(sentence).toMatch(/set aside/i);
-    expect(sentence).not.toMatch(/fail/i);
+  test("the censoring note says the chances are not held against you", () => {
+    // It used to be a per-concept sentence, attached in a table that named
+    // conversion as the only measurement able to censor. That was true of
+    // catalogue v1 and stopped being true when the tactical families landed:
+    // every one of them censors when the game ends before the subject replies.
+    expect(CENSORING_NOTE).toMatch(/set aside/i);
+    expect(CENSORING_NOTE).not.toMatch(/fail/i);
   });
 });
 
 describe("measureName", () => {
-  test("a known key is a sentence-cased name, never a slug", () => {
-    expect(measureName("only_move_recognize")).toBe("Finding the only move");
+  test("a key is never printed back at a reader as a key", () => {
+    // The names themselves now come from the API beside each estimate, because
+    // the catalogue is an open set on the server and this build cannot know
+    // what a seventh concept is called. What has to hold here is the floor: no
+    // underscore ever reaches a page.
+    expect(measureName("only_move_recognize")).not.toMatch(/_/);
+    expect(measureName("something_nobody_shipped_yet_respond")).not.toMatch(/_/);
   });
 
   test("a key from a catalogue this build has not met is still readable", () => {
@@ -94,7 +69,7 @@ describe("measureName", () => {
     // concept lands this page must not print `back_rank_recognize` at anybody.
     const name = measureName("back_rank_recognize");
     expect(name).not.toContain("_");
-    expect(measureFor("back_rank_recognize")).toBeNull();
+    expect(name.length).toBeGreaterThan(0);
   });
 });
 
@@ -154,8 +129,15 @@ describe("coverageItemText", () => {
     for (const sentence of [limitation, gap, measure]) expect(sentence).not.toContain("_");
   });
 
-  test("a dimension key is named by its measure", () => {
-    expect(coverageItemText("winning_conversion_convert")).toContain("Converting a winning position");
+  test("a dimension key without catalogue metadata falls back without printing the identifier", () => {
+    // The coverage route sends a key and nothing else -- no estimate, so no
+    // `copy` to read the catalogue's own words from. What has to hold is that
+    // the sentence is readable and carries no identifier; the catalogue name
+    // appears wherever an estimate is present to carry it.
+    const sentence = coverageItemText("winning_conversion_convert");
+    expect(sentence).not.toContain("_");
+    expect(sentence).not.toMatch(/winning conversion/i);
+    expect(sentence).toMatch(/measured area/i);
   });
 });
 

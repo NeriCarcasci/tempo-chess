@@ -29,6 +29,7 @@
  * the failure presents as "you have no data".
  */
 
+import { createHash } from "node:crypto";
 import type { Sql } from "postgres";
 import { withActor } from "../../db/actor.js";
 import { jsonParam } from "../../db/json.js";
@@ -43,6 +44,7 @@ import {
   groupByEvent,
   DETECTOR_VERSION,
   type CandidateLine,
+  type DetectedOpportunity,
   type GameFacts,
   type PositionFact,
   type TransitionFact,
@@ -50,6 +52,111 @@ import {
 import { publishedMaterializationRun } from "../../engine/recipe.js";
 
 export const DETECT_TASK = "analysis_detect_concepts";
+export const CONCEPT_EVENT_FAMILY = "chess_events";
+export const CONCEPT_OPPORTUNITY_FAMILY = "concept_opportunities";
+export const CONCEPT_ARTIFACT_FAMILIES = [
+  CONCEPT_EVENT_FAMILY,
+  CONCEPT_OPPORTUNITY_FAMILY,
+] as const;
+
+/**
+ * Whether the detector ran, and if not, why.
+ *
+ * The distinction FOR-132 turns on. A game the detector read and found nothing
+ * in is *complete* -- it has been measured, and the answer is that nothing
+ * happened worth recording. A game it could not read is *abstained*. Reporting
+ * both as "no concepts" would let an unmeasured game masquerade as a clean one,
+ * and a player would be shown an empty report either way with no means of
+ * telling which they were looking at.
+ */
+export type DetectionState = "complete" | "abstained";
+
+/**
+ * A stable fingerprint of what the detector concluded about one game.
+ *
+ * Over the detected output rather than over the rows written, so it does not
+ * move when the same conclusions are written a second time or when database
+ * identities differ between environments. Two runs of the same detector version
+ * over the same game produce the same string; a change in the string means a
+ * change in what Forma believes about that game.
+ *
+ * Sorted before hashing because the checksum must not depend on detector
+ * ordering -- that is a separate contract, tested separately, and folding it in
+ * here would make an ordering change look like an evidence change.
+ */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonical(entry)]),
+    );
+  }
+  return value;
+}
+
+function sha256(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+
+export function eventChecksum(detected: readonly DetectedOpportunity[]): string {
+  const events = new Map<string, DetectedOpportunity["event"]>();
+  for (const found of detected) events.set(found.event.detectionKey, found.event);
+  return sha256([...events.values()].sort((left, right) =>
+    left.detectionKey.localeCompare(right.detectionKey)));
+}
+
+export function detectionChecksum(detected: readonly DetectedOpportunity[]): string {
+  return sha256(detected
+    .map((found) => ({
+      conceptSlug: found.conceptSlug,
+      phase: found.phase,
+      eventKey: found.event.detectionKey,
+      draft: found.draft,
+    }))
+    .sort((left, right) => JSON.stringify(canonical(left)).localeCompare(JSON.stringify(canonical(right)))));
+}
+
+async function recordDetectionArtifacts(
+  tx: Sql,
+  runId: string,
+  detected: readonly DetectedOpportunity[],
+): Promise<void> {
+  const groups = groupByEvent(detected);
+  const entries = [
+    { family: CONCEPT_EVENT_FAMILY, count: groups.length, checksum: eventChecksum(detected) },
+    {
+      family: CONCEPT_OPPORTUNITY_FAMILY,
+      count: detected.length,
+      checksum: detectionChecksum(detected),
+    },
+  ] as const;
+
+  for (const entry of entries) {
+    const [existing] = await tx<{ checksum: string; row_count: number }[]>`
+      select checksum, row_count from analysis.run_artifacts
+      where run_id = ${runId} and family = ${entry.family}
+    `;
+    if (existing) {
+      if (existing.checksum !== entry.checksum || existing.row_count !== entry.count) {
+        // The transaction is rolled back, including any evidence written before
+        // this check. A run whose immutable manifest disagrees needs a new run;
+        // committing the new rows would make an old publication change in place.
+        throw new WorkFailure(
+          "permanent",
+          "concept_manifest_drift",
+          `the existing ${entry.family} manifest disagrees with this detector conclusion`,
+        );
+      }
+      continue;
+    }
+    await tx`
+      insert into analysis.run_artifacts (run_id, family, row_count, checksum)
+      values (${runId}, ${entry.family}, ${entry.count}, ${entry.checksum})
+    `;
+  }
+}
 
 interface Payload {
   readonly runId?: unknown;
@@ -171,10 +278,26 @@ export async function detectForRun(
       order by from_ply
     `;
     if (transitions.length === 0) {
+      await recordDetectionArtifacts(tx as unknown as Sql, runId, []);
       // Nothing to read is not nothing to say, but it is nothing to measure.
       return {
         outputRef: `run:${runId}`,
-        outputSummary: { opportunities: 0, reason: "no_assessed_transitions" },
+        outputSummary: {
+          // Read, and there was nothing in it. Complete, not unavailable.
+          detection: "complete" satisfies DetectionState,
+          opportunities: 0,
+          events: 0,
+          labels: 0,
+          succeeded: 0,
+          failed: 0,
+          censored: 0,
+          abstentions: { unregisteredConcept: 0, unrecordableDraft: 0 },
+          concepts: {},
+          roles: {},
+          completeness: {},
+          reason: "no_assessed_transitions",
+          checksum: detectionChecksum([]),
+        },
       };
     }
     const transitionsAreUsable = transitions.every((row) =>
@@ -190,7 +313,12 @@ export async function detectForRun(
       // and coercing an unknown colour to Black would make the stronger claim.
       return {
         outputRef: `run:${runId}`,
-        outputSummary: { opportunities: 0, reason: "malformed_transition_evidence" },
+        outputSummary: {
+          // Could not be read. Distinct from having been read and found empty.
+          detection: "abstained" satisfies DetectionState,
+          opportunities: 0,
+          reason: "malformed_transition_evidence",
+        },
       };
     }
 
@@ -319,14 +447,22 @@ export async function detectForRun(
       knownEvents.set(row.detection_key, Number(row.id));
     }
 
-    const knownOpportunities = new Set<string>();
-    for (const row of await tx<{ detection_key: string; concept_version_id: string; role: string }[]>`
-      select e.detection_key, o.concept_version_id, o.role
+    const knownOpportunities = new Map<string, string>();
+    for (const row of await tx<{
+      id: string;
+      detection_key: string;
+      concept_version_id: string;
+      role: string;
+    }[]>`
+      select o.id, e.detection_key, o.concept_version_id, o.role
       from analysis.concept_opportunities o
       join analysis.chess_events e on e.id = o.event_id
       where o.run_id = ${materializationRunId} and e.detection_key is not null
     `) {
-      knownOpportunities.add(`${row.detection_key}|${row.concept_version_id}|${row.role}`);
+      knownOpportunities.set(
+        `${row.detection_key}|${row.concept_version_id}|${row.role}`,
+        String(row.id),
+      );
     }
 
     // One physical occurrence per group, however many things are measured about
@@ -338,13 +474,49 @@ export async function detectForRun(
     const resolveColor = (side: "subject" | "opponent" | null): string | null =>
       side === null ? null : side === "subject" ? game.subject_color : opponentColor;
 
-    let written = 0;
+    const detected = groups.flatMap((group) => group.observations);
+
+    let succeeded = 0;
+    let failed = 0;
     let censored = 0;
-    let skipped = 0;
-    let alreadyPresent = 0;
-    let events = 0;
-    let labels = 0;
     const byConcept = new Map<string, number>();
+    const byRole = new Map<string, number>();
+    const byCompleteness = new Map<string, number>();
+    // Abstentions are counted by reason rather than lumped into one "skipped".
+    // "The catalogue in this database is behind the build" and "the detector
+    // proposed a row that would have been a lie" are different operator
+    // problems, and one number for both hides whichever is happening.
+    const abstentions = { unregisteredConcept: 0, unrecordableDraft: 0 };
+
+    // Refuse the whole conclusion before writing any of it. A detector bug or
+    // a database whose catalogue is behind this build is not a "complete"
+    // result with a few rows missing, and partial output may not publish.
+    for (const observation of detected) {
+      if (!versions.has(observation.conceptSlug) || !conceptBySlug(observation.conceptSlug)) {
+        abstentions.unregisteredConcept += 1;
+      } else if (!isRecordableOpportunity(observation.draft)
+        || !difficultyIsUncontaminated(observation.draft.difficulty)) {
+        abstentions.unrecordableDraft += 1;
+      }
+      byConcept.set(observation.conceptSlug, (byConcept.get(observation.conceptSlug) ?? 0) + 1);
+      byRole.set(observation.draft.role, (byRole.get(observation.draft.role) ?? 0) + 1);
+      byCompleteness.set(
+        observation.event.completeness,
+        (byCompleteness.get(observation.event.completeness) ?? 0) + 1,
+      );
+      if (!observation.draft.responseObserved) censored += 1;
+      else if (observation.draft.success === true) succeeded += 1;
+      else failed += 1;
+    }
+    if (abstentions.unregisteredConcept > 0 || abstentions.unrecordableDraft > 0) {
+      throw new WorkFailure(
+        abstentions.unregisteredConcept > 0 ? "unsupported" : "permanent",
+        abstentions.unregisteredConcept > 0
+          ? "unregistered_concept_output"
+          : "unrecordable_concept_output",
+        `concept output refused (${abstentions.unregisteredConcept} unregistered, ${abstentions.unrecordableDraft} unrecordable)`,
+      );
+    }
 
     for (const group of groups) {
       const { detectionKey } = group.event;
@@ -366,21 +538,42 @@ export async function detectForRun(
           // The catalogue in the database is behind this build. Skipping is the
           // conservative answer: an unregistered concept has no definition a
           // player could be shown, so evidence against it could not be explained.
-          skipped += 1;
           continue;
         }
         // The validators exist so a detector cannot write a row that lies. They
         // are checked here, on the way in, rather than trusted.
         if (!isRecordableOpportunity(observation.draft)
           || !difficultyIsUncontaminated(observation.draft.difficulty)) {
-          skipped += 1;
           continue;
         }
-        if (knownOpportunities.has(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`)) {
+        const identity = `${detectionKey}|${conceptVersionId}|${observation.draft.role}`;
+        const knownOpportunityId = knownOpportunities.get(identity);
+        if (knownOpportunityId !== undefined) {
           // This exact observation is already recorded under this exact concept
           // version. Not an error and not a duplicate to write: a re-run that
           // finds its own previous output is the normal case.
-          alreadyPresent += 1;
+          const knownEventId = knownEvents.get(detectionKey);
+          if (knownEventId === undefined) {
+            throw new WorkFailure(
+              "permanent",
+              "opportunity_without_event",
+              "an existing concept opportunity has no matching detected event",
+            );
+          }
+          await tx`
+            insert into analysis.event_concepts (
+              event_id, concept_version_id, color, role, label_confidence, detector_version
+            ) values (
+              ${knownEventId}, ${conceptVersionId}, ${game.subject_color},
+              ${observation.draft.role}, null, ${DETECTOR_VERSION}
+            )
+            on conflict (event_id, concept_version_id, color, role) do nothing
+          `;
+          await tx`
+            insert into analysis.run_concept_opportunities (analysis_run_id, opportunity_id)
+            values (${runId}, ${knownOpportunityId})
+            on conflict do nothing
+          `;
           continue;
         }
         writable.push({
@@ -413,7 +606,6 @@ export async function detectForRun(
         if (!event) throw new Error("the event vanished on insert");
         eventId = Number(event.id);
         knownEvents.set(detectionKey, eventId);
-        events += 1;
       }
 
       for (const { observation, conceptVersionId, evidenceSourceKind } of writable) {
@@ -426,7 +618,7 @@ export async function detectForRun(
         // the subject answering an opponent's threat, and it is the answer
         // being labelled, not the threat. The threat's owner is on the event,
         // in `actor_color`.
-        const labelled = await tx`
+        await tx`
           insert into analysis.event_concepts (
             event_id, concept_version_id, color, role, label_confidence, detector_version
           ) values (
@@ -435,8 +627,6 @@ export async function detectForRun(
           )
           on conflict (event_id, concept_version_id, color, role) do nothing
         `;
-        if (labelled.count > 0) labels += 1;
-
         const [evidence] = await tx<{ id: string }[]>`
           insert into analysis.evidence_items (
             run_id, evidence_kind, subject_id, subject_game_id, occurred_at, confidence
@@ -448,7 +638,7 @@ export async function detectForRun(
         `;
         if (!evidence) throw new Error("the evidence item vanished on insert");
 
-        await tx`
+        const [opportunity] = await tx<{ id: string }[]>`
           insert into analysis.concept_opportunities (
             run_id, subject_id, subject_game_id, event_id, concept_version_id, role,
             opportunity_ply, response_ply, response_observed, censored_reason, success,
@@ -463,28 +653,56 @@ export async function detectForRun(
             ${jsonParam(observation.draft.difficulty)}::jsonb, ${observation.phase},
             ${game.speed}, ${jsonParam({ evidenceItemId: evidence.id })}::jsonb, null,
             ${evidenceSourceKind}, ${facts.playedAt.toISOString()}, ${Number(evidence.id)}
-          )
+          ) returning id
+        `;
+        if (!opportunity) throw new Error("the concept opportunity vanished on insert");
+
+        await tx`
+          insert into analysis.run_concept_opportunities (analysis_run_id, opportunity_id)
+          values (${runId}, ${opportunity.id})
         `;
 
-        knownOpportunities.add(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`);
-        written += 1;
-        if (!observation.draft.responseObserved) censored += 1;
-        byConcept.set(observation.conceptSlug, (byConcept.get(observation.conceptSlug) ?? 0) + 1);
+        knownOpportunities.set(
+          `${detectionKey}|${conceptVersionId}|${observation.draft.role}`,
+          String(opportunity.id),
+        );
       }
     }
+
+    // The manifest is what tells a later reader that detection happened at all.
+    // `analysis.run_artifacts` says so in its own table comment: a family whose
+    // count is zero is a complete answer about a quiet game, and an absent row
+    // is what makes "nothing found" indistinguishable from "never ran". The
+    // review API reads exactly this to decide whether to say `published` or
+    // `unavailable`.
+    //
+    // Counts and checksums are over the detected conclusions rather than the
+    // rows written on this pass, so a retry that writes nothing new still
+    // agrees with the manifest it wrote the first time.
+    await recordDetectionArtifacts(tx as unknown as Sql, runId, detected);
 
     return {
       outputRef: `run:${runId}`,
       outputSummary: {
-        opportunities: written,
-        events,
-        labels,
+        detection: "complete" satisfies DetectionState,
+        opportunities: detected.length,
+        events: groups.length,
+        labels: detected.length,
+        // Outcomes, kept apart. `censored` is not a failure and adding it to
+        // one is the arithmetic §17.5 exists to forbid.
+        succeeded,
+        failed,
         censored,
-        skipped,
-        alreadyPresent,
+        abstentions,
         concepts: Object.fromEntries(byConcept),
+        roles: Object.fromEntries(byRole),
+        completeness: Object.fromEntries(byCompleteness),
+        // Counts and a fingerprint. Nothing here carries a square, a move, a
+        // FEN or a subject identity: a summary is written to logs and to a
+        // publication manifest, and a player's board does not belong in either.
+        checksum: detectionChecksum(detected),
       },
-      metrics: { inputCount: transitions.length, outputCount: written },
+      metrics: { inputCount: transitions.length, outputCount: detected.length },
     };
   });
 }

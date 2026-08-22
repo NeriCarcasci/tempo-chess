@@ -79,8 +79,70 @@ const coverage = (over: Partial<OnboardingCoverage> = {}): OnboardingCoverage =>
     ...over,
   }) as OnboardingCoverage;
 
+/**
+ * The words the API sends beside an estimate.
+ *
+ * They used to come from a table in the client, so a fixture only had to name a
+ * dimension key and the right sentence appeared. They come off the wire now, so
+ * a fixture that wants a row to read as "Defending a worse position" has to say
+ * so -- which is the point: the page shows what it was sent, and a test that
+ * could not get that wrong would not be testing it.
+ */
+const WIRE_COPY: Record<string, { name: string; definition: string }> = {
+  material_safety_respond: {
+    name: "Keeping your pieces safe",
+    definition: "One of your pieces was available to be taken for less than it is worth.",
+  },
+  free_material_recognize: {
+    name: "Taking what is offered",
+    definition: "Your opponent left something available to be taken for less than it is worth.",
+  },
+  only_move_recognize: {
+    name: "Finding the only move",
+    definition: "Of the moves the engine examined, exactly one held.",
+  },
+  winning_conversion_convert: {
+    name: "Converting a winning position",
+    definition: "You reached a position that should win.",
+  },
+  worse_position_defence_respond: {
+    name: "Defending a worse position",
+    definition: "You were worse and had to keep the game alive.",
+  },
+};
+
+const FRAMES = ["objective", "personal_current", "personal_baseline"];
+
+/** The base key of a wire key, dropping the frame suffix the API appends. */
+function baseOf(dimensionKey: string): string {
+  for (const frame of FRAMES) {
+    if (dimensionKey.endsWith(`_${frame}`)) {
+      return dimensionKey.slice(0, -(frame.length + 1));
+    }
+  }
+  return dimensionKey;
+}
+
+function wireCopy(dimensionKey: string) {
+  const base = baseOf(dimensionKey);
+  const known = WIRE_COPY[base];
+  const match = /^(.*)_(recognize|execute|respond|convert)$/.exec(base);
+  return {
+    name: known?.name ?? "A measurement",
+    copy: {
+      conceptSlug: match?.[1] ?? null,
+      role: match?.[2] ?? null,
+      category: "tactical",
+      roleLabel: "A measured role",
+      definition: known?.definition ?? "",
+      narrative: null,
+    },
+  };
+}
+
 const estimate = (over: Partial<SkillEstimate> & { dimensionKey: string }): SkillEstimate => ({
-  displayName: "material_safety (respond)",
+  displayName: wireCopy(over.dimensionKey).name,
+  copy: wireCopy(over.dimensionKey).copy,
   frame: "objective",
   // Null on the per-concept rows; set only on the pooled per-phase ones.
   phase: null,

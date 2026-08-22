@@ -1,4 +1,3 @@
-import { conceptBySlug, describeConceptRole } from "../analysis/concepts/catalogue.js";
 import type { Queryable } from "../db/queryable.js";
 import type { CoverageStatus, FindingType } from "./contract.js";
 
@@ -40,19 +39,55 @@ const PHASE_DISPLAY_ORDER: readonly string[] = ["opening", "middlegame", "endgam
  */
 function readableName(
   conceptSlug: string | null,
-  role: string | null,
+  conceptDisplayName: string | null,
   stored: string,
 ): string {
-  if (conceptSlug !== null && role !== null && conceptBySlug(conceptSlug) !== undefined) {
-    return describeConceptRole(conceptSlug, role).label;
-  }
-  if (!/_/.test(stored)) return stored;
-  return "a measurement this build cannot name";
+  if (conceptSlug !== null && conceptDisplayName?.trim()) return conceptDisplayName.trim();
+  // Pooled dimensions have no concept row. Preserve an explicitly human label,
+  // but never turn a database key into copy just because it lacks an underscore.
+  if (/\s/.test(stored.trim()) && !/_/.test(stored)) return stored.trim();
+  return "A measured area";
+}
+
+function roleLabel(role: string | null): string | null {
+  if (role === "recognize") return "Recognising the chance";
+  if (role === "execute") return "Following it through";
+  if (role === "respond") return "Responding to it";
+  if (role === "convert") return "Converting it";
+  return null;
+}
+
+/** What a concept is called and how to say a sentence about it. */
+export interface ConceptCopy {
+  /** The concept behind the dimension, or null on the pooled per-phase rows. */
+  conceptSlug: string | null;
+  role: string | null;
+  category: string | null;
+  roleLabel: string | null;
+  /** One sentence written for the player. Empty when this build cannot name it. */
+  definition: string;
+  /**
+   * The wording a report uses, or null when there is none for this role.
+   *
+   * Null is a real answer and the client is expected to handle it: a detector
+   * can be promoted ahead of the code that reads it, and the honest response is
+   * to say the label and stop rather than to invent a sentence.
+   */
+  narrative: { opportunity: string; succeeded: string; missed: string } | null;
 }
 
 export interface EstimateView {
   dimensionKey: string;
   displayName: string;
+  /**
+   * The words, resolved server-side from the promoted catalogue.
+   *
+   * The client used to carry its own copy of all six concepts, and said in its
+   * own header that it should be deleted the moment a route returned them. This
+   * is that route. Two copies of a sentence drift, and the one that drifts is
+   * always the one nobody remembers to update.
+   */
+  copy: ConceptCopy;
   frame: string;
   /** Set on the pooled per-phase estimates, null on the per-concept ones. */
   phase: string | null;
@@ -247,6 +282,9 @@ export async function readDashboard(
       phase: string | null;
       role: string | null;
       concept_slug: string | null;
+      concept_display_name: string | null;
+      concept_category: string | null;
+      human_definition: string | null;
       window_kind: string;
       estimate: string | null;
       interval_low: string | null;
@@ -265,7 +303,9 @@ export async function readDashboard(
     }[]
   >`
     select d.dimension_key, d.display_name, d.frame, d.phase, d.role,
-           c.slug as concept_slug, e.window_kind, e.estimate,
+           c.slug as concept_slug, c.display_name as concept_display_name,
+           c.category as concept_category, cv.human_definition,
+           e.window_kind, e.estimate,
            e.interval_low, e.interval_high, e.raw_sample_size, e.effective_sample_size,
            e.success_count, e.failure_count, e.graded_count, e.censored_count,
            e.coverage_status, e.unavailable_reason, e.delta, e.improvement_probability,
@@ -372,9 +412,20 @@ export async function readDashboard(
     ]);
   }
 
-  const estimateViews: EstimateView[] = estimates.map((row) => ({
+  const estimateViews: EstimateView[] = estimates.map((row) => {
+    // Resolved once, and used for both the name and the sentences, so the two
+    // cannot disagree about which concept this is.
+    return {
     dimensionKey: row.dimension_key,
-    displayName: readableName(row.concept_slug, row.role, row.display_name),
+    displayName: readableName(row.concept_slug, row.concept_display_name, row.display_name),
+    copy: {
+      conceptSlug: row.concept_slug,
+      role: row.role,
+      category: row.concept_category,
+      roleLabel: roleLabel(row.role),
+      definition: row.human_definition ?? "",
+      narrative: null,
+    },
     frame: row.frame,
     phase: row.phase,
     windowKind: row.window_kind,
@@ -394,7 +445,8 @@ export async function readDashboard(
     delta: row.delta === null ? null : Number(row.delta),
     improvementProbability:
       row.improvement_probability === null ? null : Number(row.improvement_probability),
-  }));
+    };
+  });
 
   const reachedPhases = new Set(binRows.map((row) => row.phase));
   const trajectory: TrajectoryView = {

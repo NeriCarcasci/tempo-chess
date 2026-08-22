@@ -66,8 +66,8 @@ try {
 
   let opportunities = 0;
   let censored = 0;
-  let skipped = 0;
-  let alreadyPresent = 0;
+  let unregistered = 0;
+  let unrecordable = 0;
   let failed = 0;
   const byConcept = new Map<string, number>();
 
@@ -77,14 +77,13 @@ try {
       const summary = result.outputSummary as {
         opportunities?: number;
         censored?: number;
-        skipped?: number;
-        alreadyPresent?: number;
+        abstentions?: { unregisteredConcept?: number; unrecordableDraft?: number };
         concepts?: Record<string, number>;
       };
       opportunities += summary.opportunities ?? 0;
       censored += summary.censored ?? 0;
-      skipped += summary.skipped ?? 0;
-      alreadyPresent += summary.alreadyPresent ?? 0;
+      unregistered += summary.abstentions?.unregisteredConcept ?? 0;
+      unrecordable += summary.abstentions?.unrecordableDraft ?? 0;
       for (const [slug, count] of Object.entries(summary.concepts ?? {})) {
         byConcept.set(slug, (byConcept.get(slug) ?? 0) + count);
       }
@@ -100,13 +99,13 @@ try {
     if ((index + 1) % 25 === 0) console.log(`progress   ${index + 1}/${runs.length}`);
   }
 
-  // Counted separately on purpose. "Wrote nothing" has three very different
-  // causes -- everything was already there, the catalogue in this database is
-  // behind this build, or the run could not be read -- and one number for all
-  // three is how a backfill that silently did nothing gets called a success.
-  console.log(`written    ${opportunities} opportunities (${censored} censored)`);
-  console.log(`present    ${alreadyPresent} observations already recorded`);
-  if (skipped > 0) console.log(`skipped    ${skipped} drafts (unregistered concept or unrecordable)`);
+  // This is a count of detector conclusions, not inserts. It therefore stays
+  // true on a retry whose conclusions were already materialized.
+  console.log(`concluded  ${opportunities} opportunities (${censored} censored)`);
+  // Named separately: a catalogue this database has not registered is an
+  // operator problem, and a draft the validators rejected is a detector bug.
+  if (unregistered > 0) console.log(`unregistered ${unregistered} drafts against concepts this database does not have`);
+  if (unrecordable > 0) console.log(`unrecordable ${unrecordable} drafts the validators refused`);
   if (failed > 0) console.log(`failed     ${failed} runs`);
   for (const [slug, count] of [...byConcept].sort((a, b) => b[1] - a[1])) {
     console.log(`  ${slug.padEnd(24)} ${count}`);

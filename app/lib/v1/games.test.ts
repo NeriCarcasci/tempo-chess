@@ -17,7 +17,7 @@ import { describe, expect, test, vi } from "vitest";
  */
 
 let answer: () => Promise<unknown> = async () => null;
-vi.mock("./client", () => ({ v1Maybe: () => answer() }));
+vi.mock("./client", () => ({ v1Maybe: () => answer(), v1Data: () => answer() }));
 
 const { fetchRecentGames } = await import("./games");
 
