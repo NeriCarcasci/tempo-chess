@@ -199,8 +199,33 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
     subjectColor: "white",
     expectation:
       "Re1+ skewers the king on e4 to the rook on e7. The king must step off the e-file and "
-      + "Rxe7 follows. Front target is the more valuable one, which is what separates this "
-      + "from a pin.",
+      + "Rxe7 follows. The rook cannot interpose: the only blocking squares are e2 and e3, and "
+      + "its own king on e4 stands in the way of reaching them. Front target is the more "
+      + "valuable one, which is what separates this from a pin.",
+  },
+  {
+    id: "skewer/bishop-checks-king-wins-rook",
+    family: "skewer",
+    shape: "positive",
+    fen: "7r/6k1/8/8/8/8/8/2B2K2 w - - 0 1",
+    move: "c1b2",
+    expectLegal: true,
+    subjectColor: "white",
+    expectation:
+      "Bb2+ checks the king on g7 along a1-h8 with the rook on h8 directly behind it. Nothing "
+      + "can interpose -- the rook cannot reach the diagonal in one move -- so the king moves and "
+      + "Bxh8 follows. Where the king steps to g8 or h7 it defends the rook, which the payoff "
+      + "accounts for.",
+  },
+  {
+    id: "skewer/bishop-checks-king-wins-rook-black",
+    family: "skewer",
+    shape: "positive",
+    fen: "2b1k3/8/8/8/8/8/6K1/7R b - - 0 1",
+    move: "c8b7",
+    expectLegal: true,
+    subjectColor: "black",
+    expectation: "The same skewer with the colours reversed: Bb7+ along a8-h1, winning the rook on h1.",
   },
   {
     id: "skewer/rear-target-is-defended",

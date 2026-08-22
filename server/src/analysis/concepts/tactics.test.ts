@@ -376,3 +376,81 @@ test("a pin nobody answered is censored", () => {
   assert.equal(found[0]!.draft.success, null);
   assert.equal(found[0]!.event.completeness, "censored");
 });
+
+// ---------------------------------------------------------------------------
+// skewer (FOR-128)
+// ---------------------------------------------------------------------------
+
+function skewersIn(game: GameFacts) {
+  return detectGame(game).filter((found) => found.conceptSlug === "skewer");
+}
+
+test("a skewer through a checked king wins what was behind it", () => {
+  const positive = fixture("skewer/bishop-checks-king-wins-rook");
+  // Bb2+ Kf7 Bxh8 -- the king steps aside and the rook falls.
+  const found = skewersIn(gameOf(positive.fen, ["c1b2", "g7f7", "b2h8"], "white"));
+  assert.equal(found.length, 1);
+
+  const [skewer] = found;
+  assert.equal(skewer!.role, "execute");
+  assert.equal(skewer!.event.facts.frontIsKing, true);
+  assert.equal(skewer!.event.facts.rearValueCp, PIECE_VALUES.rook);
+  assert.equal(skewer!.draft.success, true);
+});
+
+test("the colour-reversed skewer behaves identically", () => {
+  const twin = fixture("skewer/bishop-checks-king-wins-rook-black");
+  const found = skewersIn(gameOf(twin.fen, ["c8b7", "g2f2", "b7h1"], "black"));
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.role, "execute");
+  assert.equal(found[0]!.draft.success, true);
+});
+
+test("a skewer on a file is found as readily as one on a diagonal", () => {
+  // I briefly convinced myself this one was refutable by interposing with the
+  // rook, and it is not: the only blocking squares are e2 and e3, and the black
+  // king on e4 stands between its own rook and both of them. The detector was
+  // right and the reasoning about it was wrong, which is why fixtures get
+  // replayed rather than eyeballed.
+  const positive = fixture("skewer/rook-checks-king-wins-rook");
+  const found = skewersIn(gameOf(positive.fen, ["a1e1", "e4d4", "e1e7"], "white"));
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.event.facts.frontIsKing, true);
+  assert.equal(found[0]!.draft.success, true);
+});
+
+test("a rear target the defender can recapture is not a skewer", () => {
+  // Same geometry, one bishop added to guard the rook behind the king. Rxe7 is
+  // answered by Bxe7 and the exchange is even, so nothing was won.
+  const refuted = fixture("skewer/rear-target-is-defended");
+  assert.deepEqual(skewersIn(gameOf(refuted.fen, ["a1e1", "e4d4"], "white")), []);
+});
+
+test("a pin and a skewer never label the same geometry", () => {
+  // One ray, two ideas, decided entirely by which end is worth more. A shape
+  // that produced both would mean the value comparison had a gap in it.
+  for (const id of [
+    "skewer/bishop-checks-king-wins-rook",
+    "pin/rook-pins-knight-and-wins-it",
+  ]) {
+    const entry = fixture(id);
+    const moves = id.startsWith("skewer")
+      ? ["c1b2", "g7f7", "b2h8"]
+      : ["a1d1", "d8c8", "d1d5"];
+    const found = detectGame(gameOf(entry.fen, moves, "white"))
+      .filter((row) => row.conceptSlug === "pin" || row.conceptSlug === "skewer");
+    assert.equal(
+      new Set(found.map((row) => row.conceptSlug)).size,
+      1,
+      `${id} was labelled both a pin and a skewer`,
+    );
+  }
+});
+
+test("a skewer the opponent creates is measured as a response", () => {
+  const positive = fixture("skewer/bishop-checks-king-wins-rook");
+  const found = skewersIn(gameOf(positive.fen, ["c1b2", "g7f7", "b2h8"], "black"));
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.role, "respond");
+  assert.equal(found[0]!.event.actor, "opponent");
+});

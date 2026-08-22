@@ -426,6 +426,40 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
         + "detectors take opposite cases of the same geometry.",
     },
   },
+  {
+    slug: "skewer",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "Attacking through a piece",
+    humanDefinition:
+      "You attacked something valuable, and when it moved, what was sheltering "
+      + "behind it was taken. This measures whether you collected it -- or, when it "
+      + "was done to you, whether you saved more than it threatened.",
+    supportedRoles: ["execute", "respond"],
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "ray_geometry_and_static_exchange",
+      geometry:
+        "after the focal move, the piece that moved attacks an enemy piece with a second enemy "
+        + "piece directly behind it on the same ray, and the front one is worth strictly more",
+      distinguishedFromPin:
+        "a pin has the valuable piece behind; a skewer has it in front. Equal values are neither, "
+        + "so the two detectors cannot both label one shape",
+      attribution:
+        "with the front piece removed from the board, static exchange on the rear one must still "
+        + "win material -- otherwise the skewer is credited with material won elsewhere",
+      verification:
+        "against every legal reply, static exchange still wins at least the material threshold",
+      execute: "the subject created it; success is collecting what was behind",
+      respond: "the opponent created it; success is conceding less than it threatened",
+      censored: "the subject never moved again",
+      abstain:
+        "equal or inverted values, a rear piece that survives once the front one moves, any reply "
+        + "that saves everything, or an unreadable position",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+    },
+  },
 ]);
 
 /**

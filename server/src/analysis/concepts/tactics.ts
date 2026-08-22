@@ -602,8 +602,95 @@ function detectPin({ game, index }: DetectorContext): DetectedOpportunity[] {
   return found;
 }
 
+// ---------------------------------------------------------------------------
+// skewer (FOR-128)
+// ---------------------------------------------------------------------------
+
+/**
+ * The same ray as a pin, with the values the other way round.
+ *
+ * In a pin the valuable piece is behind and the one in front cannot move. In a
+ * skewer the valuable piece is in front, so it moves -- and what was sheltering
+ * behind it is taken. One line of geometry, two ideas, and which one it is
+ * depends entirely on which end is worth more.
+ *
+ * That is also why the two detectors cannot both fire on one shape.
+ * `pinsAgainst` requires the rear piece to be worth strictly more; this
+ * requires the front piece to be. Equal values are neither, which is correct:
+ * rook behind rook wins nothing by making the first one move.
+ *
+ * The king counts as the most valuable piece there is, so a check with
+ * something behind it is always a skewer rather than a pin.
+ */
+function detectSkewer({ game, index }: DetectorContext): DetectedOpportunity[] {
+  const found: DetectedOpportunity[] = [];
+
+  for (const transition of game.transitions) {
+    const afterPly = transition.fromPly + 1;
+    const after = index.at(afterPly);
+    if (!after) continue;
+
+    const move = parseUci(transition.playedMoveUci);
+    if (!move || !("from" in move)) continue;
+    const attackerSquare = move.to;
+    const attacker = after.pieceAt(attackerSquare);
+    if (!attacker || attacker.color !== transition.actorColor) continue;
+
+    const defender = opposite(transition.actorColor);
+    for (const xray of after.xraysFrom(attackerSquare)) {
+      const front = after.pieceAt(xray.front);
+      const rear = after.pieceAt(xray.rear);
+      if (!front || !rear) continue;
+      if (front.color !== defender || rear.color !== defender) continue;
+
+      const frontValue = valueOn(after, xray.front);
+      const rearValue = valueOn(after, xray.rear);
+      // Strictly greater. Equal is neither idea, and the pin detector takes the
+      // case where the rear piece is the valuable one.
+      if (frontValue <= rearValue) continue;
+
+      // If the front piece steps aside, does the rear one actually fall? Asked
+      // by taking the front piece off the board and running static exchange on
+      // what is behind it -- otherwise the skewer is credited with material the
+      // attacker was winning for some unrelated reason.
+      const bared = after.position.board.clone();
+      bared.take(xray.front);
+      if (see(bared, xray.rear, attackerSquare) < MATERIAL_THRESHOLD_CP) continue;
+
+      const verification = verifyConsequence(game, index, afterPly, transition.actorColor);
+      if (!verification) continue;
+
+      const observation = tacticalObservation(game, index, {
+        conceptSlug: "skewer",
+        eventType: "skewer",
+        discriminator: `${attackerSquare}-${xray.front}-${xray.rear}`,
+        focalPly: transition.fromPly,
+        actorColor: transition.actorColor,
+        facts: {
+          attacker: attackerSquare,
+          front: xray.front,
+          rear: xray.rear,
+          frontValueCp: frontValue,
+          rearValueCp: rearValue,
+          frontIsKing: front.role === "king",
+        },
+        difficulty: {
+          frontValueCp: frontValue,
+          rearValueCp: rearValue,
+          frontIsKing: front.role === "king" ? 1 : 0,
+          legalReplies: after.legalMoveCount(),
+        },
+        verification,
+      });
+      if (observation) found.push(observation);
+    }
+  }
+  return found;
+}
+
 /** The tactical detectors, in the order they run. */
 export const TACTICAL_DETECTORS = Object.freeze([
   { name: "double_attack", detect: detectDoubleAttack },
   { name: "pin", detect: detectPin },
+  { name: "skewer", detect: detectSkewer },
 ]);
