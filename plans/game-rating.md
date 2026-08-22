@@ -70,6 +70,63 @@ Strength and cleanliness are not redundant. A player can be clean and weak (a
 quiet game where nothing was asked) or sharp and error-strewn (a 2400 in a
 time scramble). The pair is more honest than either alone.
 
+### The Tal problem, and why cleanliness is measured against the opponent
+
+A strict engine reading calls most of Tal's best moves mistakes. So does it call
+the Immortal, and Kasparov–Topalov, and roughly every game anyone remembers. A
+metric that does that is not being candid, it is being wrong, and the reason it
+is wrong is that it scored the move against Stockfish when the person who had to
+answer it was a human being on a clock.
+
+[`server/src/models/practical.ts`](../server/src/models/practical.ts) already
+computes the correction, and it was written for a neighbouring purpose. Given
+the position *after* the move, Stockfish supplies the set of adequate replies
+and the human policy supplies how much probability mass a player of the
+opponent's actual strength puts on them. `adequateReplyProbability` is, in those
+words, how likely the opponent is to find a save.
+
+So every decision carries two expected-score readings, and both are true:
+
+- **Objective**, the one already in the assessments table: what the position is
+  worth against best play.
+- **Practical**, weighting each opponent reply by the human policy's probability
+  that this opponent plays it, then taking the expectation over what follows.
+
+A Tal sacrifice loses real objective expected score. But if almost all the human
+policy mass sits on replies that lose, the practical expectation goes *up*, and
+under that reading the sacrifice is not an error at all. It is the best move on
+the board, which is what every annotator has always said about those moves and
+what an engine alone can never say.
+
+The same measure still punishes hope chess, which is the point. A speculative
+sacrifice whose refutation is the natural human move shows adequate-reply
+probability near one, the objective loss stands undiscounted, and the move
+scores as the error it was. The difference between Tal and a hacker is not that
+one had better luck, it is that one created positions humans could not solve and
+the other did not, and this is the measurement that separates them.
+
+Cleanliness is therefore computed on practical loss, and the **gap** between the
+objective and practical readings is published as its own quantity. That gap is
+the thing worth naming: it is the move the engine gives away and nobody finds.
+It is also, incidentally, the best line the public page will ever have.
+
+Two rules keep this from becoming an excuse generator.
+
+1. **The outcome is not an input.** Whether the sacrifice won is irrelevant. The
+   claim is about the problem the move posed to the opponent as they actually
+   were, assessed from the position, and it would read identically if the
+   opponent had found the only save. Conditioning on the result would be
+   results-oriented thinking with a version number on it.
+2. **Out of domain means out of domain.** Forma's calibrated range is 1000–2200
+   ([`models/contract.ts`](../server/src/models/contract.ts)), and the
+   nine-network Maia covers 1100–1900. Tal's opponents were far above that.
+   Maia-3 takes a continuous rating and `CONTINUATION_RATINGS` reach 2400, so
+   the top of the master range is reachable by extrapolation, but extrapolation
+   is what it is. `practical.ts` already carries an `outOfDomain` flag and a
+   `slice_not_calibrated` refusal for exactly this case. Above the ceiling the
+   practical reading is shown as uncalibrated or withheld, and the page says
+   which. A confident practical number about a 2700 is a number we invented.
+
 ### Per game: demand
 
 How much the game asked. Built from what assessments already record: how many
