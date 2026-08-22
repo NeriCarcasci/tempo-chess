@@ -1950,6 +1950,16 @@ export interface operations {
                         data: {
                             coverageWarnings: string[];
                             estimates: {
+                                copy: {
+                                    conceptSlug: string | null;
+                                    definition: string;
+                                    narrative: {
+                                        missed: string;
+                                        opportunity: string;
+                                        succeeded: string;
+                                    } | null;
+                                    role: string | null;
+                                };
                                 coverage: {
                                     censored: number;
                                     failure: number;

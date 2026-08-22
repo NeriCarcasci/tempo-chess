@@ -2496,6 +2496,68 @@
                           "items": {
                             "additionalProperties": false,
                             "properties": {
+                              "copy": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "conceptSlug": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "definition": {
+                                    "type": "string"
+                                  },
+                                  "narrative": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "missed": {
+                                            "type": "string"
+                                          },
+                                          "opportunity": {
+                                            "type": "string"
+                                          },
+                                          "succeeded": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "opportunity",
+                                          "succeeded",
+                                          "missed"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "role": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "conceptSlug",
+                                  "role",
+                                  "definition",
+                                  "narrative"
+                                ],
+                                "type": "object"
+                              },
                               "coverage": {
                                 "additionalProperties": false,
                                 "properties": {
@@ -2615,6 +2677,7 @@
                             "required": [
                               "dimensionKey",
                               "displayName",
+                              "copy",
                               "frame",
                               "phase",
                               "windowKind",

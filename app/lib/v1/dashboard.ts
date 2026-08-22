@@ -34,7 +34,7 @@
 
 import { v1, type V1Result } from "./client";
 import { ProblemError } from "./problem";
-import { measureFor, measureName } from "./measures";
+import { CENSORING_NOTE, measureName } from "./measures";
 import { coneFinding, coneFrom, type Cone } from "../trajectory";
 import type { Dashboard, Finding, RatingProfile, SkillEstimate } from "./types";
 
@@ -252,12 +252,16 @@ export function groupMeasures(estimates: readonly SkillEstimate[]): MeasureGroup
   for (const [baseKey, rows] of byBase) {
     const headline = best(rows.filter(isHeadline)) ?? best(rows);
     if (!headline) continue;
-    const measure = measureFor(baseKey);
+    // The words come from the estimate the API sent rather than from a table
+    // here, so a concept promoted after this build shipped still reads as a
+    // sentence. `measureName` is the floor, not the source.
+    const copy = headline.copy;
     groups.push({
       baseKey,
-      name: measureName(baseKey),
-      definition: measure?.definition ?? null,
-      censoring: measure?.censoring ?? null,
+      name: copy?.conceptSlug ? headline.displayName : measureName(baseKey),
+      definition: copy?.definition ? copy.definition : null,
+      // Shown only where the API reports censored chances; see `Measurements`.
+      censoring: CENSORING_NOTE,
       headline,
       recent: best(rows.filter((row) => row.windowKind === "recent_form")),
       baseline: best(rows.filter((row) => row.windowKind === "baseline")),

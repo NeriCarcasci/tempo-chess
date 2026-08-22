@@ -1,19 +1,20 @@
 /**
- * What each thing Forma measures is called, and what a published report holds.
+ * What a published report holds, and how to order it.
  *
- * The coverage route sends a dimension key and nothing else about it:
- * `only_move_recognize` is what arrives on the wire. The server's own name for
- * it is no better — `estimates/aggregate.ts` builds
- * `analysis.skill_dimensions.display_name` as `` `${concept_slug} (${role})` ``,
- * so the stored name is a slug in brackets. The sentences written for a player
- * live in `server/src/analysis/concepts/catalogue.ts` and no route returns
- * them, so the client carries its own copy. That is the same arrangement, and
- * the same reason, as `lib/onboarding/copy.ts`: when a route starts returning
- * these, delete this half rather than keeping two.
+ * This file used to carry its own copy of all six concepts -- names, one-line
+ * definitions, and which of them could censor -- because no route returned
+ * them. Its own header said to delete that half the moment one did. FOR-133 is
+ * that moment: `/v1/dashboard` now sends `copy` beside every estimate,
+ * resolved server-side from the promoted catalogue, so the sentences a player
+ * reads come from the same place the detector's contract does.
  *
- * Nothing here computes anything about a player. It names, defines and orders
- * what the API already sent; every number on the profile page comes off the
- * wire.
+ * What is left here is presentation that has no server side: ordering, the
+ * nouns for report items, and a name for a dimension key when the key is all
+ * there is. The fallback never prints an identifier, because the catalogue is
+ * an open set and a seventh concept will arrive before this build does.
+ *
+ * Nothing here computes anything about a player. Every number on the profile
+ * page comes off the wire.
  */
 
 import { humaniseDimension, limitationText, LIMITATION_TEXT, sectionTitle, sortSections } from "../onboarding/copy";
@@ -28,117 +29,33 @@ import { humaniseDimension, limitationText, LIMITATION_TEXT, sectionTitle, sortS
 export const MEASURE_ROLES = ["recognize", "execute", "respond", "convert"] as const;
 export type MeasureRole = (typeof MEASURE_ROLES)[number];
 
-export interface Measure {
-  /** The concept the chances belong to. */
-  conceptSlug: string;
-  role: MeasureRole;
-  /** `${conceptSlug}_${role}` — exactly what the coverage route sends. */
-  dimensionKey: string;
-  /** The name a player reads. */
-  name: string;
-  /** One sentence, written for the player whose game it describes. */
-  definition: string;
-  /**
-   * Why a chance here can end with no answer, or null when it cannot.
-   *
-   * A censored chance is left out of the rate rather than counted against the
-   * player, and a screen that does not say so silently turns "you never got to
-   * answer" into "you got it wrong". Only `winning_conversion` can censor in
-   * v1: the other five judge a move that was played.
-   */
-  censoring: string | null;
-}
-
 /**
- * The six concepts of catalogue v1, split by role.
+ * A censoring note, said once for whatever measurement needs it.
  *
- * `critical_moment` is two rows because it is two different failures. Someone
- * who saw the move and calculated it wrong has a different problem from someone
- * who never considered it, and one "accuracy" number describes neither.
+ * This used to be a per-concept sentence in a table that named
+ * `winning_conversion` as the only measurement able to censor. That was true of
+ * catalogue v1 and stopped being true the moment the tactical families landed:
+ * every one of them censors when the game ends before the subject replies. The
+ * page already only shows this when the API reports censored chances, so the
+ * data decides whether it appears and the sentence no longer has to guess which
+ * concepts can produce one.
  */
-export const MEASURES: readonly Measure[] = Object.freeze([
-  {
-    conceptSlug: "material_safety",
-    role: "respond",
-    dimensionKey: "material_safety_respond",
-    name: "Keeping your pieces safe",
-    definition:
-      "One of your pieces was available to be taken for less than it is worth, and you were to move. This measures whether you noticed and dealt with it.",
-    censoring: null,
-  },
-  {
-    conceptSlug: "free_material",
-    role: "recognize",
-    dimensionKey: "free_material_recognize",
-    name: "Taking what is offered",
-    definition:
-      "Your opponent left something available to be taken for less than it is worth. This measures whether you took it.",
-    censoring: null,
-  },
-  {
-    conceptSlug: "critical_moment",
-    role: "recognize",
-    dimensionKey: "critical_moment_recognize",
-    name: "Seeing the moves that matter",
-    definition:
-      "A moment where the moves available led to genuinely different games. This measures whether the move you played was one the engine was seriously looking at.",
-    censoring: null,
-  },
-  {
-    conceptSlug: "critical_moment",
-    role: "execute",
-    dimensionKey: "critical_moment_execute",
-    name: "Choosing well when it matters",
-    definition:
-      "The same moments, judged on the other half of the decision: whether the move you settled on was good enough.",
-    censoring: null,
-  },
-  {
-    conceptSlug: "only_move",
-    role: "recognize",
-    dimensionKey: "only_move_recognize",
-    name: "Finding the only move",
-    definition:
-      "A position where exactly one move held and everything else lost ground. This measures whether you found it.",
-    censoring: null,
-  },
-  {
-    conceptSlug: "winning_conversion",
-    role: "convert",
-    dimensionKey: "winning_conversion_convert",
-    name: "Converting a winning position",
-    definition:
-      "You reached a position that should win. This measures whether it still should by the time you stopped moving. One chance per game, not per move.",
-    censoring:
-      "If your opponent resigned or the game ended before you moved again, there was nothing to convert. Those chances are set aside rather than counted against you.",
-  },
-  {
-    conceptSlug: "worse_position_defence",
-    role: "respond",
-    dimensionKey: "worse_position_defence_respond",
-    name: "Defending a worse position",
-    definition:
-      "You were worse and had to keep the game alive. This measures whether your moves held the position rather than accelerating the slide. Being worse is not counted as a failure; only the move you played from there is judged.",
-    censoring: null,
-  },
-]);
-
-const BY_KEY = new Map(MEASURES.map((measure) => [measure.dimensionKey, measure]));
-
-/** The measure a dimension key names, or null for one this build has not met. */
-export function measureFor(dimensionKey: string): Measure | null {
-  return BY_KEY.get(dimensionKey) ?? null;
-}
+export const CENSORING_NOTE =
+  "Chances you never got to answer are set aside rather than counted against you.";
 
 /**
  * A name for any dimension key, including one added after this build shipped.
  *
- * The fallback is the humanised slug rather than the slug: the catalogue is an
+ * The fallback is the humanised key rather than the key: the catalogue is an
  * open set on the server, and a page that printed `only_move_recognize` the day
  * a seventh concept landed would be worse than one that says something plain.
+ *
+ * Callers that have the estimate should prefer the name the API sent with it --
+ * see `groupMeasures`. This exists for the coverage panel, which is given a
+ * dimension key and nothing else.
  */
 export function measureName(dimensionKey: string): string {
-  return measureFor(dimensionKey)?.name ?? humaniseDimension(dimensionKey);
+  return humaniseDimension(dimensionKey);
 }
 
 // ---------------------------------------------------------------------------

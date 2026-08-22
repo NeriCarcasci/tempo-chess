@@ -50,9 +50,35 @@ function readableName(
   return "a measurement this build cannot name";
 }
 
+/** What a concept is called and how to say a sentence about it. */
+export interface ConceptCopy {
+  /** The concept behind the dimension, or null on the pooled per-phase rows. */
+  conceptSlug: string | null;
+  role: string | null;
+  /** One sentence written for the player. Empty when this build cannot name it. */
+  definition: string;
+  /**
+   * The wording a report uses, or null when there is none for this role.
+   *
+   * Null is a real answer and the client is expected to handle it: a detector
+   * can be promoted ahead of the code that reads it, and the honest response is
+   * to say the label and stop rather than to invent a sentence.
+   */
+  narrative: { opportunity: string; succeeded: string; missed: string } | null;
+}
+
 export interface EstimateView {
   dimensionKey: string;
   displayName: string;
+  /**
+   * The words, resolved server-side from the promoted catalogue.
+   *
+   * The client used to carry its own copy of all six concepts, and said in its
+   * own header that it should be deleted the moment a route returned them. This
+   * is that route. Two copies of a sentence drift, and the one that drifts is
+   * always the one nobody remembers to update.
+   */
+  copy: ConceptCopy;
   frame: string;
   /** Set on the pooled per-phase estimates, null on the per-concept ones. */
   phase: string | null;
@@ -372,9 +398,21 @@ export async function readDashboard(
     ]);
   }
 
-  const estimateViews: EstimateView[] = estimates.map((row) => ({
+  const estimateViews: EstimateView[] = estimates.map((row) => {
+    // Resolved once, and used for both the name and the sentences, so the two
+    // cannot disagree about which concept this is.
+    const described = row.concept_slug !== null && row.role !== null
+      ? describeConceptRole(row.concept_slug, row.role)
+      : null;
+    return {
     dimensionKey: row.dimension_key,
     displayName: readableName(row.concept_slug, row.role, row.display_name),
+    copy: {
+      conceptSlug: row.concept_slug,
+      role: row.role,
+      definition: described?.definition ?? "",
+      narrative: described?.narrative ?? null,
+    },
     frame: row.frame,
     phase: row.phase,
     windowKind: row.window_kind,
@@ -394,7 +432,8 @@ export async function readDashboard(
     delta: row.delta === null ? null : Number(row.delta),
     improvementProbability:
       row.improvement_probability === null ? null : Number(row.improvement_probability),
-  }));
+    };
+  });
 
   const reachedPhases = new Set(binRows.map((row) => row.phase));
   const trajectory: TrajectoryView = {

@@ -50,6 +50,23 @@ const coverageSchema = z.object({
 const estimateSchema = z.object({
   dimensionKey: z.string(),
   displayName: z.string(),
+  /**
+   * The words for this measurement, resolved from the promoted catalogue.
+   *
+   * `narrative` is nullable on purpose: a detector can be promoted ahead of the
+   * code that reads it, and the honest answer then is the label and nothing
+   * more rather than an invented sentence.
+   */
+  copy: z.object({
+    conceptSlug: z.string().nullable(),
+    role: z.string().nullable(),
+    definition: z.string(),
+    narrative: z.object({
+      opportunity: z.string(),
+      succeeded: z.string(),
+      missed: z.string(),
+    }).nullable(),
+  }),
   frame: z.string(),
   /** Set on the pooled per-phase rows, null on the per-concept ones. */
   phase: z.string().nullable(),
