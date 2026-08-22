@@ -61,6 +61,11 @@ interface JournalEntry {
 export function modelCatalogueSource(catalogue: Catalogue, label: string): CatalogueSource {
   return {
     label,
+    // This source is a replay of 0011 against the pre-0011 fixture, so what it
+    // reconstructs is what `public` held at 0011: twenty two tables, three of
+    // which 0042 has since dropped. It is judged against that, not against the
+    // present-day list.
+    expectedTables: CONTAINED_TABLES_AT_0011,
     async tableExists(table) {
       return catalogue.tables.has(table);
     },

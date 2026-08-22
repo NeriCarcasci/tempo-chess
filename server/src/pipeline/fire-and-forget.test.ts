@@ -8,7 +8,13 @@ import {
 } from "../security/fixtures/synthetic-credentials.js";
 
 const FIXTURE = "dist/pipeline/fire-and-forget.fixture.js";
-const CLOSED_LOG_LINE = /^(?:analysis worker failed|analysis import failed|analysis import failure persistence failed): (?:Error|AggregateError|TypeError|RangeError)\/(?:config_rejected|identity_failed|db_unavailable|db_permission_denied|db_constraint|db_error|provider_unavailable|provider_rejected|auth_required|not_found|validation_failed|timeout|cancelled|unknown)(?: \| (?:Error|AggregateError|TypeError|RangeError)\/(?:config_rejected|identity_failed|db_unavailable|db_permission_denied|db_constraint|db_error|provider_unavailable|provider_rejected|auth_required|not_found|validation_failed|timeout|cancelled|unknown))*$/;
+// The trailing ` | at file:line <- file:line` was added by 67640b0, which made
+// a closed log line say *where* an error was thrown instead of what it said.
+// That is still closed — a path and a line number carry no message and no
+// credential, and the forbidden-substring checks below still run over the whole
+// output — so the pattern accepts it rather than the log being reverted to
+// saying less.
+const CLOSED_LOG_LINE = /^(?:analysis worker failed|analysis import failed|analysis import failure persistence failed): (?:Error|AggregateError|TypeError|RangeError)\/(?:config_rejected|identity_failed|db_unavailable|db_permission_denied|db_constraint|db_error|provider_unavailable|provider_rejected|auth_required|not_found|validation_failed|timeout|cancelled|unknown)(?: \| (?:Error|AggregateError|TypeError|RangeError)\/(?:config_rejected|identity_failed|db_unavailable|db_permission_denied|db_constraint|db_error|provider_unavailable|provider_rejected|auth_required|not_found|validation_failed|timeout|cancelled|unknown))*(?: \| at (?:[\w./-]+:\d+)(?: <- [\w./-]+:\d+)*)?$/;
 
 function runScenario(scenario: string): { stdout: string; stderr: string; status: number | null } {
   const result = spawnSync(process.execPath, [FIXTURE, scenario], {

@@ -40,6 +40,17 @@ export interface ObservedPolicy {
 export interface CatalogueSource {
   /** Human label used in evidence detail. Deterministic for deterministic gates. */
   readonly label: string;
+  /**
+   * Which allowlist "exactly the contained tables" means for this source.
+   *
+   * Two sources answer that differently and both are right. A live database
+   * must hold today's `CONTAINED_TABLES`. A replay of 0011 against the pre-0011
+   * fixture reconstructs what `public` held *at 0011*, and 0042 has not been
+   * applied to it — judging that reconstruction against today's list asks a
+   * migration from the past to have anticipated a migration from the future.
+   * Left unset it is today's list, so only the replay has to say otherwise.
+   */
+  readonly expectedTables?: readonly string[];
   tableExists(table: string): Promise<boolean>;
   rlsEnabled(table: string): Promise<boolean>;
   policiesOn(table: string): Promise<ObservedPolicy[]>;
@@ -108,10 +119,11 @@ function once(source: CatalogueSource, key: string, check: () => Promise<void>):
   return pending;
 }
 
-/** The catalogue holds exactly the 22 contained tables and nothing else. */
+/** The catalogue holds exactly its own contained tables and nothing else. */
 export function assertExactTables(source: CatalogueSource): Promise<void> {
   return once(source, "tables", async () => {
-    const { missing, unexpected } = difference(await source.listTables(), CONTAINED_TABLES);
+    const expected = source.expectedTables ?? CONTAINED_TABLES;
+    const { missing, unexpected } = difference(await source.listTables(), expected);
     if (missing.length > 0 || unexpected.length > 0) {
       fail(
         `public holds ${unexpected.length} unlisted table(s) [${unexpected.slice(0, 5).join(", ")}] and is missing ${missing.length} [${missing.slice(0, 5).join(", ")}]`,
@@ -174,7 +186,8 @@ export function tableRlsBody(source: CatalogueSource, table: string): AssertionB
     await assertExactTables(source);
     if (!(await source.tableExists(table))) fail(`public.${table} does not exist`);
     if (!(await source.rlsEnabled(table))) fail(`public.${table} has relrowsecurity=false`);
-    return `public.${table} exists, relrowsecurity=true; public holds exactly the 22 contained tables`;
+    const listed = (source.expectedTables ?? CONTAINED_TABLES).length;
+    return `public.${table} exists, relrowsecurity=true; public holds exactly the ${listed} contained tables`;
   };
 }
 
