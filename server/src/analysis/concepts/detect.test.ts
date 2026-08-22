@@ -710,7 +710,15 @@ test("a piece defended well enough is not hanging", () => {
 test("the detector order is a written list, and it is the order of the output", () => {
   assert.deepEqual(
     DETECTORS.map((detector) => detector.name),
-    ["material", "decision", "conversion", "double_attack", "pin", "skewer"],
+    [
+      "material",
+      "decision",
+      "conversion",
+      "double_attack",
+      "pin",
+      "skewer",
+      "discovered_attack",
+    ],
     "the order is part of the output contract: two runs must emit the same rows "
     + "in the same sequence, or a diff between them means nothing. Adding a "
     + "detector is meant to change this line -- that is the deliberate act.",

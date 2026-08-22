@@ -688,9 +688,107 @@ function detectSkewer({ game, index }: DetectorContext): DetectedOpportunity[] {
   return found;
 }
 
+// ---------------------------------------------------------------------------
+// discovered_attack (FOR-129)
+// ---------------------------------------------------------------------------
+
+/**
+ * A piece steps aside and the one behind it was the threat all along.
+ *
+ * Found by comparing what each of the actor's sliders attacked before the move
+ * with what it attacks after, for sliders that did not themselves move. A
+ * target that appears in the second set and not the first, on a ray the moving
+ * piece was standing on, was uncovered by getting out of the way.
+ *
+ * The moving piece usually threatens something too, and whether it does is what
+ * separates the subtypes: a discovered check where the mover also gives check
+ * is a double check, and a double check is the one tactic no interposition and
+ * no capture can answer, because the king has to move.
+ *
+ * A line that opens onto nothing is not recorded. Every piece move uncovers
+ * some ray; almost none of them matter, and a detector that reported them all
+ * would say a player found a discovered attack every third move of every game.
+ */
+function detectDiscoveredAttack({ game, index }: DetectorContext): DetectedOpportunity[] {
+  const found: DetectedOpportunity[] = [];
+
+  for (const transition of game.transitions) {
+    const afterPly = transition.fromPly + 1;
+    const before = index.at(transition.fromPly);
+    const after = index.at(afterPly);
+    if (!before || !after) continue;
+
+    const move = parseUci(transition.playedMoveUci);
+    if (!move || !("from" in move)) continue;
+
+    const actor = transition.actorColor;
+    const defender = opposite(actor);
+    const board = after.position.board;
+    const own = actor === "white" ? board.white : board.black;
+    const enemy = actor === "white" ? board.black : board.white;
+    const enemyKing = board.kingOf(defender);
+    const sliders = own.intersect(board.rooksAndQueens().union(board.bishopsAndQueens()));
+
+    for (const slider of sliders) {
+      // The piece that moved is not discovering anything; it is the thing that
+      // got out of the way.
+      if (slider === move.to) continue;
+      const beforeTargets = before.attacksFrom(slider);
+      for (const target of after.attacksFrom(slider).intersect(enemy)) {
+        if (beforeTargets.has(target)) continue;
+        // It has to have been this move that opened the line.
+        if (!before.between(slider, target).has(move.from)) continue;
+
+        const targetIsKing = enemyKing !== undefined && target === enemyKing;
+        const moverChecks = enemyKing !== undefined
+          && after.attacksFrom(move.to).has(enemyKing);
+        const subtype = targetIsKing
+          ? (moverChecks ? "double_check" : "discovered_check")
+          : "discovered_attack";
+
+        // A discovered attack on a piece has to actually win it. A discovered
+        // check wins nothing by itself, and what it is worth is whatever the
+        // position yields once the check has been answered.
+        if (!targetIsKing
+          && bestSeeOnSquare(after, target, actor) < MATERIAL_THRESHOLD_CP) continue;
+
+        const verification = verifyConsequence(game, index, afterPly, actor);
+        if (!verification) continue;
+
+        const observation = tacticalObservation(game, index, {
+          conceptSlug: "discovered_attack",
+          eventType: "discovered_attack",
+          discriminator: `${slider}-${move.from}-${target}`,
+          focalPly: transition.fromPly,
+          actorColor: actor,
+          facts: {
+            discoveredPiece: slider,
+            mover: move.from,
+            moverTo: move.to,
+            uncoveredTarget: target,
+            uncoveredValueCp: valueOn(after, target),
+            moverChecks,
+            subtype,
+          },
+          difficulty: {
+            uncoveredTargetValueCp: valueOn(after, target),
+            moverChecks: moverChecks ? 1 : 0,
+            doubleCheck: subtype === "double_check" ? 1 : 0,
+            legalReplies: after.legalMoveCount(),
+          },
+          verification,
+        });
+        if (observation) found.push(observation);
+      }
+    }
+  }
+  return found;
+}
+
 /** The tactical detectors, in the order they run. */
 export const TACTICAL_DETECTORS = Object.freeze([
   { name: "double_attack", detect: detectDoubleAttack },
   { name: "pin", detect: detectPin },
   { name: "skewer", detect: detectSkewer },
+  { name: "discovered_attack", detect: detectDiscoveredAttack },
 ]);

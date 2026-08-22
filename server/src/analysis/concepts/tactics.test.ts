@@ -454,3 +454,53 @@ test("a skewer the opponent creates is measured as a response", () => {
   assert.equal(found[0]!.role, "respond");
   assert.equal(found[0]!.event.actor, "opponent");
 });
+
+// ---------------------------------------------------------------------------
+// discovered_attack (FOR-129)
+// ---------------------------------------------------------------------------
+
+function discoveriesIn(game: GameFacts) {
+  return detectGame(game).filter((found) => found.conceptSlug === "discovered_attack");
+}
+
+test("stepping off a line uncovers the piece that was the threat", () => {
+  const positive = fixture("discovered_attack/knight-steps-off-the-diagonal");
+  // Nb5+ (discovered) Kg8, Nxc7 -- the check is answered and the rook falls.
+  const found = discoveriesIn(gameOf(positive.fen, ["d4b5", "g7g8", "b5c7"], "white"));
+  assert.equal(found.length, 1);
+
+  const [discovery] = found;
+  assert.equal(discovery!.event.facts.subtype, "discovered_check");
+  assert.equal(discovery!.event.facts.moverChecks, false, "the knight itself gives no check");
+  assert.equal(discovery!.role, "execute");
+  assert.equal(discovery!.draft.success, true);
+});
+
+test("a double check is recorded under the same family, not a dimension of its own", () => {
+  const positive = fixture("discovered_attack/double-check");
+  const found = discoveriesIn(gameOf(positive.fen, ["d4f5", "g7g8", "f5e7"], "white"));
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.event.facts.subtype, "double_check");
+  assert.equal(found[0]!.event.facts.moverChecks, true);
+  assert.equal(found[0]!.conceptSlug, "discovered_attack", "one family, three subtypes");
+});
+
+test("the colour-reversed discovery behaves identically", () => {
+  const twin = fixture("discovered_attack/knight-steps-off-the-diagonal-black");
+  const found = discoveriesIn(gameOf(twin.fen, ["d5c3", "g2g1", "c3e2"], "black"));
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.role, "execute");
+  assert.equal(found[0]!.draft.success, true);
+});
+
+test("a piece that was never on the line uncovers nothing", () => {
+  const nearMiss = fixture("discovered_attack/line-was-never-blocked");
+  assert.deepEqual(discoveriesIn(gameOf(nearMiss.fen, ["c3b5", "g7g8"], "white")), []);
+});
+
+test("a line that opens onto nothing is not a discovery", () => {
+  // Every piece move uncovers some ray. A detector that reported them all would
+  // find a discovered attack every third move of every game.
+  const found = discoveriesIn(gameOf("8/6k1/8/8/3N4/8/8/B6K w - - 0 1", ["d4b5", "g7g8"], "white"));
+  assert.deepEqual(found, [], "a check that wins nothing is not a chance the opponent missed");
+});

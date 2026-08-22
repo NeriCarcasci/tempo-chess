@@ -248,37 +248,40 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
     id: "discovered_attack/knight-steps-off-the-diagonal",
     family: "discovered_attack",
     shape: "positive",
-    fen: "8/6k1/8/8/3N4/8/8/B6K w - - 0 1",
+    fen: "8/2r3k1/8/8/3N4/8/8/B6K w - - 0 1",
     move: "d4b5",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "Nb5 vacates the a1-h8 diagonal and the bishop on a1 checks the king on g7. "
-      + "The knight itself attacks nothing relevant, so this is a plain discovered check.",
+      "Nb5 vacates the a1-h8 diagonal and the bishop on a1 checks the king on g7, while the "
+      + "knight lands attacking the rook on c7. The check must be answered and the rook falls. "
+      + "Written first without the rook, where the discovery won nothing at all -- a check that "
+      + "wins nothing is not a chance the opponent missed.",
   },
   {
     id: "discovered_attack/double-check",
     family: "discovered_attack",
     shape: "positive",
-    fen: "8/6k1/8/8/3N4/8/8/B6K w - - 0 1",
+    fen: "8/4r1k1/8/8/3N4/8/8/B6K w - - 0 1",
     move: "d4f5",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "Nf5+ checks from the knight and uncovers the bishop's check at the same time. "
-      + "Subtype double_check, from the same family and the same event type.",
+      "Nf5+ checks from the knight and uncovers the bishop's check at the same time. Double "
+      + "check: no interposition and no capture answers it, the king has to move, and the rook "
+      + "on e7 falls. Subtype double_check, same family and same event type.",
   },
   {
     id: "discovered_attack/knight-steps-off-the-diagonal-black",
     family: "discovered_attack",
     shape: "positive",
-    fen: "b3k3/8/8/3n4/8/8/6K1/8 b - - 0 1",
+    fen: "b2k4/8/8/3n4/8/8/4R1K1/8 b - - 0 1",
     move: "d5c3",
     expectLegal: true,
     subjectColor: "black",
     expectation:
-      "The colour-reversed twin: Nc3 vacates the a8-h1 diagonal and the bishop on a8 checks "
-      + "the king on g2.",
+      "The colour-reversed twin: Nc3 vacates the a8-h1 diagonal, the bishop on a8 checks the "
+      + "king on g2, and the knight lands attacking the rook on e2.",
   },
   {
     id: "discovered_attack/line-was-never-blocked",

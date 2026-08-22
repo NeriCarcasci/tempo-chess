@@ -460,6 +460,39 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       thresholdCp: MATERIAL_THRESHOLD_CP,
     },
   },
+  {
+    slug: "discovered_attack",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "Uncovering an attack",
+    humanDefinition:
+      "Moving one piece uncovered an attack from the piece behind it. This "
+      + "measures whether you collected what that won -- or, when it was done to "
+      + "you, whether you gave up less than it threatened.",
+    supportedRoles: ["execute", "respond"],
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "attack_map_difference_and_static_exchange",
+      geometry:
+        "a slider of the moving side attacks a target after the move that it did not attack "
+        + "before, and the square the mover left lies between them",
+      subtypes: ["discovered_attack", "discovered_check", "double_check"],
+      doubleCheck: "the moving piece also gives check, which no interposition or capture answers",
+      verification:
+        "a discovered attack on a piece must win that piece by static exchange. A discovered "
+        + "check wins nothing by itself, so what it is worth is whatever the position yields once "
+        + "the check has been answered -- and against every legal reply",
+      execute: "the subject played it; success is collecting what it won, or mating",
+      respond: "the opponent played it; success is conceding less than it threatened",
+      censored: "the subject never moved again",
+      abstain:
+        "a line that opens onto nothing, a target that survives the exchange, or any reply that "
+        + "saves everything. Almost every piece move uncovers some ray and almost none of them "
+        + "matter",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+    },
+  },
 ]);
 
 /**
