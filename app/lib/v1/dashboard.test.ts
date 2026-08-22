@@ -29,6 +29,7 @@ import type { Dashboard, Finding, RatingProfile, SkillEstimate } from "./types";
 
 const estimate = (over: Partial<SkillEstimate> & { dimensionKey: string }): SkillEstimate => ({
   displayName: "material_safety (respond)",
+  phase: null,
   frame: "objective",
   windowKind: "lifetime",
   estimate: 0.5,

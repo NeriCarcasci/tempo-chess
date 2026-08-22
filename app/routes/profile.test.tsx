@@ -82,6 +82,8 @@ const coverage = (over: Partial<OnboardingCoverage> = {}): OnboardingCoverage =>
 const estimate = (over: Partial<SkillEstimate> & { dimensionKey: string }): SkillEstimate => ({
   displayName: "material_safety (respond)",
   frame: "objective",
+  // Null on the per-concept rows; set only on the pooled per-phase ones.
+  phase: null,
   windowKind: "lifetime",
   estimate: 0.5,
   intervalLow: 0.45,
