@@ -78,6 +78,11 @@ export type DetectionState = "complete" | "abstained";
  * ordering -- that is a separate contract, tested separately, and folding it in
  * here would make an ordering change look like an evidence change.
  */
+export function eventChecksum(detected: readonly DetectedOpportunity[]): string {
+  const keys = [...new Set(detected.map((found) => found.event.detectionKey))].sort();
+  return createHash("sha256").update(keys.join("\n")).digest("hex");
+}
+
 export function detectionChecksum(detected: readonly DetectedOpportunity[]): string {
   const lines = detected
     .map((found) => [
@@ -543,10 +548,48 @@ export async function detectForRun(
       }
     }
 
+    // The manifest is what tells a later reader that detection happened at all.
+    // `analysis.run_artifacts` says so in its own table comment: a family whose
+    // count is zero is a complete answer about a quiet game, and an absent row
+    // is what makes "nothing found" indistinguishable from "never ran". The
+    // review API reads exactly this to decide whether to say `published` or
+    // `unavailable`.
+    //
+    // Counts and checksums are over the detected conclusions rather than the
+    // rows written on this pass, so a retry that writes nothing new still
+    // agrees with the manifest it wrote the first time.
+    let manifestDrift = false;
+    for (const [family, count, checksum] of [
+      ["chess_events", groups.length, eventChecksum(detected)],
+      ["concept_opportunities", detected.length, detectionChecksum(detected)],
+    ] as const) {
+      const [existing] = await tx<{ checksum: string; row_count: number }[]>`
+        select checksum, row_count from analysis.run_artifacts
+        where run_id = ${runId} and family = ${family}
+      `;
+      if (!existing) {
+        await tx`
+          insert into analysis.run_artifacts (run_id, family, row_count, checksum)
+          values (${runId}, ${family}, ${count}, ${checksum})
+        `;
+        continue;
+      }
+      if (existing.checksum === checksum && existing.row_count === count) continue;
+      // A manifest that already describes this run and disagrees means the
+      // catalogue or the detector changed since it was written. E11's rule is
+      // that a manifest is immutable, and FOR-122's is that a new concept
+      // version may be backfilled onto an existing run -- so the disagreement
+      // is reported rather than resolved. Overwriting would rewrite history;
+      // throwing would roll back evidence that is correctly appended and
+      // append-only.
+      manifestDrift = true;
+    }
+
     return {
       outputRef: `run:${runId}`,
       outputSummary: {
         detection: "complete" satisfies DetectionState,
+        manifestDrift,
         opportunities: written,
         events,
         labels,

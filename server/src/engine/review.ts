@@ -23,6 +23,7 @@
 import type { Queryable } from "../db/queryable.js";
 import type { VersionBlock } from "../v1/envelope.js";
 import type { DeepStatus } from "./contract.js";
+import { publishedMaterializationRun } from "./recipe.js";
 
 /** Whether a review section has anything to say, and why when it does not. */
 export type SectionState = "published" | "unavailable";
@@ -90,6 +91,50 @@ export type PracticalContextView =
       subjectCapitalized: boolean | null;
     };
 
+/**
+ * One concept label hanging off an occurrence, as a player's client reads it.
+ *
+ * `success` is null when the response was censored, and `censoredReason` says
+ * why. A client that renders null as a failure would undo the whole point of
+ * §17.5, so the two fields travel together and neither is optional.
+ */
+export interface ReviewConcept {
+  slug: string;
+  displayName: string;
+  /** The wording of the version this evidence was recorded under, not today's. */
+  definition: string;
+  conceptVersionId: string;
+  versionNo: number;
+  role: string;
+  color: string;
+  detectorVersion: string;
+  observed: boolean;
+  success: boolean | null;
+  censoredReason: string | null;
+  opportunityPly: number;
+  responsePly: number | null;
+  difficulty: Record<string, number> | null;
+  confidence: number | null;
+  evidenceSourceKind: string;
+  /** For tracing a claim in a report back to the moment it came from. */
+  evidenceItemId: string | null;
+}
+
+/** One physical occurrence in a game, with everything measured about it. */
+export interface ReviewEvent {
+  eventType: string;
+  startPly: number;
+  focalPly: number;
+  endPly: number;
+  actorColor: string | null;
+  affectedColor: string | null;
+  completeness: string;
+  confidence: number | null;
+  /** Board-derived facts only; see `safeFacts`. */
+  facts: Record<string, unknown>;
+  concepts: ReviewConcept[];
+}
+
 export interface GameReview {
   gameId: string;
   runId: string;
@@ -107,6 +152,8 @@ export interface GameReview {
   };
   moves: ReviewMove[];
   criticalMoments: { fromPly: number; criticality: number | null; reasons: string[] }[];
+  /** Empty and `published` is a game with nothing in it; see `sections.events`. */
+  events: ReviewEvent[];
   version: VersionBlock;
 }
 
@@ -217,6 +264,25 @@ export async function readGameReview(
     },
   }));
 
+  // Whether detection ran at all is a manifest question, not a row-count one.
+  // `analysis.run_artifacts` records a family with a count of zero for a quiet
+  // game; an absent row is a run that never got there. Publications written
+  // before the detector existed have neither, and must keep saying unavailable.
+  const detectorFamilies = new Set(
+    (await sql<{ family: string }[]>`
+      select family from analysis.run_artifacts
+      where run_id = ${publication.run_id}
+        and family in ('chess_events', 'concept_opportunities')
+    `).map((row) => row.family),
+  );
+  const materializationRunId = await publishedMaterializationRun(
+    sql,
+    String(publication.published_revision_id),
+  );
+  const events = detectorFamilies.has("chess_events") && materializationRunId !== null
+    ? await readEvents(sql, materializationRunId, input.subjectGameId)
+    : [];
+
   return {
     gameId: input.subjectGameId,
     runId: publication.run_id,
@@ -234,14 +300,19 @@ export async function readGameReview(
       // carries an answer. Whether that answer is a number or a reason is a
       // per-move fact, not a section-level one.
       practicalContext: practical.size > 0 ? "published" : "unavailable",
-      // E13 and E15. Named rather than omitted, and `unavailable` rather than
-      // empty, so a client cannot read "not analysed yet" as "nothing found".
-      events: "unavailable",
-      concepts: "unavailable",
+      // E13. Published means the detector ran and recorded what it concluded,
+      // which for a quiet game is an empty array -- a different answer from a
+      // game nobody has measured. A publication written before the detector
+      // existed has no manifest entry and keeps saying unavailable, so a client
+      // cannot read "not analysed yet" as "nothing found".
+      events: detectorFamilies.has("chess_events") ? "published" : "unavailable",
+      concepts: detectorFamilies.has("concept_opportunities") ? "published" : "unavailable",
+      // E15, still to come. Named rather than omitted.
       explanations: "unavailable",
       trajectory: "unavailable",
     },
     moves,
+    events,
     criticalMoments: moves
       .filter((move) => move.deep.status !== "not_selected")
       .map((move) => ({
@@ -257,6 +328,169 @@ export async function readGameReview(
       policyVersions: await policyVersions(sql, publication.recipe_version_id),
     },
   };
+}
+
+/**
+ * What a detector fact is allowed to be by the time a client sees it.
+ *
+ * `facts` is a jsonb column a detector writes, and shipping it verbatim would
+ * make the API's shape whatever the last detector happened to put there. So it
+ * is copied key by key: primitives and flat arrays of primitives survive, nested
+ * objects do not, and both the array length and the string length are capped.
+ *
+ * Nothing here is secret -- these are squares and moves from the player's own
+ * game -- but "not secret" is not the same as "bounded", and an API whose
+ * response shape is decided by a detector is one no client can be written
+ * against.
+ */
+function safeFacts(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const safe: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (value === null || typeof value === "number" || typeof value === "boolean") {
+      safe[key] = value;
+      continue;
+    }
+    if (typeof value === "string") {
+      safe[key] = value.slice(0, 120);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      const items = value
+        .filter((item) => item === null
+          || typeof item === "number"
+          || typeof item === "boolean"
+          || typeof item === "string")
+        .slice(0, 32)
+        .map((item) => (typeof item === "string" ? item.slice(0, 120) : item));
+      if (items.length === value.length) safe[key] = items;
+      continue;
+    }
+    // Anything else -- a nested object, a function, whatever a future detector
+    // invents -- is dropped rather than passed through.
+  }
+  return safe;
+}
+
+interface EventRow {
+  id: string;
+  event_type: string;
+  start_ply: number;
+  focal_ply: number;
+  end_ply: number;
+  actor_color: string | null;
+  affected_color: string | null;
+  completeness: string;
+  detection_confidence: string | null;
+  detection_key: string | null;
+  facts: unknown;
+}
+
+interface ConceptRow {
+  event_id: string;
+  slug: string;
+  display_name: string;
+  human_definition: string;
+  concept_version_id: string;
+  version_no: number;
+  role: string;
+  color: string;
+  detector_version: string;
+  response_observed: boolean;
+  success: boolean | null;
+  censored_reason: string | null;
+  opportunity_ply: number;
+  response_ply: number | null;
+  difficulty: Record<string, number> | null;
+  confidence: string | null;
+  evidence_source_kind: string;
+  evidence_item_id: string | null;
+}
+
+/**
+ * The occurrences of one published game, with their labels.
+ *
+ * Ordered by focal ply and then detection key so two reads of the same
+ * publication return the same sequence -- an ETag over a response whose array
+ * order drifts is an ETag that changes for no reason.
+ *
+ * Read through the materialization the publication names rather than through
+ * the subject game, because the evidence belongs to a position graph and a game
+ * can have more than one of those over its life.
+ */
+async function readEvents(
+  sql: Queryable,
+  materializationRunId: string,
+  subjectGameId: string,
+): Promise<ReviewEvent[]> {
+  const events = await sql<EventRow[]>`
+    select id, event_type, start_ply, focal_ply, end_ply, actor_color, affected_color,
+           completeness, detection_confidence, detection_key, facts
+    from analysis.chess_events
+    where run_id = ${materializationRunId} and subject_game_id = ${subjectGameId}
+    order by focal_ply, detection_key nulls last, id
+  `;
+  if (events.length === 0) return [];
+
+  const labels = await sql<ConceptRow[]>`
+    select o.event_id, c.slug, c.display_name, cv.human_definition,
+           cv.id as concept_version_id, cv.version_no, o.role, ec.color, ec.detector_version,
+           o.response_observed, o.success, o.censored_reason, o.opportunity_ply, o.response_ply,
+           o.difficulty, o.confidence, o.evidence_source_kind,
+           coalesce(o.evidence_item_id, (o.context->>'evidenceItemId')::bigint) as evidence_item_id
+    from analysis.concept_opportunities o
+    join analysis.concept_versions cv on cv.id = o.concept_version_id
+    join analysis.concepts c on c.id = cv.concept_id
+    -- The label carries the detector version and the colour it was recorded
+    -- for. Joining on the role as well keeps recognize and execute apart, which
+    -- is the distinction §17.4 exists to preserve.
+    left join analysis.event_concepts ec
+      on ec.event_id = o.event_id
+     and ec.concept_version_id = o.concept_version_id
+     and ec.role = o.role
+    where o.run_id = ${materializationRunId} and o.subject_game_id = ${subjectGameId}
+    order by o.event_id, c.slug, o.role
+  `;
+
+  const byEvent = new Map<string, ReviewConcept[]>();
+  for (const row of labels) {
+    const list = byEvent.get(String(row.event_id)) ?? [];
+    list.push({
+      slug: row.slug,
+      displayName: row.display_name,
+      definition: row.human_definition,
+      conceptVersionId: row.concept_version_id,
+      versionNo: row.version_no,
+      role: row.role,
+      color: row.color ?? "",
+      detectorVersion: row.detector_version ?? "",
+      observed: row.response_observed,
+      // Censored rows keep a null success and say why. A client that renders
+      // null as a failure would undo §17.5, so both fields always travel.
+      success: row.response_observed ? row.success : null,
+      censoredReason: row.censored_reason,
+      opportunityPly: row.opportunity_ply,
+      responsePly: row.response_ply,
+      difficulty: row.difficulty,
+      confidence: row.confidence == null ? null : Number(row.confidence),
+      evidenceSourceKind: row.evidence_source_kind,
+      evidenceItemId: row.evidence_item_id === null ? null : String(row.evidence_item_id),
+    });
+    byEvent.set(String(row.event_id), list);
+  }
+
+  return events.map((event) => ({
+    eventType: event.event_type,
+    startPly: event.start_ply,
+    focalPly: event.focal_ply,
+    endPly: event.end_ply,
+    actorColor: event.actor_color,
+    affectedColor: event.affected_color,
+    completeness: event.completeness,
+    confidence: event.detection_confidence == null ? null : Number(event.detection_confidence),
+    facts: safeFacts(event.facts),
+    concepts: byEvent.get(String(event.id)) ?? [],
+  }));
 }
 
 async function readCandidates(

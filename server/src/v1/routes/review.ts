@@ -69,6 +69,54 @@ const reviewMoveSchema = z.object({
   }),
 });
 
+/**
+ * One concept label as a client reads it.
+ *
+ * `success` is nullable and `censoredReason` sits beside it because the two are
+ * one fact: a response nobody made is censored, not failed, and a client that
+ * renders a null success as a loss would undo the constraint the database
+ * enforces.
+ */
+const reviewConceptSchema = z.object({
+  slug: z.string(),
+  displayName: z.string(),
+  definition: z.string(),
+  conceptVersionId: z.string(),
+  versionNo: z.number().int(),
+  role: z.string(),
+  color: z.string(),
+  detectorVersion: z.string(),
+  observed: z.boolean(),
+  success: z.boolean().nullable(),
+  censoredReason: z.string().nullable(),
+  opportunityPly: z.number().int(),
+  responsePly: z.number().int().nullable(),
+  difficulty: z.record(z.string(), z.number()).nullable(),
+  confidence: z.number().nullable(),
+  evidenceSourceKind: z.string(),
+  evidenceItemId: z.string().nullable(),
+});
+
+/**
+ * One physical occurrence, with everything measured about it hanging off it.
+ *
+ * `facts` is bounded rather than open: the read model copies primitives and flat
+ * arrays of primitives out of the detector's jsonb and drops the rest, so the
+ * response shape is not whatever the last detector happened to write.
+ */
+const reviewEventSchema = z.object({
+  eventType: z.string(),
+  startPly: z.number().int(),
+  focalPly: z.number().int(),
+  endPly: z.number().int(),
+  actorColor: z.string().nullable(),
+  affectedColor: z.string().nullable(),
+  completeness: z.string(),
+  confidence: z.number().nullable(),
+  facts: z.record(z.string(), z.unknown()),
+  concepts: z.array(reviewConceptSchema),
+});
+
 const reviewSchema = z.object({
   gameId: z.string(),
   runId: z.string(),
@@ -83,6 +131,7 @@ const reviewSchema = z.object({
     trajectory: sectionState,
   }),
   moves: z.array(reviewMoveSchema),
+  events: z.array(reviewEventSchema),
   criticalMoments: z.array(
     z.object({
       fromPly: z.number().int(),
@@ -105,7 +154,7 @@ const getReviewRoute: RouteDefinition<never, never, z.infer<typeof reviewSchema>
   operationId: "getGameReview",
   summary: "The published objective review of one owned game",
   description:
-    "Transition assessments and critical moments for the run the publication pointer currently names. `sections` states what each part of the review can say: `unavailable` means the component has not run, which is different from an empty result. `decisionLoss` is actor-perspective expected score given up, measured against the tolerance rule the run pinned; it is not a `mistake` label.",
+    "Transition assessments, critical moments and detected concepts for the run the publication pointer currently names. `sections` states what each part of the review can say: `unavailable` means the component has not run, which is different from an empty result -- `events: published` with an empty array is a game that was measured and had nothing in it. Concept `success` is null exactly when `observed` is false, and `censoredReason` says why; a response nobody made is censored, never failed. `decisionLoss` is actor-perspective expected score given up, measured against the tolerance rule the run pinned; it is not a `mistake` label.",
   kind: "read",
   auth: "required",
   envelope: "resource",
