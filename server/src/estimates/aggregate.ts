@@ -270,11 +270,31 @@ async function readTrajectoryGames(
       expected_score_after: string;
     }[]
   >`
-    select g.subject_game_id, ta.from_ply, ta.phase, ta.expected_score_after
+    select
+      g.subject_game_id,
+      ta.from_ply,
+      ta.phase,
+      -- expected_score_after is stored from the ACTOR's side of the board:
+      -- buildAssessment writes fromActor(...), which is why decision_loss is a
+      -- loss for whoever moved, whatever colour they were. Read raw, this
+      -- series flipped perspective on every ply -- your score after your move,
+      -- your opponent's after theirs -- and a series alternating between x and
+      -- 1-x has a median of exactly one half however the player is doing. That
+      -- is why the line sat level on a losing record, and why it sawtoothed.
+      case
+        when ta.actor_color = sg.subject_color then ta.expected_score_after
+        else 1 - ta.expected_score_after
+      end as expected_score_after
     from analysis.subject_data_snapshot_games g
+    join chess.subject_games sg on sg.id = g.subject_game_id
     join analysis.subject_game_publications pub on pub.subject_game_id = g.subject_game_id
     join analysis.transition_assessments ta on ta.analysis_run_id = pub.run_id
-    where g.snapshot_id = ${snapshotId} and ta.phase is not null
+    where g.snapshot_id = ${snapshotId}
+      and ta.phase is not null
+      -- A game whose side is unresolved cannot go on one axis with the rest.
+      -- subject_games_color_check allows null only while a game is ambiguous,
+      -- and an ambiguous game is left out rather than guessed at.
+      and sg.subject_color is not null
     order by g.subject_game_id, ta.from_ply
   `;
 

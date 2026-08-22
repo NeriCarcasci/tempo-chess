@@ -504,7 +504,14 @@
   }
   .skip-link:focus { transform: translateY(0); }
   /* Matches the public header: blur and a wash, no rule under it. */
+  /* `backdrop-filter` creates a stacking context, which quietly trapped the
+     account menu inside the header: `.nav-menu` carries z-index 60, but that
+     only orders it against its siblings *within* this context, and the context
+     itself sat at auto — behind every card later in the document. So an open
+     menu was drawn under the graph. The header takes its own layer, above the
+     page, and the menu rises with it. */
   .product-header {
+    position: relative; z-index: 50;
     background: color-mix(in srgb, var(--color-bg) 82%, transparent);
     -webkit-backdrop-filter: blur(16px) saturate(1.2);
     backdrop-filter: blur(16px) saturate(1.2);
