@@ -16,8 +16,18 @@ import { readFileSync } from "node:fs";
 import { MAX_PROBE_TIMEOUT_SECONDS } from "./contract.js";
 
 export const MANIFEST_PATH = "docs/security/E01-assertion-manifest.json";
+/**
+ * Repinned by 0042, which dropped `player_opening_stats`, `player_style` and
+ * `puzzles`. Twenty-one assertions named those tables as their target and
+ * became unaskable when the tables stopped existing, so the inventory went
+ * 492 -> 471 and three per-command totals moved with it.
+ *
+ * The hash exists to make an edit here a deliberate act rather than a drifting
+ * file. Changing it without removing an assertion's *subject* is the thing it
+ * is guarding against.
+ */
 export const MANIFEST_SHA256 =
-  "f03c782f6e9c1be5bcf9e3975b6c25ce0e1df8cc865b67e2b8f7e1ddf6ed07f7";
+  "cfb77195717066c8a5da245d9539dfc1e4a3a3ebd6af76733777663ec0b576aa";
 
 export interface AssertionRecord {
   id: string;

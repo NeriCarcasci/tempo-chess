@@ -870,20 +870,27 @@ function catalogueAdversarialBodies(context: Context): AssertionBody[] {
   }
 
   const scenarios: Scenario[] = [
+    // These two used `public.puzzles` until 0042 dropped it. It was the
+    // convenient subject because the runtime held nothing on it at all, and
+    // after 0042 no such table exists. `mistakes` is the closest thing left:
+    // the runtime holds SELECT on it and nothing else, so a column grant of any
+    // other privilege is still a privilege the contract has never listed, and
+    // the property under test -- a *column*-level grant is caught, not just a
+    // table-level one -- is unchanged.
     {
-      label: "column SELECT on denied public.puzzles for forma_api",
-      setup: `grant select (id) on table public.puzzles to ${RUNTIME_ROLE}`,
-      cleanup: `revoke select (id) on table public.puzzles from ${RUNTIME_ROLE}`,
+      label: `column UPDATE on read-only public.mistakes for ${RUNTIME_ROLE}`,
+      setup: `grant update (id) on table public.mistakes to ${RUNTIME_ROLE}`,
+      cleanup: `revoke update (id) on table public.mistakes from ${RUNTIME_ROLE}`,
       check: assertExactRuntimeGrants,
     },
     {
-      label: "effective browser column access on denied public.puzzles",
-      setup: "grant usage on schema public to anon; grant select (id) on table public.puzzles to anon",
-      cleanup: "revoke select (id) on table public.puzzles from anon; revoke usage on schema public from anon",
+      label: "effective browser column access on public.mistakes",
+      setup: "grant usage on schema public to anon; grant select (id) on table public.mistakes to anon",
+      cleanup: "revoke select (id) on table public.mistakes from anon; revoke usage on schema public from anon",
       check: async (source) => {
         const reachable = await source.effectiveAccess("anon", "tables");
-        if (!reachable.includes("puzzles")) {
-          throw new Error("the probe failed to observe effective anon column access to puzzles");
+        if (!reachable.includes("mistakes")) {
+          throw new Error("the probe failed to observe effective anon column access to mistakes");
         }
         await assertExactRuntimeGrants(source);
       },
@@ -896,7 +903,7 @@ function catalogueAdversarialBodies(context: Context): AssertionBody[] {
     },
     {
       label: "an unlisted non-r public view",
-      setup: "create view public.e01_unlisted_relation as select id from public.puzzles",
+      setup: "create view public.e01_unlisted_relation as select id from public.mistakes",
       cleanup: "drop view public.e01_unlisted_relation",
       check: assertExactTables,
     },

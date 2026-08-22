@@ -48,6 +48,7 @@
  * anywhere unless the band actually opened there.
  */
 
+import { smoothCurve } from "./curve";
 import type { TrajectoryBin } from "./v1/types";
 
 /** Reading order. The API orders bins by phase *name*, which is alphabetical. */
@@ -326,19 +327,19 @@ function areaPath(
     const [, lower] = project(box, only.xLow, bottom(only));
     return `M${left} ${upper}L${right} ${upper}L${right} ${lower}L${left} ${lower}Z`;
   }
-  const head = points
-    .map((point, index) => {
-      const [x, y] = project(box, point.x, top(point));
-      return `${index === 0 ? "M" : "L"}${x} ${y}`;
-    })
-    .join("");
-  const tail = [...points]
-    .reverse()
-    .map((point) => {
-      const [x, y] = project(box, point.x, bottom(point));
-      return `L${x} ${y}`;
-    })
-    .join("");
+  const edge = (pick: (point: ConePoint) => number, reversed: boolean) => {
+    const series = reversed ? [...points].reverse() : points;
+    return series.map((point) => {
+      const [x, y] = project(box, point.x, pick(point));
+      return { x, y };
+    });
+  };
+  // Smoothed, because a corner at every bin is the sampling interval rather
+  // than anything that happened in a game. The two edges are one closed shape,
+  // so the join between them is a corner a round linejoin can soften instead of
+  // a seam between two paths.
+  const head = smoothCurve(edge(top, false), "M");
+  const tail = smoothCurve(edge(bottom, true), "L");
   return `${head}${tail}Z`;
 }
 
@@ -381,12 +382,12 @@ export function medianPath(points: readonly ConePoint[], box: PlotBox): string {
     const [right] = project(box, only.xHigh, only.median);
     return `M${left} ${y}L${right} ${y}`;
   }
-  return points
-    .map((point, index) => {
+  return smoothCurve(
+    points.map((point) => {
       const [x, y] = project(box, point.x, point.median);
-      return `${index === 0 ? "M" : "L"}${x} ${y}`;
-    })
-    .join("");
+      return { x, y };
+    }),
+  );
 }
 
 export interface RailBar {

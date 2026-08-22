@@ -59,8 +59,13 @@ export function isDeploymentRole(role: string | undefined): role is DeploymentRo
 }
 
 /**
- * The exact 22-table allowlist. All 22 are internal: the public-projection
+ * The exact 19-table allowlist. All 19 are internal: the public-projection
  * allowlist is empty, so an anonymous `200` on any of them is a failure.
+ *
+ * It was 22 until 0042 dropped `player_opening_stats`, `player_style` and
+ * `puzzles`. Those three were the only members of `NO_RUNTIME_GRANT_TABLES`, so
+ * the list is now exactly the tables that carry both a grant and a policy, and
+ * `POLICY_TABLES` below is the whole of it rather than a subset.
  */
 export const CONTAINED_TABLES = [
   "analysis_imports",
@@ -78,29 +83,47 @@ export const CONTAINED_TABLES = [
   "opening_repertoire_moves",
   "opening_training_results",
   "player_opening_observations",
-  "player_opening_stats",
-  "player_style",
   "position_eval",
   "profiles",
-  "puzzles",
   "repertoire_openings",
   "usage_events",
 ] as const;
 export type ContainedTable = (typeof CONTAINED_TABLES)[number];
 
-/** The public-projection allowlist is empty by contract. */
-export const PUBLIC_PROJECTION_ALLOWLIST: readonly string[] = [];
-
-/** Tables that carry no runtime grant at all. */
-export const NO_RUNTIME_GRANT_TABLES = [
+/**
+ * The 22 tables `public` held when 0011 contained it.
+ *
+ * History, not configuration. The pre-0011 fixture is a snapshot of what
+ * production actually looked like at 0010, and 0011 is replayed against it to
+ * prove the containment migration does what it claimed at the time. Comparing
+ * that snapshot to `CONTAINED_TABLES` was right only while the two were the
+ * same list; 0042 dropped three tables and made the present a bad description
+ * of the past. Editing the fixture instead would have been a lie about what was
+ * there.
+ */
+export const CONTAINED_TABLES_AT_0011 = [
+  ...CONTAINED_TABLES,
   "player_opening_stats",
   "player_style",
   "puzzles",
 ] as const;
 
-/** The 19 tables that carry the containment policy — every table except the three above. */
+/** The public-projection allowlist is empty by contract. */
+export const PUBLIC_PROJECTION_ALLOWLIST: readonly string[] = [];
+
+/**
+ * Tables that carry no runtime grant at all.
+ *
+ * Empty since 0042. It is kept rather than deleted because it is the shape the
+ * contract asserts against: a table added to `public` without a grant is a
+ * table nothing can reach, and the next person to create one should have to add
+ * it here deliberately rather than discover the concept does not exist.
+ */
+export const NO_RUNTIME_GRANT_TABLES: readonly string[] = [];
+
+/** The tables that carry the containment policy — all of them, since 0042. */
 export const POLICY_TABLES = CONTAINED_TABLES.filter(
-  (table) => !(NO_RUNTIME_GRANT_TABLES as readonly string[]).includes(table),
+  (table) => !NO_RUNTIME_GRANT_TABLES.includes(table),
 );
 
 /** The one policy name shape frozen by 0011. */
@@ -273,9 +296,10 @@ function freeze(label: string, actual: number, expected: number): void {
   }
 }
 
-freeze("contained tables", CONTAINED_TABLES.length, 22);
+freeze("contained tables", CONTAINED_TABLES.length, 19);
+freeze("contained tables at 0011", CONTAINED_TABLES_AT_0011.length, 22);
 freeze("policy tables", POLICY_TABLES.length, 19);
 freeze("runtime grant pairs", RUNTIME_GRANT_PAIRS.length, 54);
-freeze("no-runtime-grant tables", NO_RUNTIME_GRANT_TABLES.length, 3);
+freeze("no-runtime-grant tables", NO_RUNTIME_GRANT_TABLES.length, 0);
 freeze("allowed origins", ALLOWED_ORIGINS.length, 4);
 freeze("denied roles", DENIED_ROLES.length, 3);

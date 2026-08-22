@@ -168,8 +168,8 @@ export function Trajectory({
             })}
 
             <g className="cone-sweep" mask={stops.length > 0 ? `url(#${maskId})` : undefined}>
-              <path className="cone-above" d={band.above} />
-              <path className="cone-below" d={band.below} />
+              <path className="cone-above" d={band.above} vectorEffect="non-scaling-stroke" />
+              <path className="cone-below" d={band.below} vectorEffect="non-scaling-stroke" />
             </g>
 
             <line

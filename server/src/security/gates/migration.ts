@@ -30,7 +30,7 @@ import {
 import {
   JOURNAL_ENTRY,
   MIGRATION_ARTIFACTS,
-  CONTAINED_TABLES,
+  CONTAINED_TABLES_AT_0011,
   RUNTIME_ROLE,
   policyName,
 } from "../contract.js";
@@ -209,9 +209,11 @@ export function journalBody(root: string): AssertionBody {
 export function replayContainment(root: string): Catalogue {
   const fixture = JSON.parse(readFileSync(`${root}/${FIXTURE_PATH}`, "utf8")) as CatalogueFixture;
   const fixtureTables = fixture.tables.map((table) => table.name).sort();
-  const expected = [...CONTAINED_TABLES].sort();
+  const expected = [...CONTAINED_TABLES_AT_0011].sort();
   if (fixtureTables.join(",") !== expected.join(",")) {
-    throw new Error("pre-0011 fixture does not describe the 22 contained tables");
+    throw new Error(
+      `pre-0011 fixture does not describe the ${CONTAINED_TABLES_AT_0011.length} tables public held at 0011`,
+    );
   }
   const sql = readFileSync(`${root}/${MIGRATION_ARTIFACTS.sql.path}`, "utf8");
   return applyMigration(fixture, sql);
@@ -241,16 +243,26 @@ const ADVERSARIAL_SCENARIOS: AdversarialScenario[] = [
     check: assertExactTables,
   },
   {
-    label: `a forbidden ${RUNTIME_ROLE} SELECT grant on public.puzzles`,
-    mutate: (catalogue) => catalogue.tablePrivileges.set(`puzzles ${RUNTIME_ROLE}`, new Set(["SELECT"])),
+    // `public.puzzles` was the subject here until 0042 dropped it, and with it
+    // the last table holding no grant at all. The question the scenario asks is
+    // unchanged -- does a privilege nobody granted get noticed -- but it now has
+    // to be asked of a table that legitimately holds *some* privileges.
+    // `mistakes` is read-only to the runtime, so DELETE on it is a grant the
+    // contract has never contained.
+    label: `a forbidden ${RUNTIME_ROLE} DELETE grant on public.mistakes`,
+    mutate: (catalogue) =>
+      catalogue.tablePrivileges.set(`mistakes ${RUNTIME_ROLE}`, new Set(["SELECT", "DELETE"])),
     check: assertExactRuntimeGrants,
   },
   {
-    label: "a forbidden extra policy on public.puzzles",
+    // Likewise. A second policy on a table that already has its one frozen
+    // policy is the shape that matters: the count moves and the name is not one
+    // the contract can produce.
+    label: "a forbidden extra policy on public.mistakes",
     mutate: (catalogue) =>
       catalogue.policies.push({
-        name: policyName("puzzles"),
-        table: "puzzles",
+        name: `${policyName("mistakes")}_shadow`,
+        table: "mistakes",
         roles: [RUNTIME_ROLE],
         command: "ALL",
         permissive: true,
@@ -291,7 +303,18 @@ export function buildMigrationBodies(
   const hooks = {
     scanMigratorPaths: async () => describeHits(scanMigratorOperationalPaths(root)),
   };
-  let denialIndex = 0;
+  // One adversarial scenario rides along with each of the first few assertions,
+  // so the exactness predicates are proven to *reject* an extra object rather
+  // than merely to accept a correct catalogue.
+  //
+  // They used to ride on the `runtime-denial` assertions, of which there were
+  // exactly three: one per table the runtime held nothing on. 0042 dropped all
+  // three tables, so that category has no subject left and no members. The
+  // scenarios are independent of what they are attached to -- each mutates the
+  // catalogue and asserts the mutation is caught -- so they now ride on
+  // `table-rls`, which has one member per contained table and cannot empty
+  // while any contained table exists.
+  let adversarialIndex = 0;
 
   for (const record of records) {
     if (record.category === "artifact-integrity") {
@@ -306,12 +329,9 @@ export function buildMigrationBodies(
     }
     const body = catalogueBody(record, source, hooks);
     if (!body) throw new Error(`no body for category "${record.category}" (${record.id})`);
-    if (record.category === "runtime-denial") {
-      // Each denial assertion also carries one adversarial scenario, so the
-      // exactness predicates are proven to reject extra objects rather than
-      // merely to accept correct ones.
-      const index = denialIndex;
-      denialIndex += 1;
+    if (record.category === "table-rls" && adversarialIndex < ADVERSARIAL_SCENARIOS.length) {
+      const index = adversarialIndex;
+      adversarialIndex += 1;
       bodies.set(record.id, async (assertion) => {
         const detail = await body(assertion);
         const adversarial = await runAdversarialScenario(root, index);
@@ -321,9 +341,9 @@ export function buildMigrationBodies(
     }
     bodies.set(record.id, body);
   }
-  if (denialIndex !== ADVERSARIAL_SCENARIOS.length) {
+  if (adversarialIndex !== ADVERSARIAL_SCENARIOS.length) {
     throw new Error(
-      `expected ${ADVERSARIAL_SCENARIOS.length} runtime-denial assertions to carry adversarial scenarios, saw ${denialIndex}`,
+      `expected ${ADVERSARIAL_SCENARIOS.length} assertions to carry adversarial scenarios, saw ${adversarialIndex}`,
     );
   }
   return bodies;

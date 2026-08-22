@@ -214,7 +214,12 @@ try {
     const before = await prior.query<{ n: number }>(
       `select count(*)::int as n from information_schema.tables where table_schema = 'public'`,
     );
-    await applyMigrations(prior.adminUrl);
+    // Stops at 0013. It used to apply everything, which meant the assertion
+    // below quietly grew into "no migration ever touches the legacy schema" --
+    // true by accident until 0042 deliberately dropped three tables from it.
+    // The claim this check is named for is about 0013 alone, so it applies 0013
+    // alone; later migrations are their own epics' to prove.
+    await applyMigrations(prior.adminUrl, "0013_e03_api_kernel");
     await assertKernelSchema(prior, "prior state");
     const after = await prior.query<{ n: number }>(
       `select count(*)::int as n from information_schema.tables where table_schema = 'public'`,

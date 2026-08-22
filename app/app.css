@@ -3171,9 +3171,25 @@
   /* The two semantic colours DESIGN.md allows, and nothing else on this page
      is coloured. Above level is a game being won, below it a game being lost;
      the split is what makes an asymmetric band readable as asymmetric. */
-  .cone-above { fill: color-mix(in srgb, var(--color-win) 46%, transparent); }
-  .cone-below { fill: color-mix(in srgb, var(--color-loss) 46%, transparent); }
-  .cone-median { stroke: var(--color-ink); stroke-width: 1.5; stroke-linejoin: round; }
+  /* Fill plus a same-colour round-joined stroke. The band's own corners are the
+     sampling interval rather than anything that happened in a game, and the
+     spikes where a quarter of the archive swings hard are where a mitre is
+     ugliest — a needle point instead of the turn the data actually makes. The
+     stroke is opaque so the overlap with the fill does not darken its edge. */
+  .cone-above {
+    fill: color-mix(in srgb, var(--color-win) 46%, transparent);
+    stroke: color-mix(in srgb, var(--color-win) 46%, var(--color-surface));
+    stroke-width: 2; stroke-linejoin: round;
+  }
+  .cone-below {
+    fill: color-mix(in srgb, var(--color-loss) 46%, transparent);
+    stroke: color-mix(in srgb, var(--color-loss) 46%, var(--color-surface));
+    stroke-width: 2; stroke-linejoin: round;
+  }
+  .cone-median {
+    stroke: var(--color-ink); stroke-width: 1.5;
+    stroke-linejoin: round; stroke-linecap: round;
+  }
   .cone-rail rect { fill: color-mix(in srgb, var(--color-ink) 26%, transparent); }
 
   /* Job: a game is read from the first move to the last, so the graph arrives

@@ -19,9 +19,9 @@
     "cd server && npm ci && npm run build && npm run typecheck": 3,
     "cd server && npm run pipeline:test": 9,
     "cd server && npm run security:unit": 32,
-    "cd server && npm run security:migration": 105,
-    "cd server && npm run security:rehearsal": 179,
-    "cd server && npm run security:production-readonly": 147,
+    "cd server && npm run security:migration": 99,
+    "cd server && npm run security:rehearsal": 170,
+    "cd server && npm run security:production-readonly": 141,
     "cd server && npm run security:forbidden-scope": 12,
     "npm audit --omit=dev && cd server && npm audit --omit=dev": 2
   },
@@ -677,26 +677,6 @@
       "evidence_class": "deterministic"
     },
     {
-      "id": "MIG-TBL-016",
-      "command": "cd server && npm run security:migration",
-      "category": "table-rls",
-      "target": "public.player_opening_stats",
-      "setup": "static exact artifacts and production-shaped 0010 catalogue fixture",
-      "predicate": "table exists and relrowsecurity=true",
-      "timeout_seconds": 10,
-      "evidence_class": "deterministic"
-    },
-    {
-      "id": "MIG-TBL-017",
-      "command": "cd server && npm run security:migration",
-      "category": "table-rls",
-      "target": "public.player_style",
-      "setup": "static exact artifacts and production-shaped 0010 catalogue fixture",
-      "predicate": "table exists and relrowsecurity=true",
-      "timeout_seconds": 10,
-      "evidence_class": "deterministic"
-    },
-    {
       "id": "MIG-TBL-018",
       "command": "cd server && npm run security:migration",
       "category": "table-rls",
@@ -711,16 +691,6 @@
       "command": "cd server && npm run security:migration",
       "category": "table-rls",
       "target": "public.profiles",
-      "setup": "static exact artifacts and production-shaped 0010 catalogue fixture",
-      "predicate": "table exists and relrowsecurity=true",
-      "timeout_seconds": 10,
-      "evidence_class": "deterministic"
-    },
-    {
-      "id": "MIG-TBL-020",
-      "command": "cd server && npm run security:migration",
-      "category": "table-rls",
-      "target": "public.puzzles",
       "setup": "static exact artifacts and production-shaped 0010 catalogue fixture",
       "predicate": "table exists and relrowsecurity=true",
       "timeout_seconds": 10,
@@ -1477,36 +1447,6 @@
       "evidence_class": "deterministic"
     },
     {
-      "id": "MIG-DEN-001",
-      "command": "cd server && npm run security:migration",
-      "category": "runtime-denial",
-      "target": "public.player_opening_stats",
-      "setup": "static exact artifacts and production-shaped 0010 catalogue fixture",
-      "predicate": "forma_api has no table privilege and no applicable policy",
-      "timeout_seconds": 10,
-      "evidence_class": "deterministic"
-    },
-    {
-      "id": "MIG-DEN-002",
-      "command": "cd server && npm run security:migration",
-      "category": "runtime-denial",
-      "target": "public.player_style",
-      "setup": "static exact artifacts and production-shaped 0010 catalogue fixture",
-      "predicate": "forma_api has no table privilege and no applicable policy",
-      "timeout_seconds": 10,
-      "evidence_class": "deterministic"
-    },
-    {
-      "id": "MIG-DEN-003",
-      "command": "cd server && npm run security:migration",
-      "category": "runtime-denial",
-      "target": "public.puzzles",
-      "setup": "static exact artifacts and production-shaped 0010 catalogue fixture",
-      "predicate": "forma_api has no table privilege and no applicable policy",
-      "timeout_seconds": 10,
-      "evidence_class": "deterministic"
-    },
-    {
       "id": "MIG-ROLE-001",
       "command": "cd server && npm run security:migration",
       "category": "role-posture",
@@ -1727,26 +1667,6 @@
       "evidence_class": "disposable"
     },
     {
-      "id": "REH-MIG-TBL-016",
-      "command": "cd server && npm run security:rehearsal",
-      "category": "table-rls",
-      "target": "public.player_opening_stats",
-      "setup": "fresh isolated synthetic 0010 database after applying exact 0011 once",
-      "predicate": "table exists and relrowsecurity=true",
-      "timeout_seconds": 10,
-      "evidence_class": "disposable"
-    },
-    {
-      "id": "REH-MIG-TBL-017",
-      "command": "cd server && npm run security:rehearsal",
-      "category": "table-rls",
-      "target": "public.player_style",
-      "setup": "fresh isolated synthetic 0010 database after applying exact 0011 once",
-      "predicate": "table exists and relrowsecurity=true",
-      "timeout_seconds": 10,
-      "evidence_class": "disposable"
-    },
-    {
       "id": "REH-MIG-TBL-018",
       "command": "cd server && npm run security:rehearsal",
       "category": "table-rls",
@@ -1761,16 +1681,6 @@
       "command": "cd server && npm run security:rehearsal",
       "category": "table-rls",
       "target": "public.profiles",
-      "setup": "fresh isolated synthetic 0010 database after applying exact 0011 once",
-      "predicate": "table exists and relrowsecurity=true",
-      "timeout_seconds": 10,
-      "evidence_class": "disposable"
-    },
-    {
-      "id": "REH-MIG-TBL-020",
-      "command": "cd server && npm run security:rehearsal",
-      "category": "table-rls",
-      "target": "public.puzzles",
       "setup": "fresh isolated synthetic 0010 database after applying exact 0011 once",
       "predicate": "table exists and relrowsecurity=true",
       "timeout_seconds": 10,
@@ -2527,36 +2437,6 @@
       "evidence_class": "disposable"
     },
     {
-      "id": "REH-MIG-DEN-001",
-      "command": "cd server && npm run security:rehearsal",
-      "category": "runtime-denial",
-      "target": "public.player_opening_stats",
-      "setup": "fresh isolated synthetic 0010 database after applying exact 0011 once",
-      "predicate": "forma_api has no table privilege and no applicable policy",
-      "timeout_seconds": 10,
-      "evidence_class": "disposable"
-    },
-    {
-      "id": "REH-MIG-DEN-002",
-      "command": "cd server && npm run security:rehearsal",
-      "category": "runtime-denial",
-      "target": "public.player_style",
-      "setup": "fresh isolated synthetic 0010 database after applying exact 0011 once",
-      "predicate": "forma_api has no table privilege and no applicable policy",
-      "timeout_seconds": 10,
-      "evidence_class": "disposable"
-    },
-    {
-      "id": "REH-MIG-DEN-003",
-      "command": "cd server && npm run security:rehearsal",
-      "category": "runtime-denial",
-      "target": "public.puzzles",
-      "setup": "fresh isolated synthetic 0010 database after applying exact 0011 once",
-      "predicate": "forma_api has no table privilege and no applicable policy",
-      "timeout_seconds": 10,
-      "evidence_class": "disposable"
-    },
-    {
       "id": "REH-MIG-ROLE-001",
       "command": "cd server && npm run security:rehearsal",
       "category": "role-posture",
@@ -2867,26 +2747,6 @@
       "evidence_class": "disposable"
     },
     {
-      "id": "REH-HTTP-016",
-      "command": "cd server && npm run security:rehearsal",
-      "category": "anonymous-data-api",
-      "target": "public.player_opening_stats",
-      "setup": "prove table exists, then issue anonymous Data API select with disposable publishable key",
-      "predicate": "HTTP 401 or 403, or PostgREST code exactly 42501; 200/404/transport/timeout fails",
-      "timeout_seconds": 10,
-      "evidence_class": "disposable"
-    },
-    {
-      "id": "REH-HTTP-017",
-      "command": "cd server && npm run security:rehearsal",
-      "category": "anonymous-data-api",
-      "target": "public.player_style",
-      "setup": "prove table exists, then issue anonymous Data API select with disposable publishable key",
-      "predicate": "HTTP 401 or 403, or PostgREST code exactly 42501; 200/404/transport/timeout fails",
-      "timeout_seconds": 10,
-      "evidence_class": "disposable"
-    },
-    {
       "id": "REH-HTTP-018",
       "command": "cd server && npm run security:rehearsal",
       "category": "anonymous-data-api",
@@ -2901,16 +2761,6 @@
       "command": "cd server && npm run security:rehearsal",
       "category": "anonymous-data-api",
       "target": "public.profiles",
-      "setup": "prove table exists, then issue anonymous Data API select with disposable publishable key",
-      "predicate": "HTTP 401 or 403, or PostgREST code exactly 42501; 200/404/transport/timeout fails",
-      "timeout_seconds": 10,
-      "evidence_class": "disposable"
-    },
-    {
-      "id": "REH-HTTP-020",
-      "command": "cd server && npm run security:rehearsal",
-      "category": "anonymous-data-api",
-      "target": "public.puzzles",
       "setup": "prove table exists, then issue anonymous Data API select with disposable publishable key",
       "predicate": "HTTP 401 or 403, or PostgREST code exactly 42501; 200/404/transport/timeout fails",
       "timeout_seconds": 10,
@@ -3487,26 +3337,6 @@
       "evidence_class": "observed_live"
     },
     {
-      "id": "PROD-TBL-016",
-      "command": "cd server && npm run security:production-readonly",
-      "category": "table-rls",
-      "target": "public.player_opening_stats",
-      "setup": "read-only admin catalogue query against oqsjfmgdovvepncbphvk",
-      "predicate": "table exists and relrowsecurity=true",
-      "timeout_seconds": 10,
-      "evidence_class": "observed_live"
-    },
-    {
-      "id": "PROD-TBL-017",
-      "command": "cd server && npm run security:production-readonly",
-      "category": "table-rls",
-      "target": "public.player_style",
-      "setup": "read-only admin catalogue query against oqsjfmgdovvepncbphvk",
-      "predicate": "table exists and relrowsecurity=true",
-      "timeout_seconds": 10,
-      "evidence_class": "observed_live"
-    },
-    {
       "id": "PROD-TBL-018",
       "command": "cd server && npm run security:production-readonly",
       "category": "table-rls",
@@ -3521,16 +3351,6 @@
       "command": "cd server && npm run security:production-readonly",
       "category": "table-rls",
       "target": "public.profiles",
-      "setup": "read-only admin catalogue query against oqsjfmgdovvepncbphvk",
-      "predicate": "table exists and relrowsecurity=true",
-      "timeout_seconds": 10,
-      "evidence_class": "observed_live"
-    },
-    {
-      "id": "PROD-TBL-020",
-      "command": "cd server && npm run security:production-readonly",
-      "category": "table-rls",
-      "target": "public.puzzles",
       "setup": "read-only admin catalogue query against oqsjfmgdovvepncbphvk",
       "predicate": "table exists and relrowsecurity=true",
       "timeout_seconds": 10,
@@ -4597,26 +4417,6 @@
       "evidence_class": "observed_live"
     },
     {
-      "id": "PROD-HTTP-016",
-      "command": "cd server && npm run security:production-readonly",
-      "category": "anonymous-data-api",
-      "target": "public.player_opening_stats",
-      "setup": "prove table exists by catalogue, then anonymous Data API select using public publishable key",
-      "predicate": "HTTP 401 or 403, or PostgREST code exactly 42501; 200/404/transport/timeout fails",
-      "timeout_seconds": 10,
-      "evidence_class": "observed_live"
-    },
-    {
-      "id": "PROD-HTTP-017",
-      "command": "cd server && npm run security:production-readonly",
-      "category": "anonymous-data-api",
-      "target": "public.player_style",
-      "setup": "prove table exists by catalogue, then anonymous Data API select using public publishable key",
-      "predicate": "HTTP 401 or 403, or PostgREST code exactly 42501; 200/404/transport/timeout fails",
-      "timeout_seconds": 10,
-      "evidence_class": "observed_live"
-    },
-    {
       "id": "PROD-HTTP-018",
       "command": "cd server && npm run security:production-readonly",
       "category": "anonymous-data-api",
@@ -4631,16 +4431,6 @@
       "command": "cd server && npm run security:production-readonly",
       "category": "anonymous-data-api",
       "target": "public.profiles",
-      "setup": "prove table exists by catalogue, then anonymous Data API select using public publishable key",
-      "predicate": "HTTP 401 or 403, or PostgREST code exactly 42501; 200/404/transport/timeout fails",
-      "timeout_seconds": 10,
-      "evidence_class": "observed_live"
-    },
-    {
-      "id": "PROD-HTTP-020",
-      "command": "cd server && npm run security:production-readonly",
-      "category": "anonymous-data-api",
-      "target": "public.puzzles",
       "setup": "prove table exists by catalogue, then anonymous Data API select using public publishable key",
       "predicate": "HTTP 401 or 403, or PostgREST code exactly 42501; 200/404/transport/timeout fails",
       "timeout_seconds": 10,

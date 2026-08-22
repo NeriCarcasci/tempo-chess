@@ -1,0 +1,73 @@
+-- 0042_drop_contained_legacy_tables
+--
+-- Drop the three legacy tables E01 contained and nothing ever un-contained.
+--
+-- Hand-written and reviewed. Destructive, deliberately and narrowly: three
+-- tables, chosen because each satisfies all four of the conditions below, and
+-- no other table in `public` satisfies even the first two.
+--
+--   1. No runtime grant. `forma_api` holds nothing on them, and neither does
+--      any browser role. They are the entire membership of
+--      `NO_RUNTIME_GRANT_TABLES`, so no deployed process can reach them even by
+--      accident. The only role holding anything is Supabase's built-in
+--      `service_role`, which holds it on every table in `public` by platform
+--      default rather than by any decision of ours.
+--   2. No reader. Nothing in `server/src` names them outside the security
+--      contract that contains them and the drizzle schema that describes them.
+--   3. Empty. Zero rows in the live project, no policy, and no inbound foreign
+--      key from anywhere.
+--   4. Superseded, by the thing 0011 said would supersede them. That is the
+--      condition that makes this a cleanup rather than a deletion:
+--
+--        * `player_style`          -> `analysis.player_skill_estimates` (0028,
+--          E15), which is versioned and carries an interval where this carried
+--          a bare label.
+--        * `puzzles`               -> `coaching.training_items` (0031, E18),
+--          which owns provenance and a schedule rather than a due date bolted
+--          onto a mistake.
+--        * `player_opening_stats`  -> the `families` block of
+--          `GET /v1/openings/explorer`, which reports games, judged decisions
+--          and failures per family. Notably it does *not* report a win rate:
+--          this table's `wins`/`draws`/`losses`/`avg_accuracy` columns are the
+--          shape of a claim the product no longer makes without an interval
+--          behind it, which is why nothing rebuilt them.
+--
+-- What this is not. It is not the legacy cutover: `public.games`,
+-- `public.linked_accounts`, `public.opening_positions` and the other sixteen
+-- contained tables are still read by `requireSession()`, by every unported
+-- screen, and by the `/v1` explorer's catalogue join. Removing those is E23's
+-- work and needs the screens ported first.
+--
+-- Re-running is a no-op: every statement is `if exists`.
+--
+-- The security contract moves with this migration, in the same commit.
+-- `CONTAINED_TABLES` goes 22 -> 19 and `NO_RUNTIME_GRANT_TABLES` goes 3 -> 0.
+-- `POLICY_TABLES` and `RUNTIME_GRANT_PAIRS` are unchanged at 19 and 54, because
+-- none of the three ever held a policy or a grant -- which is the same fact
+-- that made them safe to drop.
+
+-- `reset role`, not `set local role forma_migrator`, and it has to be explicit.
+--
+-- Drizzle applies every pending migration inside one transaction, and
+-- `set local role` lives for that transaction rather than for the file that
+-- issued it. 0031, 0032 and 0033 each set the role and none of them resets it,
+-- so whatever runs next inherits `forma_migrator` -- harmless while every
+-- migration is additive and re-sets the role anyway, and not harmless here.
+-- These three tables were created in 0000 and are owned by the migration
+-- connection, not by `forma_migrator`, and DROP requires ownership: inheriting
+-- the role turns every statement below into a 42501. 0011, the migration that
+-- contained these same three tables, runs unroled for the same reason.
+reset role
+--> statement-breakpoint
+-- Order is arbitrary: none of the three is referenced by any other table. Their
+-- only foreign keys point outward, at `public.profiles`, and drop with them.
+drop table if exists public.player_opening_stats
+--> statement-breakpoint
+drop table if exists public.player_style
+--> statement-breakpoint
+drop table if exists public.puzzles
+--> statement-breakpoint
+-- The enum existed only to type `puzzles.source`. Left behind it would be a
+-- type describing a table that no longer exists, which is the sort of thing a
+-- later reader treats as a hint that something is coming back.
+drop type if exists public.puzzle_source
