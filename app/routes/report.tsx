@@ -220,7 +220,7 @@ export default function Report() {
                   positions have been read all the way through.
                 </p>
               ) : (
-                <Trajectory cone={cone} />
+                <Trajectory cone={cone} printable />
               )}
             </Part>
 

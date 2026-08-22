@@ -373,6 +373,62 @@ export function bandPaths(
   };
 }
 
+/**
+ * The whole middle half as one shape, rather than two split at level.
+ *
+ * The split band coloured the winning quarter green and the losing quarter red,
+ * and the asymmetry between them was the reading. It is still the reading — and
+ * `coneFinding` says it in words — but the colour was carrying a claim the
+ * figure elsewhere makes with shape, and a ribbon that is green on top and red
+ * underneath for its whole length reads as decoration before it reads as data.
+ * One neutral band puts the spread back in charge, which is what the eye should
+ * be measuring here.
+ */
+export function bandPath(points: readonly ConePoint[], box: PlotBox): string {
+  return areaPath(
+    points,
+    box,
+    (point) => point.p75,
+    (point) => point.p25,
+  );
+}
+
+/**
+ * The sample rail as one area under a curve, rather than a bar per bin.
+ *
+ * Drawn as bars this register was the band again at a lighter weight — same
+ * width, same rhythm, near enough the same height across the opening — and a
+ * reader has to work out that the two are not the same kind of thing. A curve
+ * is a different kind of mark, and what this register says is a shape: the
+ * archive is whole here, and by the endgame it is a quarter of itself.
+ */
+export function railPath(
+  cone: Cone,
+  box: PlotBox,
+  top: number,
+  height: number,
+): { edge: string; area: string } {
+  if (cone.peakGames <= 0 || cone.points.length === 0) return { edge: "", area: "" };
+  const y = (point: ConePoint) =>
+    round(top + height - (point.games / cone.peakGames) * height);
+  const points = cone.points.map((point) => ({
+    x: round(box.x + clamp01(point.x) * box.width),
+    y: y(point),
+  }));
+  // Squared off to the plot's own edges, so the rail spans the same width as
+  // the band above it instead of stopping half a bin short at each end.
+  points.unshift({ x: round(box.x), y: points[0]!.y });
+  points.push({ x: round(box.x + box.width), y: points[points.length - 1]!.y });
+  const edge = smoothCurve(points);
+  const floor = round(top + height);
+  // Edge and area as two paths: one closed path would stroke the baseline too,
+  // drawing a rule under the figure that means nothing.
+  return {
+    edge,
+    area: `${edge}L${round(box.x + box.width)} ${floor}L${round(box.x)} ${floor}Z`,
+  };
+}
+
 /** The median, as an open path. One point becomes a short flat tick. */
 export function medianPath(points: readonly ConePoint[], box: PlotBox): string {
   if (points.length === 0) return "";

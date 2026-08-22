@@ -183,7 +183,7 @@ function moveNoOf(ply: number): number {
   return ply % 2 === 0 ? ply / 2 + 1 : (ply + 1) / 2;
 }
 
-export function heatOf(decisions: number, failures: number): CellHeat | undefined {
+function heatOf(decisions: number, failures: number): CellHeat | undefined {
   if (decisions < FLOOR_COLOR) return undefined;
   const rate = failures / decisions;
   if (rate >= TEARS_AT) return "tears";

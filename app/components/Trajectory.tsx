@@ -1,8 +1,9 @@
 import { useId } from "react";
 import type { Cone, PhaseAccuracy, PlotBox } from "../lib/trajectory";
+import { FigureNote } from "./FigureNote";
 import {
   accuracyFinding,
-  bandPaths,
+  bandPath,
   coneFinding,
   coneText,
   decayStops,
@@ -10,7 +11,7 @@ import {
   medianPath,
   phaseCards,
   project,
-  railBars,
+  railPath,
 } from "../lib/trajectory";
 
 /**
@@ -74,11 +75,47 @@ const pct = (value: number): string => `${Math.round(value * 100)}%`;
 const signed = (value: number): string =>
   `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(Math.round(value * 100))}`;
 
+/**
+ * What the figure counts, written once and rendered either behind a mark or as
+ * prose. Two copies would be two chances for the screen and the paper to define
+ * the same picture differently.
+ */
+const DEFINITIONS = (
+  <>
+    <p>
+      Every move of every game you have had read was scored by the engine, and turned into an
+      expected score from your side of the board: 100% is won, 0% is lost, and level is a game
+      either of you could still take.
+    </p>
+    <p>
+      The band is the middle half of your games at that point — a quarter are above it and a
+      quarter below — and the line through it is the median. It is drawn in one weight rather
+      than split by colour: the spread is what this figure measures, and the asymmetry between
+      its halves is said in words above rather than left to a hue to carry.
+    </p>
+    <p>
+      The curve under the band is how many games are still being counted, and the band fades
+      with it, so where the archive thins the figure says so instead of claiming the same
+      strength over fifty games as over two hundred. Each phase is measured across its own
+      length, which is what the dashed dividers mark.
+    </p>
+  </>
+);
+
 export function Trajectory({
   cone,
   accuracy = [],
+  printable = false,
 }: {
   cone: Cone;
+  /**
+   * Set on the published report, which is a document rather than a screen: it
+   * carries exactly one control, the one that prints it, and a test holds that
+   * rule. Here the definitions are set as prose so they are on the page and on
+   * the paper. Everywhere else they sit behind a mark, because a returning
+   * reader reads past them every time.
+   */
+  printable?: boolean;
   /**
    * How often chances were taken in each phase. Empty today: no route
    * publishes per-phase rates, and the cards say so rather than deriving one.
@@ -91,7 +128,7 @@ export function Trajectory({
   const descriptionId = `cone-desc-${uid}`;
 
   const finding = coneFinding(cone);
-  const band = bandPaths(cone.points, PLOT);
+  const band = bandPath(cone.points, PLOT);
   const stops = decayStops(cone);
   const cards = phaseCards(cone, accuracy);
   const rowFinding = accuracyFinding(cards);
@@ -168,8 +205,9 @@ export function Trajectory({
             })}
 
             <g className="cone-sweep" mask={stops.length > 0 ? `url(#${maskId})` : undefined}>
-              <path className="cone-above" d={band.above} vectorEffect="non-scaling-stroke" />
-              <path className="cone-below" d={band.below} vectorEffect="non-scaling-stroke" />
+              {/* One neutral band, fill plus a same-colour round-joined stroke,
+                  so the corners turn where the data turns. */}
+              <path className="cone-band" d={band} vectorEffect="non-scaling-stroke" />
             </g>
 
             <line
@@ -203,11 +241,17 @@ export function Trajectory({
               />
             ))}
 
-            <g className="cone-rail">
-              {railBars(cone, PLOT, RAIL_TOP, RAIL_HEIGHT).map((bar) => (
-                <rect key={bar.key} x={bar.x} y={bar.y} width={bar.width} height={bar.height} />
-              ))}
-            </g>
+            {/* The evidence under the reading, as a curve rather than a second
+                row of bars pretending not to be the band. */}
+            {(() => {
+              const rail = railPath(cone, PLOT, RAIL_TOP, RAIL_HEIGHT);
+              return rail.edge ? (
+                <g className="cone-rail">
+                  <path className="cone-rail-area" d={rail.area} />
+                  <path className="cone-rail-edge" d={rail.edge} vectorEffect="non-scaling-stroke" />
+                </g>
+              ) : null;
+            })()}
           </svg>
         </div>
 
@@ -293,12 +337,14 @@ export function Trajectory({
           </p>
         ) : null}
         <p className="cone-note">
-          Expected score from your side of the board, from the engine that read every move. The
-          shaded region is the middle half of your games at that point, coloured by which side of
-          level it falls; the line through it is the median; the strip underneath is how many games
-          are still being counted, and the band fades with it. Each phase is measured across its own
-          length, which is what the dashed dividers mark.
+          Expected score from your side of the board, whichever colour you had.
+          {printable ? null : (
+            <FigureNote title="How this figure is measured">
+              {DEFINITIONS}
+            </FigureNote>
+          )}
         </p>
+        {printable ? <div className="cone-note">{DEFINITIONS}</div> : null}
       </figcaption>
       <p id={descriptionId} className="sr-only">
         {coneText(cone)}
