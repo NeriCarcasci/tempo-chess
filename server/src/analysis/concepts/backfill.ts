@@ -1,116 +1,236 @@
 /**
  * `npm run concepts:backfill` — measure games that were analysed before the
- * detector existed.
+ * detector existed, or before a concept it now knows about did.
  *
- * Every game in this environment already has a succeeded analysis run with its
- * transitions assessed and its position graph materialized. What those runs do
- * not have is any concept evidence, because the step that produces it was
- * planned into the per-game workflow only after they finished.
+ * The archive has succeeded analysis runs whose position graphs are already
+ * materialized. Replanning them would repeat the screening and deep searches,
+ * which are the expensive part and whose output has not changed. The detector
+ * reads that output, so this walks the runs that already succeeded and calls
+ * exactly the same
+ * `detectForRun` the worker calls — not a second implementation, and not a
+ * shortcut past the actor binding.
  *
- * Replanning them would work and would be wasteful: it would repeat the
- * screening and deep searches, which are the expensive part and whose output
- * has not changed. The detector reads that output. So this walks the runs that
- * already succeeded and calls exactly the same `detectForRun` the worker calls
- * -- not a second implementation, and not a shortcut past the actor binding.
+ * ## Safe invocation
  *
- * Idempotent, because evidence is append-only: `detectForRun` declines to write
- * a second copy of an observation it already recorded. Running it twice is safe
- * and the second run writes nothing.
+ * ```bash
+ * # See the scope. Writes nothing.
+ * PROFILE_ID=<uuid> npm run concepts:backfill -- --dry-run
  *
- * What changed in FOR-122 is what "already recorded" means. It used to mean the
- * run had *any* opportunity, so this command could never deliver a newly added
- * concept to a game the previous version had already touched -- the only way to
- * pick one up was to delete evidence, which `forma_analysis` cannot do. It now
- * means that exact observation, under that exact concept version, so a second
- * pass fills in what is missing and reports the rest as already present.
+ * # Measure the runs that have never been measured. The default, and the safe one.
+ * PROFILE_ID=<uuid> npm run concepts:backfill
  *
- * Usage: PROFILE_ID=<uuid> npm run concepts:backfill
+ * # In bounded batches, for a large archive.
+ * PROFILE_ID=<uuid> npm run concepts:backfill -- --limit=100
+ *
+ * # Also re-run already-measured runs, to reconcile their counts. Existing
+ * # evidence is never rewritten; missing provenance links may be appended.
+ * PROFILE_ID=<uuid> npm run concepts:backfill -- --verify
+ * ```
+ *
+ * `PROFILE_ID` decides whose evidence is touched, and it is an environment
+ * variable rather than a flag so it is harder to leave in a shell history and
+ * reuse against the wrong person. Every read and write runs under
+ * `withActor`, so row level security is the boundary rather than the `where`
+ * clause.
+ *
+ * ## Recovering an interrupted batch
+ *
+ * Run the same command again. A run that completed carries an artifact
+ * manifest, so the default mode no longer selects it; the selection is sorted
+ * by run id so the order does not move under a resumed batch; and each run is
+ * its own transaction, so an interruption leaves completed games written and
+ * the interrupted one untouched rather than half-written. A second completed
+ * run over the same scope selects nothing and writes nothing.
+ *
+ * ## What it will not do
+ *
+ * It will not change what a published review already said. A run whose manifest
+ * disagrees with this build's conclusions — because the catalogue gained a
+ * concept, or a detector was corrected — needs a *new* analysis run, and
+ * planning those is the pipeline's job rather than this command's. Such runs are
+ * counted and named so an operator can plan them, and the batch carries on.
+ *
+ * It performs no production mutation on its own account: it writes only the
+ * evidence the detector concludes, for the one profile named, and `--dry-run`
+ * writes nothing at all.
  */
 
 import postgres from "postgres";
 import { detectForRun } from "./worker.js";
 import { withActor } from "../../db/actor.js";
+import { WorkFailure } from "../../ops/retry.js";
+import {
+  OptionError,
+  exitCodeFor,
+  parseOptions,
+  reconcile,
+  reportLines,
+  selectRuns,
+  summarise,
+  type RunCandidate,
+  type RunOutcome,
+} from "./backfill-plan.js";
 
 const url = process.env.DATABASE_URL;
-const profileId = process.env.PROFILE_ID;
 if (!url) {
   console.error("DATABASE_URL is not set");
   process.exit(1);
 }
-if (!profileId) {
-  console.error("PROFILE_ID is not set; this command acts on exactly one person");
+
+let options;
+try {
+  options = parseOptions(process.argv.slice(2), process.env);
+} catch (error) {
+  console.error(error instanceof OptionError ? error.message : String(error));
   process.exit(1);
 }
+
 const client = postgres(url, { max: 1, prepare: false });
 
 try {
-  // Bound, like everything else that touches a tenant table. All three of
-  // these force row level security against `private.current_actor_id()`, so
-  // unbound this returns no rows and reports "0 analysed games to measure" for
-  // a subject with a hundred and ninety-six of them -- which is exactly what it
-  // did the first time it ran, under a comment claiming it was bound.
-  const runs = await withActor(client, profileId, (tx) =>
-    tx<{ id: string }[]>`
-      select r.id
+  // Bound, like everything else that touches a tenant table. These force row
+  // level security against `private.current_actor_id()`, so unbound this
+  // returns no rows and reports "0 analysed games" for a subject with a hundred
+  // and ninety-six of them -- which is exactly what it did the first time it
+  // ran, under a comment claiming it was bound.
+  const candidates = await withActor(client, options.profileId, (tx) =>
+    tx<{ run_id: string; subject_game_id: string; has_manifest: boolean }[]>`
+      select r.id as run_id,
+             r.subject_game_id,
+             exists (
+               select 1 from analysis.run_artifacts a
+               where a.run_id = r.id and a.family = 'concept_opportunities'
+             ) as has_manifest
       from analysis.runs r
       join chess.subject_games g on g.id = r.subject_game_id
       join app.analysis_subjects s on s.id = g.subject_id
-      where s.owner_user_id = ${profileId}
+      where s.owner_user_id = ${options.profileId}
         and r.status = 'succeeded'
         and r.subject_game_id is not null
-        and exists (select 1 from analysis.transition_assessments t where t.analysis_run_id = r.id)
       order by r.id
     `,
   );
-  console.log(`runs       ${runs.length} analysed games to measure`);
 
-  let opportunities = 0;
-  let censored = 0;
-  let unregistered = 0;
-  let unrecordable = 0;
-  let failed = 0;
-  const byConcept = new Map<string, number>();
+  const { selected, skipped } = selectRuns(
+    candidates.map((row): RunCandidate => ({
+      runId: row.run_id,
+      subjectGameId: row.subject_game_id,
+      hasManifest: row.has_manifest,
+    })),
+    options,
+  );
 
-  for (const [index, run] of runs.entries()) {
-    try {
-      const result = await detectForRun(client, run.id, profileId);
-      const summary = result.outputSummary as {
-        opportunities?: number;
-        censored?: number;
-        abstentions?: { unregisteredConcept?: number; unrecordableDraft?: number };
-        concepts?: Record<string, number>;
-      };
-      opportunities += summary.opportunities ?? 0;
-      censored += summary.censored ?? 0;
-      unregistered += summary.abstentions?.unregisteredConcept ?? 0;
-      unrecordable += summary.abstentions?.unrecordableDraft ?? 0;
-      for (const [slug, count] of Object.entries(summary.concepts ?? {})) {
-        byConcept.set(slug, (byConcept.get(slug) ?? 0) + count);
+  // Counted before anything is written, so the reconciliation at the end has
+  // something to be a difference from.
+  const [before] = await withActor(client, options.profileId, (tx) =>
+    tx<{ opportunities: string; events: string }[]>`
+      select (select count(*)::text from analysis.concept_opportunities) as opportunities,
+             (select count(*)::text from analysis.chess_events) as events
+    `,
+  );
+
+  console.log(`profile      ${options.profileId}`);
+  console.log(`candidates   ${candidates.length} succeeded analysis runs`);
+  console.log(`selected     ${selected.length} for ${options.mode}`);
+
+  const outcomes: RunOutcome[] = [];
+  const counts = {
+    opportunities: 0,
+    censored: 0,
+    unregisteredConcept: 0,
+    unrecordableDraft: 0,
+    byConcept: {} as Record<string, number>,
+  };
+
+  if (options.dryRun) {
+    console.log("dry run      nothing was written");
+  } else {
+    for (const [index, candidate] of selected.entries()) {
+      try {
+        const result = await detectForRun(client, candidate.runId, options.profileId);
+        const summary = result.outputSummary as {
+          detection?: string;
+          reason?: string;
+          checksum?: string;
+          opportunities?: number;
+          writtenOpportunities?: number;
+          censored?: number;
+          writtenCensored?: number;
+          abstentions?: { unregisteredConcept?: number; unrecordableDraft?: number };
+          concepts?: Record<string, number>;
+          writtenConcepts?: Record<string, number>;
+        };
+        counts.opportunities += summary.writtenOpportunities ?? 0;
+        counts.censored += summary.writtenCensored ?? 0;
+        counts.unregisteredConcept += summary.abstentions?.unregisteredConcept ?? 0;
+        counts.unrecordableDraft += summary.abstentions?.unrecordableDraft ?? 0;
+        for (const [slug, count] of Object.entries(summary.writtenConcepts ?? {})) {
+          counts.byConcept[slug] = (counts.byConcept[slug] ?? 0) + count;
+        }
+        if (summary.detection === "abstained") {
+          const reason = summary.reason ?? "unstated";
+          outcomes.push({ kind: "abstained", runId: candidate.runId, reason });
+          console.error(`run ${candidate.runId} abstained: ${reason}`);
+        } else {
+          outcomes.push({
+            kind: "completed",
+            runId: candidate.runId,
+            checksum: summary.checksum ?? null,
+            opportunities: summary.writtenOpportunities ?? 0,
+            censored: summary.writtenCensored ?? 0,
+          });
+        }
+      } catch (error) {
+        // One unreadable game must not stop the other hundred and ninety-five,
+        // and each run is its own transaction so a failure here leaves nothing
+        // half-written.
+        const code = (error as { code?: string }).code
+          ?? (error as { failureCode?: string }).failureCode
+          ?? (error as Error).name;
+        if (error instanceof WorkFailure && error.code === "concept_manifest_drift") {
+          // Expected, and not a failure: this build concludes something
+          // different from what the run recorded, and an immutable manifest
+          // means that needs a new run rather than an edit of this one.
+          outcomes.push({ kind: "needs_new_run", runId: candidate.runId });
+          console.error(`run ${candidate.runId} needs a new analysis run: concept manifest drift`);
+        } else {
+          outcomes.push({ kind: "failed", runId: candidate.runId, code: String(code) });
+          console.error(`run ${candidate.runId} failed: ${code}`);
+        }
       }
-    } catch (error) {
-      // One unreadable game must not stop the other hundred and ninety-five.
-      // The count is reported at the end rather than swallowed.
-      failed += 1;
-      // The SQLSTATE, not the message: a bare error name says a thing went
-      // wrong a hundred and ninety-six times and refuses to say which thing.
-      const code = (error as { code?: string }).code;
-      console.error(`run ${run.id} failed: ${(error as Error).name}${code ? ` [${code}]` : ""}`);
+      if ((index + 1) % 25 === 0) console.log(`progress     ${index + 1}/${selected.length}`);
     }
-    if ((index + 1) % 25 === 0) console.log(`progress   ${index + 1}/${runs.length}`);
   }
 
-  // This is a count of detector conclusions, not inserts. It therefore stays
-  // true on a retry whose conclusions were already materialized.
-  console.log(`concluded  ${opportunities} opportunities (${censored} censored)`);
-  // Named separately: a catalogue this database has not registered is an
-  // operator problem, and a draft the validators rejected is a detector bug.
-  if (unregistered > 0) console.log(`unregistered ${unregistered} drafts against concepts this database does not have`);
-  if (unrecordable > 0) console.log(`unrecordable ${unrecordable} drafts the validators refused`);
-  if (failed > 0) console.log(`failed     ${failed} runs`);
-  for (const [slug, count] of [...byConcept].sort((a, b) => b[1] - a[1])) {
-    console.log(`  ${slug.padEnd(24)} ${count}`);
+  const report = summarise(
+    candidates.length,
+    skipped,
+    outcomes,
+    counts,
+    options.dryRun ? selected.length : 0,
+  );
+  for (const line of reportLines(report, options)) console.log(line);
+
+  const [after] = await withActor(client, options.profileId, (tx) =>
+    tx<{ opportunities: string; events: string }[]>`
+      select (select count(*)::text from analysis.concept_opportunities) as opportunities,
+             (select count(*)::text from analysis.chess_events) as events
+    `,
+  );
+  const wrote = Number(after?.opportunities ?? 0) - Number(before?.opportunities ?? 0);
+  console.log(
+    `reconciled   ${wrote} new opportunity rows visible to this actor, `
+    + `${report.opportunities} reported written`,
+  );
+  const databaseDeltaMatches = options.dryRun || wrote === report.opportunities;
+  if (!databaseDeltaMatches) {
+    console.error("reconciled   the database delta and the reported writes disagree");
   }
+
+  const check = reconcile(report);
+  for (const problem of check.problems) console.error(`unreconciled ${problem}`);
+  process.exitCode = exitCodeFor(report, check.ok, databaseDeltaMatches);
 } finally {
   await client.end({ timeout: 5 });
 }
-process.exit(0);
+process.exit(process.exitCode ?? 0);

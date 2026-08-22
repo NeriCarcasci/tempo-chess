@@ -25,6 +25,7 @@
 import { parseUci } from "chessops/util";
 import type { CensorReason } from "../observations.js";
 import {
+  conceptBySlug,
   CRITICALITY_THRESHOLD,
   MATERIAL_THRESHOLD_CP,
   WINNING_THRESHOLD,
@@ -710,7 +711,47 @@ export const DETECTORS: readonly Detector[] = Object.freeze([
  * the same plies, and parsing each FEN once per game rather than once per
  * question is the difference the shared layer exists to make.
  */
-export function detectGame(game: GameFacts): DetectedOpportunity[] {
+export interface DetectionOptions {
+  /**
+   * Concept families to withhold, by catalogue slug.
+   *
+   * FOR-138 requires that a family failing validation can be disabled on its
+   * own while the rest of the MVP keeps working, and that disabling one deletes
+   * no evidence. Withholding stops new observations being produced; everything
+   * already recorded stays exactly where it is, under the concept version it
+   * was recorded against.
+   *
+   * Passed in rather than read from the environment here, because this module
+   * is pure and a detector whose behaviour depends on an ambient variable
+   * cannot be exhausted in a unit test.
+   */
+  readonly withheld?: ReadonlySet<string>;
+}
+
+export function detectGame(
+  game: GameFacts,
+  options: DetectionOptions = {},
+): DetectedOpportunity[] {
   const context: DetectorContext = { game, index: new PositionIndex(game.positions) };
-  return DETECTORS.flatMap((detector) => detector.detect(context));
+  const detected = DETECTORS.flatMap((detector) => detector.detect(context));
+  return options.withheld
+    ? detected.filter((observation) => !options.withheld!.has(observation.conceptSlug))
+    : detected;
+}
+
+/**
+ * The families an operator has withheld, from the environment.
+ *
+ * Resolved at the edge -- the worker and the shadow harness -- so `detectGame`
+ * stays a pure function of its arguments.
+ */
+export function withheldFrom(env: Record<string, string | undefined>): ReadonlySet<string> {
+  const raw = env.FORMA_WITHHELD_CONCEPTS?.trim();
+  if (!raw) return new Set();
+  const withheld = new Set(raw.split(",").map((name) => name.trim()).filter(Boolean));
+  const unknown = [...withheld].filter((slug) => !conceptBySlug(slug));
+  if (unknown.length > 0) {
+    throw new Error(`unknown concept families in FORMA_WITHHELD_CONCEPTS: ${unknown.join(", ")}`);
+  }
+  return withheld;
 }
