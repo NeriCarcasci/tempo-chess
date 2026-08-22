@@ -2,21 +2,26 @@
  * The profile page, tested on the promises it makes about numbers.
  *
  * Every test here is one way this page could start overstating what Forma
- * knows. It could print a rate the API never sent. It could print a raw
- * dimension key at somebody. It could let a chance the player never got to
- * answer read as a chance they missed. It could show a thin measure looking
- * exactly like a well-evidenced one. And it could open the baseline report on
- * the reader's behalf, which is a write.
+ * knows. It could print a rate without the interval the estimator hedged it
+ * with, or without the sample size that makes 50% of two hundred a different
+ * claim from 84% of seventeen hundred. It could print a raw dimension key at
+ * somebody. It could let a chance the player never got to answer read as a
+ * chance they missed. It could draw a blank where an estimator refused to give
+ * a number, which reads as a zero. And it could list sixty-three rows of the
+ * same seven measures under three unreadable names each.
  */
 
 import { render } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import type {
-  BaselineReport,
+  Dashboard,
+  Finding,
   Me,
   OnboardingCoverage,
   OnboardingState,
+  SkillEstimate,
+  TrajectoryBin,
 } from "../lib/v1/types";
 import type { RecentGame } from "../lib/v1/games";
 
@@ -70,70 +75,186 @@ const coverage = (over: Partial<OnboardingCoverage> = {}): OnboardingCoverage =>
     totalGames: 214,
     eligibleGames: 200,
     limitations: ["thin_dimensions"],
-    dimensions: [
-      {
-        dimensionKey: "worse_position_defence_respond",
-        observationCount: 1698,
-        state: "sufficient",
-        limitationReason: null,
-      },
-      {
-        dimensionKey: "winning_conversion_convert",
-        observationCount: 200,
-        state: "limited",
-        limitationReason: "41.2 chances after time weighting",
-      },
-      {
-        dimensionKey: "only_move_recognize",
-        observationCount: 335,
-        state: "sufficient",
-        limitationReason: null,
-      },
-    ],
+    dimensions: [],
     ...over,
   }) as OnboardingCoverage;
 
-const report = (over: Partial<BaselineReport> = {}): BaselineReport =>
-  ({
-    reportId: "report-1",
-    publishedAt: "2026-08-01T00:00:00Z",
-    manifestSha256: "abc123",
-    plan: "free",
-    items: [
-      { section: "headline", displayOrder: 0, itemKind: "narrative", findingId: null, estimateId: null, trajectorySnapshotId: null, coverageDimensionKey: null },
-      { section: "coverage", displayOrder: 0, itemKind: "coverage", findingId: null, estimateId: null, trajectorySnapshotId: null, coverageDimensionKey: "few_games" },
-      { section: "constraints", displayOrder: 0, itemKind: "finding", findingId: "finding-9f3", estimateId: null, trajectorySnapshotId: null, coverageDimensionKey: null },
-    ],
-    withheld: [{ section: "constraints", count: 14, entitlementKey: "pro_detail" }],
-    ...over,
-  }) as BaselineReport;
+const estimate = (over: Partial<SkillEstimate> & { dimensionKey: string }): SkillEstimate => ({
+  displayName: "material_safety (respond)",
+  frame: "objective",
+  windowKind: "lifetime",
+  estimate: 0.5,
+  intervalLow: 0.45,
+  intervalHigh: 0.55,
+  rawSampleSize: 200,
+  effectiveSampleSize: 120,
+  coverage: { success: 100, failure: 100, graded: 200, censored: 0 },
+  coverageStatus: "sufficient",
+  unavailableReason: null,
+  delta: null,
+  improvementProbability: null,
+  ...over,
+});
 
-const shown = (over: Partial<Record<string, unknown>> = {}): string => {
+const bin = (over: Partial<TrajectoryBin> & { phase: string; binOrdinal: number }): TrajectoryBin => ({
+  progressLow: over.binOrdinal / 2,
+  progressHigh: (over.binOrdinal + 1) / 2,
+  gamesContributing: 200,
+  medianExpectedScore: 0.5,
+  p25ExpectedScore: 0.4,
+  p75ExpectedScore: 0.6,
+  intervalLow: null,
+  intervalHigh: null,
+  phaseReachRate: 1,
+  ...over,
+});
+
+const finding = (over: Partial<Finding> & { id: string }): Finding => ({
+  findingType: "foundational_miss",
+  priority: 10,
+  confidenceTier: "moderate",
+  claim: {},
+  adjustedProbability: 0.01,
+  evidence: [{ evidenceItemId: "e1", role: "primary", displayRank: 0 }],
+  explanation: "You lose material to a capture you could have seen.",
+  explanationState: "passed",
+  ...over,
+});
+
+const dashboard = (over: Partial<Dashboard> = {}): Dashboard =>
+  ({
+    subjectId: "s1",
+    publicationId: "pub-2f9",
+    runId: "run-1",
+    publishedAt: "2026-08-01T00:00:00Z",
+    sections: {
+      estimates: "published",
+      findings: "published",
+      trajectory: "published",
+      ratingProfile: "published",
+      goal: "unavailable",
+      connections: "unavailable",
+    },
+    estimates: [
+      estimate({
+        dimensionKey: "worse_position_defence_respond_objective",
+        estimate: 0.42,
+        intervalLow: 0.39,
+        intervalHigh: 0.45,
+        rawSampleSize: 1698,
+        coverage: { success: 713, failure: 985, graded: 1698, censored: 0 },
+      }),
+      estimate({
+        dimensionKey: "worse_position_defence_respond_personal_current",
+        frame: "personal_current",
+        windowKind: "recent_form",
+        estimate: 0.48,
+        delta: 0.06,
+        improvementProbability: 0.82,
+      }),
+      estimate({
+        dimensionKey: "winning_conversion_convert_objective",
+        estimate: 0.61,
+        intervalLow: 0.5,
+        intervalHigh: 0.72,
+        rawSampleSize: 200,
+        coverageStatus: "limited",
+        coverage: { success: 97, failure: 62, graded: 159, censored: 41 },
+      }),
+      estimate({
+        dimensionKey: "only_move_recognize_objective",
+        estimate: null,
+        intervalLow: null,
+        intervalHigh: null,
+        unavailableReason: "below_minimum_sample",
+        coverageStatus: "insufficient",
+        rawSampleSize: 12,
+        coverage: { success: 0, failure: 0, graded: 12, censored: 0 },
+      }),
+    ],
+    findings: [finding({ id: "finding-9f3" }), finding({ id: "finding-silent", explanation: null })],
+    trajectory: {
+      state: "published",
+      snapshotId: "snap-1",
+      includedGameCount: 200,
+      bins: [
+        bin({ phase: "opening", binOrdinal: 0, p25ExpectedScore: 0.511, p75ExpectedScore: 0.521 }),
+        bin({ phase: "opening", binOrdinal: 1, p25ExpectedScore: 0.18, p75ExpectedScore: 0.961 }),
+        bin({
+          phase: "middlegame",
+          binOrdinal: 0,
+          p25ExpectedScore: 0,
+          p75ExpectedScore: 0.667,
+          gamesContributing: 163,
+          phaseReachRate: 0.8,
+        }),
+        bin({
+          phase: "endgame",
+          binOrdinal: 0,
+          p25ExpectedScore: 0.012,
+          p75ExpectedScore: 0.741,
+          gamesContributing: 48,
+          phaseReachRate: 0.24,
+        }),
+      ],
+      unreachedPhases: [],
+    },
+    ratingProfile: {
+      state: "published",
+      pools: [
+        {
+          provider: "lichess",
+          pool: "lichess_blitz",
+          speed: "blitz",
+          observedRating: 1642,
+          scaleEstimate: 1590,
+          intervalLow: 1520,
+          intervalHigh: 1660,
+          inSupportedRange: true,
+          suppressedReason: null,
+        },
+      ],
+      note: "Ratings from different pools are not comparable. Forma does not combine them into one number.",
+    },
+    coverageWarnings: ["1 of 4 areas have too little evidence to estimate yet."],
+    version: { recipeVersionId: "recipe-7", snapshotId: "snap-1", estimatorVersions: ["est-3"] },
+    ...over,
+  }) as Dashboard;
+
+function draw(over: Record<string, unknown> = {}) {
   data = {
     me: me(),
     state: state(),
+    dashboard: dashboard(),
+    redactions: [],
     coverage: coverage(),
-    report: report(),
     games: [] as RecentGame[],
     ...over,
   };
-  const { container } = render(
+  return render(
     <MemoryRouter>
       <Profile />
     </MemoryRouter>,
   );
-  return container.textContent ?? "";
-};
+}
+
+const shown = (over: Record<string, unknown> = {}): string =>
+  draw(over).container.textContent ?? "";
 
 describe("the measures", () => {
-  test("no rate is drawn, because no rate is published", () => {
-    // The estimate, its interval and the graded/censored split live in
-    // `analysis.player_skill_estimates` and no /v1 route returns them. A page
-    // that filled the gap with a figure of its own would be making a claim
-    // nobody computed, and it would be making it without an interval.
-    const text = shown();
-    expect(text).not.toMatch(/\d+(\.\d+)?%/);
-    expect(text).not.toMatch(/0\.\d\d\b/);
+  test("a rate never appears without its interval and its sample size", () => {
+    // 50% over two hundred chances and 84% over seventeen hundred are different
+    // claims. A page that prints both in the same weight says they are not.
+    const { container } = draw();
+    const figures = [...container.querySelectorAll(".rate-figure")];
+    expect(figures.length).toBeGreaterThan(0);
+    for (const figure of figures) {
+      const text = figure.textContent ?? "";
+      if (!text.includes("No figure")) {
+        expect(text).toMatch(/\d+% to \d+%/);
+      }
+      expect(text).toMatch(/chances?/);
+    }
   });
 
   test("a measure is named and defined, never shown as a slug", () => {
@@ -144,84 +265,146 @@ describe("the measures", () => {
     expect(text).toContain("keep the game alive");
   });
 
-  test("the sample size behind each measure is on the page", () => {
-    // Precision is the whole point: 1,698 chances and 200 are not the same
-    // claim, and the page has to make that visible even without the interval.
-    const text = shown();
-    expect(text).toContain("1,698");
-    expect(text).toContain("200");
-    expect(text).toContain("335");
+  test("sixty-odd rows become one row per measure", () => {
+    // Every measure arrives in two frames and over two windows. Listing rows
+    // would name the same measure three times under three unreadable keys.
+    const { container } = draw();
+    expect(container.querySelectorAll(".rate-row")).toHaveLength(3);
   });
 
-  test("a measure that is not sufficient says so, in the server's own words", () => {
+  test("a censored chance is set aside, never added to the failures", () => {
     const text = shown();
-    expect(text).toContain("Limited");
-    expect(text).toContain("41.2 chances after time weighting");
-  });
-
-  test("a censored chance is described as set aside, never as a failure", () => {
-    const text = shown();
+    expect(text).toContain("41 set aside");
+    // 159 graded, not 200: the forty-one are out of the rate, not in it.
+    expect(text).toContain("159 graded");
     expect(text).toContain("set aside rather than counted against you");
-    expect(text).toContain("resigned");
   });
 
-  test("what is missing is named rather than left blank", () => {
-    // Silence where a number belongs reads as a zero, and a censored count of
-    // zero says the opposite of what a censored observation means.
+  test("an estimate with no number keeps the reason it has none", () => {
+    // A blank where a figure belongs reads as a zero, and "not enough evidence"
+    // and "measured at zero" are opposite statements.
     const text = shown();
-    expect(text).toContain("never got to answer");
+    expect(text).toContain("No figure");
+    expect(text).toContain("Too few chances so far to put a number on this.");
+  });
+
+  test("a change is reported with how sure Forma is of it", () => {
+    const text = shown();
+    expect(text).toContain("6 up on your earlier ones");
+    expect(text).toContain("82%");
   });
 
   test("nothing measured is a sentence, not an empty page", () => {
-    const text = shown({ coverage: coverage({ dimensions: [], limitations: [] }) });
+    const text = shown({ dashboard: dashboard({ estimates: [] }) });
     expect(text).toContain("No measure has any chances behind it");
   });
 });
 
-describe("the report", () => {
-  test("a withheld group is counted and named, never silently absent", () => {
-    const text = shown();
-    expect(text).toContain("14 items on a paid plan");
+describe("the trajectory", () => {
+  test("the graph carries a card per phase, each with its own game count", () => {
+    const { container } = draw();
+    const cards = [...container.querySelectorAll(".phase-card")];
+    expect(cards).toHaveLength(3);
+    expect(cards[2]!.textContent).toContain("48 games");
+    expect(cards[2]!.textContent).toContain("24% of your games reach it");
   });
 
-  test("a finding is counted rather than described, and its id never shown", () => {
+  test("the picture states its finding in words, not just in a shape", () => {
     const text = shown();
-    expect(text).not.toContain("finding-9f3");
-    expect(text).toContain("1 conclusion");
+    expect(text).toMatch(/decided in the|stay close throughout/);
+    expect(text).toContain("the middle half of your games");
   });
 
-  test("a report that has not been opened is a link, not a fetch", () => {
-    // Reading the report is a write: it records `report_viewed_at` and moves
-    // the run on. The page offers the door instead of walking through it.
-    const text = shown({ report: null, state: state({ stage: "report_ready", status: "active" }) });
-    expect(text).toContain("has not been opened");
-    expect(text).toContain("Open your report");
+  test("a per-phase rate nobody publishes is named as absent, never derived", () => {
+    // The evidence is phase-tagged in the database and no route returns it.
+    // Splitting the published estimates here would invent a measurement.
+    const text = shown();
+    expect(text).toContain("is not published to this screen yet");
+  });
+
+  test("no trajectory is a sentence rather than a missing section", () => {
+    const text = shown({
+      dashboard: dashboard({
+        trajectory: {
+          state: "unavailable",
+          snapshotId: null,
+          includedGameCount: 0,
+          bins: [],
+          unreachedPhases: ["opening", "middlegame", "endgame"],
+        },
+      }),
+    });
+    expect(text).toContain("No trajectory has been built yet");
   });
 });
 
-describe("before anything has been measured", () => {
-  test("a brand new account is taught, not shown an empty frame", () => {
-    const text = shown({
-      state: state({ runId: null, stage: "not_started", status: "not_started", baselineReportId: null }),
-      coverage: null,
-      report: null,
-    });
-    expect(text).toContain("Nothing has been measured yet");
-    expect(text).not.toContain("What Forma measures");
+describe("the conclusions", () => {
+  test("a conclusion is printed in Forma's own words, and its id never shown", () => {
+    const text = shown();
+    expect(text).not.toContain("finding-9f3");
+    expect(text).toContain("You lose material to a capture you could have seen.");
   });
 
-  test("coverage the server has not worked out yet is a wait, not a zero", () => {
+  test("a conclusion with no readable form is counted, never described", () => {
+    const text = shown();
+    expect(text).toContain("1 further conclusion");
+  });
+});
+
+describe("the rating", () => {
+  test("pools are named and never combined into one figure", () => {
+    const text = shown();
+    expect(text).toContain("1,642");
+    expect(text).toContain("blitz");
+    expect(text).toContain("are not comparable");
+  });
+});
+
+describe("coverage and provenance", () => {
+  test("the server's own warnings are printed rather than reworded", () => {
+    expect(shown()).toContain("1 of 4 areas have too little evidence to estimate yet.");
+  });
+
+  test("the page says how many games and when, before it says anything else", () => {
+    const text = shown();
+    expect(text).toContain("Measured from 200 games");
+    expect(text).toContain("pub-2f9");
+  });
+
+  test("the report is offered as a link, never opened on the reader's behalf", () => {
+    // Fetching a baseline report is a write: it records that it was read and
+    // moves the run on. A hub must not consume that.
+    const { container } = draw();
+    const link = [...container.querySelectorAll("a")].find(
+      (anchor) => anchor.getAttribute("href") === "/report",
+    );
+    expect(link?.textContent).toContain("printable report");
+  });
+
+  test("a withheld section is named, never silently absent", () => {
     const text = shown({
+      redactions: [{ path: "data.findings", reason: "entitlement" }],
+    });
+    expect(text).toContain("part of a paid plan");
+  });
+});
+
+describe("before anything has been published", () => {
+  test("a brand new account is taught, not shown an empty frame", () => {
+    const text = shown({
+      dashboard: null,
+      state: state({ runId: null, stage: "not_started", status: "not_started", baselineReportId: null }),
+      coverage: null,
+    });
+    expect(text).toContain("Nothing has been measured yet");
+    expect(text).not.toContain("What Forma measured");
+  });
+
+  test("an examination still running is a wait, not a zero", () => {
+    const text = shown({
+      dashboard: null,
       state: state({ stage: "analysing", status: "active", baselineReportId: null }),
-      coverage: coverage({
-        state: "unavailable",
-        overallState: null,
-        totalGames: null,
-        eligibleGames: null,
-        limitations: [],
-        dimensions: [],
-      }),
-      report: null,
+      coverage: null,
     });
     expect(text).toContain("still reading your games");
     expect(text).not.toContain("0 of 0");
@@ -229,9 +412,9 @@ describe("before anything has been measured", () => {
 
   test("a failed examination says so instead of showing nothing", () => {
     const text = shown({
+      dashboard: null,
       state: state({ status: "failed", stage: "analysing", baselineReportId: null }),
       coverage: null,
-      report: null,
     });
     expect(text).toContain("did not finish");
   });
@@ -253,19 +436,8 @@ describe("the games", () => {
     ...over,
   });
 
-  test("a result carries a letter, so the colour is never the only thing saying it", () => {
-    data = {
-      me: me(),
-      state: state(),
-      coverage: coverage(),
-      report: report(),
-      games: [game()],
-    };
-    const { container } = render(
-      <MemoryRouter>
-        <Profile />
-      </MemoryRouter>,
-    );
+  test("a result carries a letter, so colour is never the only thing saying it", () => {
+    const { container } = draw({ games: [game()] });
     const chip = container.querySelector(".result-chip");
     expect(chip?.textContent).toContain("L");
     expect(chip?.textContent).toContain("Loss");

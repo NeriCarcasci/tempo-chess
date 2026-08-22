@@ -362,11 +362,6 @@
     font-size: 0.9rem; font-weight: 620; letter-spacing: -0.012em; color: var(--color-ink);
   }
 
-  .report-section { display: grid; gap: 0.7rem; }
-  .report-section h2 {
-    font-size: 1rem; font-weight: 650; letter-spacing: -0.02em; color: var(--color-ink);
-  }
-  .report-count { font-size: 0.88rem; line-height: 1.6; color: var(--color-ink-muted); }
   .report-meta { display: grid; gap: 0.3rem; margin-top: 1.6rem; }
 
   /* ------------------------------------------------------------------ */
@@ -2781,50 +2776,22 @@
   .profile-section .coverage-limits { margin-top: 0.9rem; }
   .profile-section .empty-card { margin-top: 1.1rem; }
 
-  /* -- one measured thing per row -------------------------------------
-     The figure and the bar say the same thing twice on purpose: the figure
-     is the number the API sent and the bar is that number against the
-     largest on the page, so a measure standing on 200 chances cannot be
-     mistaken for one standing on 1,698. */
-  .measure-list { margin-top: 1.1rem; display: grid; gap: 8px; }
-  .measure-row {
-    display: grid; gap: 0.4rem;
-    border-radius: var(--radius-control); padding: 0.95rem 1.1rem;
-    background: var(--color-surface); box-shadow: var(--shadow-soft);
-  }
-  .measure-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; }
-  .measure-head strong { font-size: 0.98rem; font-weight: 650; }
+  /* -- what a measure is, under the row that measures it ---------------
+     The bar that used to live here drew the observation count against the
+     largest on the page, because no rate was published and the evidence was
+     all there was to show. `/v1/dashboard` publishes the rate and its
+     interval, so the bar in `.rate-track` is the claim itself and this is
+     back to being prose. */
   .measure-def { max-width: 68ch; font-size: 0.85rem; line-height: 1.65; color: var(--color-ink-muted); }
-  .measure-count { font-size: 0.82rem; color: var(--color-ink-muted); }
-  .measure-count .figure { font-size: 1.05rem; font-weight: 620; color: var(--color-ink); }
-  .measure-bar {
-    display: block; height: 4px; border-radius: 999px; max-width: 26rem;
-    background: var(--color-surface-2); overflow: hidden;
-  }
-  /* Ink, not accent. This bar is a quantity, and DESIGN.md's rule for counts
-     is that they step by weight and value rather than by hue — the accent on a
-     product page means "the action", and a row of orange bars would say every
-     measure is one. */
-  .measure-bar i {
-    display: block; height: 100%; min-width: 2px; border-radius: 999px;
-    background: color-mix(in srgb, var(--color-ink) 34%, var(--color-surface-2));
-    transform-origin: left;
-    animation: measure-grow 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  /* Set apart from the limitation note above it: one says the evidence is
-     thin, the other says some of the evidence was never a question the
-     player got to answer, and reading them as one sentence turns a chance
-     that was withdrawn into a chance that was missed. */
+  /* Set apart from the reason above it: one says the evidence is thin, the
+     other says some of the evidence was never a question the player got to
+     answer, and reading them as one sentence turns a chance that was
+     withdrawn into a chance that was missed. */
   .measure-censor {
     margin-top: 0.25rem; border-radius: 9px; padding: 0.5rem 0.65rem;
     background: var(--color-surface-2);
     font-size: 0.78rem; line-height: 1.6; color: var(--color-ink-muted);
   }
-
-  /* -- what the report holds ------------------------------------------ */
-  .report-sections { margin-top: 1.1rem; display: grid; gap: 1.2rem; }
-  .report-sections > li { display: grid; gap: 0.5rem; }
-  .report-withheld { margin-top: 1.2rem; display: grid; gap: 0.45rem; }
 
   /* -- the games underneath -------------------------------------------
      A dense table is one of the two places DESIGN.md still allows a rule,
@@ -2857,11 +2824,6 @@
     margin-top: clamp(2.25rem, 5vw, 3.25rem); display: grid; gap: 0.45rem; max-width: 68ch;
   }
 
-  @keyframes measure-grow {
-    from { transform: scaleX(0); }
-    to { transform: none; }
-  }
-
   /* Structural, as DESIGN.md requires: the table becomes stacked rows and
      each cell takes the label its column header carried. */
   @media (max-width: 768px) {
@@ -2876,7 +2838,377 @@
     }
   }
 
+  .profile-standing {
+    margin-top: 0.55rem; font-size: 0.88rem; color: var(--color-ink-muted);
+  }
+  .profile-standing .figure { font-weight: 650; color: var(--color-ink); }
+  /* The lead section carries the graph and needs less air above it than a
+     section of prose: the head has already said what the page is. */
+  .profile-section-lead { margin-top: 1.6rem; }
+}
+
+/* ------------------------------------------------------------------ */
+/* The trajectory: one evaluation graph across a whole archive, and a   */
+/* card per phase under it.                                             */
+/*                                                                      */
+/* The SVG carries geometry and nothing else. Every label is HTML, so    */
+/* the type takes the sheet's own scale instead of a font-size inside a  */
+/* scaled viewBox, which is either unreadable at 375px or shouting at    */
+/* full width. The plot is stretched by CSS (`preserveAspectRatio` is    */
+/* `none`), which is why every stroke sets `vector-effect`.              */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .cone { margin-top: 1.4rem; display: grid; gap: 1rem; }
+
+  .cone-frame {
+    display: grid;
+    grid-template-columns: 3.1rem minmax(0, 1fr);
+    column-gap: 0.6rem;
+    row-gap: 0.9rem;
+  }
+
+  /* Positioned against the plot, not the whole drawing: the rail under the
+     curve is part of the same SVG, so a label at 100% of the element would
+     put "Lost" below the axis it names. `--cone-plot-share` comes from the
+     component that owns the viewBox, because two copies of that fraction
+     would drift the first time the rail changes height. */
+  .cone-axis { position: relative; }
+  .cone-axis span {
+    position: absolute; right: 0; transform: translateY(-50%);
+    font: 700 0.6rem/1 var(--font-mono); letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--color-ink-faint); white-space: nowrap;
+  }
+  .cone-axis .is-top { top: 0; }
+  .cone-axis .is-level { top: calc(var(--cone-plot-share, 78%) / 2); }
+  .cone-axis .is-bottom { top: var(--cone-plot-share, 78%); }
+
+  .cone-plot {
+    position: relative; aspect-ratio: 2.6;
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft);
+    overflow: hidden;
+  }
+  .cone-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  .cone-grid { stroke: var(--color-line); stroke-width: 1; }
+  /* Level is the only gridline that means anything, and the band is coloured
+     by which side of it a game has landed on, so it is drawn as a real edge. */
+  .cone-level { stroke: var(--color-line-strong); stroke-width: 1; }
+  .cone-divider {
+    stroke: var(--color-line-strong); stroke-width: 1; stroke-dasharray: 3 4;
+  }
+
+  /* The two semantic colours DESIGN.md allows, and nothing else on this page
+     is coloured. Above level is a game being won, below it a game being lost;
+     the split is what makes an asymmetric band readable as asymmetric. */
+  .cone-above { fill: color-mix(in srgb, var(--color-win) 46%, transparent); }
+  .cone-below { fill: color-mix(in srgb, var(--color-loss) 46%, transparent); }
+  .cone-median { stroke: var(--color-ink); stroke-width: 1.5; stroke-linejoin: round; }
+  .cone-rail rect { fill: color-mix(in srgb, var(--color-ink) 26%, transparent); }
+
+  /* Job: a game is read from the first move to the last, so the graph arrives
+     that way. No fill mode, so the final state is what renders if the
+     animation never runs. */
+  .cone-sweep { animation: cone-sweep 700ms cubic-bezier(0.16, 1, 0.3, 1); }
+  @keyframes cone-sweep {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+  }
+
+  .cone figcaption { display: grid; gap: 0.6rem; max-width: 68ch; }
+  .cone-finding { font-size: 0.94rem; line-height: 1.65; color: var(--color-ink); }
+  .cone-absent, .cone-note {
+    font-size: 0.8rem; line-height: 1.65; color: var(--color-ink-muted);
+  }
+
+  /* -- one card per phase, under the segment it describes ---------------
+     `--phase-columns` mirrors the slots in the graph, so a card sits under
+     its own stretch of the curve rather than merely near it. */
+  .phase-cards {
+    grid-column: 2; display: grid; gap: 8px;
+    grid-template-columns: var(--phase-columns, repeat(3, 1fr));
+  }
+  .phase-card {
+    display: grid; gap: 0.5rem; align-content: start;
+    border-radius: var(--radius-control); padding: 0.9rem 1rem;
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+  }
+  .phase-card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+  .phase-card-head strong { font-size: 0.95rem; font-weight: 650; text-transform: capitalize; }
+
+  .phase-rate, .phase-band { display: grid; gap: 0.35rem; }
+  .phase-figure { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; }
+  .phase-figure b {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 1.45rem; font-weight: 650; letter-spacing: -0.02em; color: var(--color-ink);
+  }
+  /* The band figure steps down from the rate above it by weight and size, not
+     by hue: two figures on one card have to be told apart, and a third meaning
+     for colour on a page that already has two would break the whole scheme. */
+  .phase-figure.is-secondary b { font-size: 1.1rem; color: var(--color-ink-muted); }
+  .phase-figure small { font-size: 0.76rem; line-height: 1.4; color: var(--color-ink-muted); }
+  .phase-reading { font-size: 0.85rem; line-height: 1.5; color: var(--color-ink); }
+  .phase-evidence, .phase-missing, .phase-caution {
+    font-size: 0.76rem; line-height: 1.55; color: var(--color-ink-muted);
+  }
+  .phase-missing, .phase-caution {
+    border-radius: 9px; padding: 0.45rem 0.6rem; background: var(--color-surface-2);
+  }
+  .phase-band { margin-top: 0.15rem; }
+
+  @media (max-width: 720px) {
+    .cone-frame { grid-template-columns: 2.6rem minmax(0, 1fr); }
+    .cone-plot { aspect-ratio: 1.35; }
+    /* Structural, as DESIGN.md requires: three narrow columns of prose is not
+       a layout, so the cards stack and give up their alignment to the graph. */
+    .phase-cards { grid-template-columns: minmax(0, 1fr); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .measure-bar i { animation: none; }
+    .cone-sweep { animation: none; }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Measurements: the rows and cards `/profile` and `/report` share.     */
+/*                                                                      */
+/* Every rate is drawn against the same 0-100% ruler, drawn once above   */
+/* the column. Reading down the column is the shape of somebody's play,  */
+/* which is the only reason the rows are aligned at all.                 */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .rate-axis,
+  .rate-row {
+    display: grid;
+    grid-template-columns: minmax(0, 13rem) minmax(0, 1fr) minmax(0, 11rem);
+    align-items: center;
+    column-gap: 1rem;
+  }
+  .rate-axis { padding: 0 1.1rem 0.35rem; }
+  .rate-scale { display: flex; justify-content: space-between; }
+  .rate-scale i {
+    font: 700 0.6rem/1 var(--font-mono); letter-spacing: 0.08em;
+    font-style: normal; color: var(--color-ink-faint);
+  }
+
+  .rate-list { display: grid; gap: 8px; }
+  .rate-row {
+    row-gap: 0.5rem;
+    border-radius: var(--radius-control); padding: 0.95rem 1.1rem;
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+  }
+  .rate-name { display: grid; gap: 0.25rem; justify-items: start; }
+  .rate-name strong { font-size: 0.95rem; font-weight: 650; }
+
+  /* The bar is the interval and the tick inside it is the estimate. Drawing
+     the point alone would be the same overstatement the copy refuses: a
+     measure standing on forty chances has to look different from one standing
+     on seventeen hundred, and the width is what does that. */
+  .rate-track {
+    position: relative; display: block; height: 8px; border-radius: 999px;
+    background: var(--color-surface-2);
+  }
+  .rate-track.is-empty { background: none; }
+  .rate-interval {
+    position: absolute; inset-block: 0; min-width: 3px; border-radius: 999px;
+    background: color-mix(in srgb, var(--color-ink) 26%, var(--color-surface-2));
+  }
+  .rate-point {
+    position: absolute; top: -3px; bottom: -3px; width: 2px;
+    transform: translateX(-1px); border-radius: 999px; background: var(--color-ink);
+  }
+
+  .rate-figure { display: grid; gap: 0.1rem; justify-items: end; text-align: right; }
+  .rate-figure b {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 1.2rem; font-weight: 650; letter-spacing: -0.02em;
+  }
+  .rate-figure small { font-size: 0.72rem; line-height: 1.4; color: var(--color-ink-muted); }
+  .rate-none { font-size: 0.85rem; font-weight: 620; color: var(--color-ink-muted); }
+
+  .rate-body { grid-column: 1 / -1; display: grid; gap: 0.4rem; }
+  .rate-evidence { display: flex; flex-wrap: wrap; gap: 0.15rem 1rem; }
+  .rate-evidence span { font-size: 0.78rem; color: var(--color-ink-muted); }
+  .rate-evidence b {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-weight: 650; color: var(--color-ink);
+  }
+  /* Set aside, never failed. A chance the opponent resigned into was never a
+     question, so it is separated from the counts it must not be added to. */
+  .rate-evidence .is-aside { color: var(--color-ink-faint); }
+  .rate-evidence .is-aside b { color: var(--color-ink-muted); }
+  .rate-change, .rate-why {
+    font-size: 0.8rem; line-height: 1.6; color: var(--color-ink-muted);
+  }
+  .rate-why {
+    border-radius: 9px; padding: 0.45rem 0.6rem; background: var(--color-surface-2);
+  }
+
+  /* -- conclusions ------------------------------------------------------ */
+  .finding-list { margin-top: 1.1rem; display: grid; gap: 8px; }
+  .finding {
+    display: grid; gap: 0.4rem;
+    border-radius: var(--radius-control); padding: 0.95rem 1.1rem;
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+  }
+  .finding-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; }
+  .finding-text { max-width: 68ch; font-size: 0.94rem; line-height: 1.65; }
+  .finding-evidence { font-size: 0.76rem; color: var(--color-ink-faint); }
+
+  /* -- rating pools ----------------------------------------------------- */
+  .pool-list {
+    margin-top: 1.1rem; display: grid; gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  }
+  .pool {
+    display: grid; gap: 0.3rem;
+    border-radius: var(--radius-control); padding: 0.9rem 1rem;
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+  }
+  .pool-head { display: flex; align-items: baseline; gap: 0.5rem; }
+  .pool-head strong { font-size: 0.9rem; font-weight: 650; text-transform: capitalize; }
+  .pool-figure { display: grid; gap: 0.15rem; }
+  .pool-figure b {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 1.45rem; font-weight: 650; letter-spacing: -0.02em;
+  }
+  .pool-figure small { font-size: 0.74rem; color: var(--color-ink-muted); }
+
+  .publication { margin-top: 1.2rem; display: grid; gap: 0.4rem; max-width: 68ch; }
+  .publication-id {
+    font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-ink-faint);
+    overflow-wrap: anywhere;
+  }
+
+  /* Wide content scrolls inside its own container. The page never does. */
+  .table-scroll { margin-top: 1.1rem; overflow-x: auto; }
+  .table-scroll .profile-games { margin-top: 0; }
+
+  @media (max-width: 860px) {
+    /* One column: three columns of four rem each is not a comparison, it is a
+       squeeze, and a shared ruler stops meaning anything below the width where
+       two bars can visibly differ. */
+    .rate-axis { display: none; }
+    .rate-row { grid-template-columns: minmax(0, 1fr); row-gap: 0.55rem; }
+    .rate-figure { justify-items: start; text-align: left; }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* `/today`: the report's own conclusion, at the top of the hub.        */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .today-verdict { display: grid; gap: 0.7rem; justify-items: start; }
+  .today-verdict h1 {
+    max-width: 22ch; font-size: clamp(1.9rem, 4.4vw, 2.9rem);
+    font-weight: 650; letter-spacing: -0.03em; line-height: 1.08;
+  }
+  .today-verdict-standing { font-size: 0.85rem; color: var(--color-ink-muted); }
+  .today-verdict-standing .figure { font-weight: 650; color: var(--color-ink); }
+  .today-verdict-detail,
+  .today-verdict-finding {
+    max-width: 68ch; font-size: 0.94rem; line-height: 1.7; color: var(--color-ink);
+  }
+  .today-verdict-inside { font-size: 0.8rem; line-height: 1.6; color: var(--color-ink-muted); }
+  .today-verdict-inside a { color: var(--color-accent); }
+  .today-verdict .cone { width: 100%; }
+  .today-verdict .today-go { margin-top: 0.4rem; }
+}
+
+/* ------------------------------------------------------------------ */
+/* `/report`: the profile, frozen and printable.                        */
+/*                                                                      */
+/* Same content, different job. A page is scrolled and a sheet is read   */
+/* once, so this one is numbered, dated, provenanced, and arranged so    */
+/* nothing it says is split across a fold.                               */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .report-doc { max-width: 940px; margin: 0 auto; padding: 2.5rem 2rem 6rem; }
+
+  .report-masthead { display: grid; gap: 0.6rem; justify-items: start; }
+  .report-mast-brand {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-weight: 650; letter-spacing: -0.02em;
+  }
+  .report-kind {
+    font: 700 0.66rem/1 var(--font-mono); letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--color-ink-faint);
+  }
+  .report-masthead h1 {
+    font-size: clamp(1.8rem, 4vw, 2.5rem); font-weight: 650; letter-spacing: -0.03em;
+  }
+  .report-facts { margin-top: 0.3rem; display: flex; flex-wrap: wrap; gap: 0.4rem 2rem; }
+  .report-facts dt {
+    font: 700 0.6rem/1.6 var(--font-mono); letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--color-ink-faint);
+  }
+  .report-facts dd {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.95rem; font-weight: 620;
+  }
+  .report-print { margin-top: 0.8rem; }
+
+  .report-part { margin-top: clamp(2.5rem, 5vw, 3.5rem); }
+  .report-part > h2 {
+    display: flex; align-items: baseline; gap: 0.7rem;
+    font-size: 1.2rem; font-weight: 650; letter-spacing: -0.02em;
+  }
+  .report-part-n { font: 700 0.8rem/1 var(--font-mono); color: var(--color-ink-faint); }
+  .report-lede {
+    margin-top: 0.7rem; max-width: 68ch;
+    font-size: 0.9rem; line-height: 1.7; color: var(--color-ink-muted);
+  }
+  .report-lede .figure { font-weight: 650; color: var(--color-ink); }
+  .report-part .coverage-limits,
+  .report-part .rate-axis { margin-top: 0.9rem; }
+
+  .report-colophon {
+    margin-top: clamp(2.5rem, 5vw, 3.5rem); display: grid; gap: 0.8rem; max-width: 68ch;
+  }
+  .report-colophon p { font-size: 0.82rem; line-height: 1.7; color: var(--color-ink-muted); }
+  .report-colophon dl { display: grid; gap: 0.35rem; }
+  .report-colophon div { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .report-colophon dt {
+    min-width: 6rem;
+    font: 700 0.6rem/1.7 var(--font-mono); letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--color-ink-faint);
+  }
+  .report-colophon dd {
+    font-family: var(--font-mono); font-size: 0.68rem; line-height: 1.7;
+    color: var(--color-ink-muted); overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 768px) {
+    .report-doc { padding: 2rem 1.25rem 5rem; }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Print. The report is a document somebody could send to a coach, so   */
+/* it has to survive leaving the browser.                                */
+/* ------------------------------------------------------------------ */
+@media print {
+  .top-nav, .skip-link, .report-print, .nav-progress { display: none !important; }
+
+  body { background: #fff; }
+  .report-doc { max-width: none; padding: 0; }
+
+  /* A section that splits across a fold loses the qualifier that makes its
+     figure honest, which is the one thing this document cannot afford. */
+  .report-part, .phase-card, .rate-row, .finding, .pool, .cone { break-inside: avoid; }
+  .report-masthead { break-after: avoid; }
+  .report-part > h2 { break-after: avoid; }
+
+  /* The band is coloured by which side of level a game fell on. A printer
+     that drops the wash turns the reading into a grey blob. */
+  .cone-above, .cone-below, .cone-rail rect, .rate-interval, .rate-point,
+  .coverage-track span, .result-chip {
+    print-color-adjust: exact; -webkit-print-color-adjust: exact;
+  }
+  .cone-sweep { animation: none; }
+  .cone-plot { box-shadow: none; aspect-ratio: 2.4; }
+  .phase-card, .rate-row, .finding, .pool, .empty-card {
+    box-shadow: none; background: none; padding-left: 0; padding-right: 0;
   }
 }

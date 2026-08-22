@@ -9,6 +9,7 @@ import { getCached, setCached } from "../lib/loaderCache";
 import { getOnboarding, getWorkflow } from "../lib/onboarding/api";
 import { nextScreen, type Destination } from "../lib/onboarding/nextScreen";
 import { fetchRecentGames, type RecentGame } from "../lib/v1/games";
+import { getDashboard, todayReport, type TodayReport } from "../lib/v1/dashboard";
 import {
   explorerEmptyReason,
   getOpeningExplorer,
@@ -27,6 +28,7 @@ import {
  *
  * What it reads now, and nothing else:
  *
+ *   * `GET /v1/dashboard`, for what the published report concludes;
  *   * `GET /v1/openings/explorer` per colour, for the shape and the lead;
  *   * `GET /v1/games/recent`, for the last game;
  *   * `GET /v1/onboarding` plus its sync workflow, for where the run stands.
@@ -34,10 +36,12 @@ import {
  * No call carries a username. The subject is resolved from the access token on
  * the server, which is what stops a client naming somebody else's games.
  *
- * The panels with no `/v1` source say so on screen rather than falling back:
- * the rating, the lifetime record, and the analysed-game and blunder counts.
- * The import control is gone with them — `/v1` has no importer, because games
- * arrive with an examination run rather than on demand.
+ * The rating and the trajectory used to be stated absences here, because the
+ * figures that once filled them came from tables the pipeline stopped writing
+ * and `/v1` published nothing to replace them. `/v1/dashboard` publishes both,
+ * so the page now opens on a measurement again. The import control is still
+ * gone — `/v1` has no importer, because games arrive with an examination run
+ * rather than on demand.
  */
 
 interface TodayData {
@@ -53,6 +57,8 @@ interface TodayData {
   unanalysed: number;
   lastGame: RecentGame | null;
   run: Destination | null;
+  /** What the published report concludes, or null when nothing is published. */
+  report: TodayReport | null;
 }
 
 export function meta() {
@@ -90,6 +96,25 @@ async function readRun(): Promise<Destination | null> {
   }
 }
 
+/**
+ * What the published report says, or nothing.
+ *
+ * A 404 is the ordinary state of somebody who has not been examined yet and is
+ * already null. Anything else is swallowed for the same reason the run is: this
+ * is the top of a page that has other things to show, and a failed read of one
+ * panel must not take the page with it. `/profile` reads the same endpoint and
+ * does let it throw, because there the dashboard *is* the page.
+ */
+async function readReport(): Promise<TodayReport | null> {
+  try {
+    const result = await getDashboard();
+    return result === null ? null : todayReport(result.data);
+  } catch (error) {
+    if (error instanceof Response) throw error; // a 401 redirect must land
+    return null;
+  }
+}
+
 export async function clientLoader(): Promise<TodayData> {
   const session = await requireSession();
 
@@ -106,11 +131,12 @@ export async function clientLoader(): Promise<TodayData> {
    * a pooled graph cannot. `walkable` is the whole adapter: the v1 graph and
    * the legacy one differ only in a loss field the tear sheet never reads.
    */
-  const [white, black, recent, run] = await Promise.all([
+  const [white, black, recent, run, report] = await Promise.all([
     getOpeningExplorer({ color: "white" }),
     getOpeningExplorer({ color: "black" }),
     fetchRecentGames(1),
     readRun(),
+    readReport(),
   ]);
 
   const sheet = deriveTearSheet(
@@ -140,6 +166,7 @@ export async function clientLoader(): Promise<TodayData> {
     unanalysed,
     lastGame: recent[0] ?? null,
     run,
+    report,
   };
   setCached(cacheKey, data);
   return data;
