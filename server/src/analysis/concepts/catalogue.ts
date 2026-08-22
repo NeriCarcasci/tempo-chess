@@ -391,6 +391,41 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       horizon: "one ply of defence, plus a stored line where one exists",
     },
   },
+  {
+    slug: "pin",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "Pinning a piece",
+    humanDefinition:
+      "A piece could not move without giving up something worth more behind it, "
+      + "and that was worth material. This measures whether you won it -- or, when "
+      + "it was done to you, whether you got out of it.",
+    supportedRoles: ["execute", "respond"],
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "ray_geometry_and_static_exchange",
+      geometry:
+        "a pinner, a pinned piece and a more valuable target behind it on one ray, with nothing "
+        + "else between. Absolute when the target is the king; relative otherwise",
+      created:
+        "the pin must not have existed before the focal move. A pin that has been on the board for "
+        + "three moves is not something the player just did",
+      verification:
+        "against every legal reply, static exchange still wins material. Alignment with no way to "
+        + "increase the pressure has cost the opponent nothing and is not recorded",
+      execute: "the subject created it; success is winning the material it was worth",
+      respond: "the opponent created it; success is conceding less than it threatened",
+      censored: "the subject never moved again",
+      abstain:
+        "a pin that already existed, alignment with no verified consequence, equal or beneficial "
+        + "exchanges, or an unreadable position",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+      note:
+        "Which side of the ray is more valuable is what separates this from a skewer, and the two "
+        + "detectors take opposite cases of the same geometry.",
+    },
+  },
 ]);
 
 /**

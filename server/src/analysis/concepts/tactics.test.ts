@@ -20,6 +20,7 @@ import { detectGame } from "./detect.js";
 import { CONCEPT_CATALOGUE } from "./catalogue.js";
 import { fixturesFor, type ConceptFixture } from "./fixtures.js";
 import { guaranteedGain, legalMoves, MATE_GAIN_CP } from "./tactics.js";
+import { PIECE_VALUES } from "../../engine/attacks.js";
 import type { GameFacts, PositionFact, TransitionFact } from "./evidence.js";
 
 const sq = (name: string) => parseSquare(name)!;
@@ -105,7 +106,7 @@ test("a motif any single reply defuses is not verified", () => {
 test("a fork with check is verified, because check must be answered", () => {
   const position = Chess.fromSetup(parseFen("r3k3/2N5/8/8/8/8/8/4K3 b - - 0 1").unwrap()).unwrap();
   const verdict = guaranteedGain(position, "white");
-  assert.equal(verdict.gainCp, 500, "the rook falls whatever the king does");
+  assert.equal(verdict.gainCp, PIECE_VALUES.rook, "the rook falls whatever the king does");
   assert.notEqual(verdict.bestDefence, null);
 });
 
@@ -155,7 +156,11 @@ test("a knight fork on king and rook is recorded, with the rook as the payoff", 
   assert.equal(fork!.role, "execute", "the subject created it");
   assert.equal(fork!.event.facts.subtype, "royal_fork");
   assert.equal(fork!.event.facts.kingInvolved, true);
-  assert.equal(fork!.event.facts.expectedGainCp, 500, "the rook, whatever the king does");
+  assert.equal(
+    fork!.event.facts.expectedGainCp,
+    PIECE_VALUES.rook,
+    "the rook, whatever the king does",
+  );
   assert.equal(fork!.event.actor, "subject");
   assert.equal(fork!.event.affected, "opponent");
   assert.equal(fork!.draft.success, true, "and they took it");
@@ -290,4 +295,84 @@ test("two occurrences of one family at one ply do not share a key", () => {
     "the key names the attacking square and its targets, not just the ply",
   );
   assert.ok(fork!.event.detectionKey.includes(String(sq("c7"))));
+});
+
+// ---------------------------------------------------------------------------
+// pin (FOR-127)
+// ---------------------------------------------------------------------------
+
+function pinsIn(game: GameFacts) {
+  return detectGame(game).filter((found) => found.conceptSlug === "pin");
+}
+
+test("a pin that wins the pinned piece is recorded", () => {
+  const positive = fixture("pin/rook-pins-knight-and-wins-it");
+  // Rd1 Kc8 Rxd5 -- created, unpinned too late, collected.
+  const found = pinsIn(gameOf(positive.fen, ["a1d1", "d8c8", "d1d5"], "white"));
+  assert.equal(found.length, 1);
+
+  const [pin] = found;
+  assert.equal(pin!.role, "execute");
+  assert.equal(pin!.event.facts.subtype, "absolute");
+  assert.equal(
+    pin!.event.facts.winnableCp,
+    PIECE_VALUES.knight,
+    "an undefended knight, at whatever the shared table says a knight is worth",
+  );
+  assert.equal(pin!.draft.success, true);
+});
+
+test("the colour-reversed winning pin behaves identically", () => {
+  const twin = fixture("pin/rook-pins-knight-and-wins-it-black");
+  const found = pinsIn(gameOf(twin.fen, ["a8d8", "d1c1", "d8d4"], "black"));
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.role, "execute");
+  assert.equal(found[0]!.draft.success, true);
+});
+
+test("immobilising a piece is not the same claim as winning one", () => {
+  // The distinction the contract turns on, and the one this fixture was
+  // originally written on the wrong side of. Bg5 really does pin the knight --
+  // it has no legal move -- and wins nothing, because Bxf6 is met by Kxf6.
+  const refuted = fixture("pin/bishop-pins-knight-to-king");
+  assert.deepEqual(pinsIn(gameOf(refuted.fen, ["h4g5", "e7d7"], "white")), []);
+
+  const twin = fixture("pin/bishop-pins-knight-to-king-black");
+  assert.deepEqual(pinsIn(gameOf(twin.fen, ["b4c3", "e1f1"], "black")), []);
+});
+
+test("alignment with nothing behind it is not a pin", () => {
+  const nearMiss = fixture("pin/alignment-with-nothing-behind-it");
+  assert.deepEqual(pinsIn(gameOf(nearMiss.fen, ["h4g5", "e8d8"], "white")), []);
+});
+
+test("a pin that was already on the board is not something the player just did", () => {
+  // Otherwise one idea becomes an event every ply for as long as the geometry
+  // survives, and a player who pinned a knight once is credited with pinning it
+  // eleven times.
+  const positive = fixture("pin/rook-pins-knight-and-wins-it");
+  const found = pinsIn(gameOf(positive.fen, ["a1d1", "d8c8", "h1g1", "c8d8", "g1h1"], "white"));
+  assert.equal(found.length, 1, "created once, recorded once");
+  assert.equal(found[0]!.draft.opportunityPly, 0);
+});
+
+test("a pin the opponent creates is measured as a response", () => {
+  const positive = fixture("pin/rook-pins-knight-and-wins-it");
+  const found = pinsIn(gameOf(positive.fen, ["a1d1", "d8c8", "d1d5"], "black"));
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.role, "respond");
+  assert.equal(found[0]!.event.actor, "opponent");
+  assert.equal(found[0]!.draft.success, false, "the knight was lost anyway");
+});
+
+test("a pin nobody answered is censored", () => {
+  const positive = fixture("pin/rook-pins-knight-and-wins-it");
+  const found = pinsIn(gameOf(positive.fen, ["a1d1"], "white", {
+    termination: "resign",
+    result: "white",
+  }));
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.draft.responseObserved, false);
+  assert.equal(found[0]!.draft.success, null);
+  assert.equal(found[0]!.event.completeness, "censored");
 });

@@ -127,26 +127,51 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
   {
     id: "pin/bishop-pins-knight-to-king",
     family: "pin",
-    shape: "positive",
+    shape: "refuted_geometry",
     fen: "8/4k3/5n2/8/7B/8/8/4K3 w - - 0 1",
     move: "h4g5",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "Bg5 pins the knight on f6 against the king on e7 along the g5-f6-e7 diagonal. "
-      + "Absolute pin: the knight cannot legally move. Event pin, subtype absolute, role execute.",
+      "Bg5 pins the knight on f6 against the king on e7, and the knight cannot legally move. "
+      + "It still wins nothing: Bxf6 is answered by Kxf6, so the pinned piece is not winnable. "
+      + "Written first as a positive, which was the mistake -- immobilising a piece and winning "
+      + "one are different claims, and the contract records only the second.",
+  },
+  {
+    id: "pin/rook-pins-knight-and-wins-it",
+    family: "pin",
+    shape: "positive",
+    fen: "3k4/8/8/3n4/8/8/8/R6K w - - 0 1",
+    move: "a1d1",
+    expectLegal: true,
+    subjectColor: "white",
+    expectation:
+      "Rd1 pins the undefended knight on d5 against the king on d8. Every black reply loses it: "
+      + "moving the king leaves it hanging and it cannot move itself. Event pin, subtype "
+      + "absolute, role execute, payoff a knight.",
+  },
+  {
+    id: "pin/rook-pins-knight-and-wins-it-black",
+    family: "pin",
+    shape: "positive",
+    fen: "r6k/8/8/8/3N4/8/8/3K4 b - - 0 1",
+    move: "a8d8",
+    expectLegal: true,
+    subjectColor: "black",
+    expectation: "The same winning pin with the colours reversed.",
   },
   {
     id: "pin/bishop-pins-knight-to-king-black",
     family: "pin",
-    shape: "positive",
+    shape: "refuted_geometry",
     fen: "4k3/8/8/8/1b6/8/3N4/4K3 b - - 0 1",
     move: "b4c3",
     expectLegal: true,
     subjectColor: "black",
     expectation:
-      "The colour-reversed twin: Bc3 pins the knight on d2 against the king on e1 along "
-      + "c3-d2-e1. Absolute pin, role execute, subject Black.",
+      "The colour-reversed twin of the bishop pin, and a negative for the same reason: Bxd2 is "
+      + "answered by Kxd2.",
   },
   {
     id: "pin/alignment-with-nothing-behind-it",

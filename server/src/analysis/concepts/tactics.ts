@@ -397,6 +397,28 @@ function capturedAtLeast(
   return view.see(move.to, move.from) >= atLeast;
 }
 
+/**
+ * The most `attacker` can win by taking whatever stands on `square`.
+ *
+ * Attribution, not just size. `guaranteedGain` says the attacker wins material
+ * somewhere after the best defence, which is not the same as winning it *from
+ * the motif being recorded*. A move that creates an irrelevant pin while also
+ * leaving the opponent's queen hanging elsewhere would otherwise credit the pin
+ * with the queen.
+ */
+export function bestSeeOnSquare(
+  view: PositionView,
+  square: Square,
+  attacker: Color,
+): number {
+  let best = Number.NEGATIVE_INFINITY;
+  for (const from of view.attackersOf(square, attacker)) {
+    const gain = view.see(square, from);
+    if (gain > best) best = gain;
+  }
+  return best === Number.NEGATIVE_INFINITY ? 0 : best;
+}
+
 /** Material value of whatever stands on a square. */
 export function valueOn(view: PositionView, square: Square): number {
   const piece = view.pieceAt(square);
@@ -497,7 +519,91 @@ function detectDoubleAttack({ game, index }: DetectorContext): DetectedOpportuni
   return found;
 }
 
+// ---------------------------------------------------------------------------
+// pin (FOR-127)
+// ---------------------------------------------------------------------------
+
+/** A pin, as the identity that decides whether this move created it. */
+const pinIdentity = (pin: { pinner: Square; pinned: Square; target: Square }): string =>
+  `${pin.pinner}-${pin.pinned}-${pin.target}`;
+
+/**
+ * A piece that cannot move without giving up something better behind it.
+ *
+ * Two things separate what is recorded here from what a board is full of.
+ *
+ * The move has to have *created* the pin. A bishop that was already pinning a
+ * knight three moves ago is not something the player just did, and recording it
+ * every ply would turn one idea into a dozen events.
+ *
+ * And the pin has to be worth something. Alignment is not an opportunity: a
+ * developing move that happens to pin a knight against a queen, with no way to
+ * increase the pressure, has cost the opponent nothing. `verifyConsequence`
+ * decides that the same way it decides a fork -- against every legal reply,
+ * does static exchange still win material -- so the pins that survive are the
+ * ones where the pinned piece is genuinely being won.
+ *
+ * Which side of the ray is more valuable is what makes this a pin rather than a
+ * skewer, and `pinsAgainst` already draws that line: the piece behind must be
+ * worth more than the piece in front. The skewer detector takes the other case.
+ */
+function detectPin({ game, index }: DetectorContext): DetectedOpportunity[] {
+  const found: DetectedOpportunity[] = [];
+
+  for (const transition of game.transitions) {
+    const afterPly = transition.fromPly + 1;
+    const before = index.at(transition.fromPly);
+    const after = index.at(afterPly);
+    if (!before || !after) continue;
+
+    const defender = opposite(transition.actorColor);
+    const existing = new Set(before.pinsAgainst(defender).map(pinIdentity));
+    const created = after.pinsAgainst(defender).filter((pin) => !existing.has(pinIdentity(pin)));
+    if (created.length === 0) continue;
+
+    const verification = verifyConsequence(game, index, afterPly, transition.actorColor);
+    if (!verification) continue;
+
+    for (const pin of created) {
+      // The gain has to be the pinned piece, not something unrelated the same
+      // move happened to win. A pinned knight the attacker cannot profitably
+      // take is an alignment, and the contract calls that a negative.
+      const winnable = bestSeeOnSquare(after, pin.pinned, transition.actorColor);
+      if (winnable < MATERIAL_THRESHOLD_CP) continue;
+
+      const observation = tacticalObservation(game, index, {
+        conceptSlug: "pin",
+        eventType: "pin",
+        discriminator: pinIdentity(pin),
+        focalPly: transition.fromPly,
+        actorColor: transition.actorColor,
+        facts: {
+          pinner: pin.pinner,
+          pinned: pin.pinned,
+          target: pin.target,
+          ray: pin.ray,
+          subtype: pin.subtype,
+          pinnedValueCp: valueOn(after, pin.pinned),
+          targetValueCp: valueOn(after, pin.target),
+          winnableCp: winnable,
+        },
+        difficulty: {
+          pinnedValueCp: valueOn(after, pin.pinned),
+          targetValueCp: valueOn(after, pin.target),
+          absolute: pin.subtype === "absolute" ? 1 : 0,
+          rayLength: pin.ray.length,
+          legalReplies: after.legalMoveCount(),
+        },
+        verification,
+      });
+      if (observation) found.push(observation);
+    }
+  }
+  return found;
+}
+
 /** The tactical detectors, in the order they run. */
 export const TACTICAL_DETECTORS = Object.freeze([
   { name: "double_attack", detect: detectDoubleAttack },
+  { name: "pin", detect: detectPin },
 ]);
