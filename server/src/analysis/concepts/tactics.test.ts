@@ -504,3 +504,83 @@ test("a line that opens onto nothing is not a discovery", () => {
   const found = discoveriesIn(gameOf("8/6k1/8/8/3N4/8/8/B6K w - - 0 1", ["d4b5", "g7g8"], "white"));
   assert.deepEqual(found, [], "a check that wins nothing is not a chance the opponent missed");
 });
+
+// ---------------------------------------------------------------------------
+// removal_of_defender (FOR-130) and trapped_piece (FOR-131)
+// ---------------------------------------------------------------------------
+
+const bySlug = (game: GameFacts, slug: string) =>
+  detectGame(game).filter((found) => found.conceptSlug === slug);
+
+test("removing the guard wins what it was guarding", () => {
+  const positive = fixture("removal_of_defender/capture-the-pawn-that-guards");
+  // Nxc6 Kc7 Rxd5 -- the knight on d5 is pinned and cannot follow its guard.
+  const found = bySlug(gameOf(positive.fen, ["b4c6", "d8c7", "d1d5"], "white"), "removal_of_defender");
+  assert.equal(found.length, 1);
+
+  const [removal] = found;
+  assert.equal(removal!.event.facts.removalMethod, "capture");
+  assert.equal(removal!.event.facts.defendersBefore, 1);
+  assert.equal(removal!.role, "execute");
+  assert.equal(removal!.draft.success, true);
+});
+
+test("a duty two pieces share is not removed by taking one of them", () => {
+  const refuted = fixture("removal_of_defender/target-has-a-second-defender");
+  assert.deepEqual(
+    bySlug(gameOf(refuted.fen, ["b4c6", "d8c7"], "white"), "removal_of_defender"),
+    [],
+  );
+});
+
+test("a guard removed from a target that can run wins nothing", () => {
+  // The version of this fixture I wrote first, kept as the negative it is: with
+  // the black king on e8 the knight is not pinned, so it simply moves away and
+  // the guard was removed from nothing.
+  const found = bySlug(
+    gameOf("4k3/8/2p5/3n4/1N6/8/8/3RK3 w - - 0 1", ["b4c6", "d5f6"], "white"),
+    "removal_of_defender",
+  );
+  assert.deepEqual(found, [], "removing a guard is not the tactic; winning the piece is");
+});
+
+test("a piece whose every answer still loses it is trapped", () => {
+  const positive = fixture("trapped_piece/knight-in-the-corner");
+  // b6 Kg5 Bxa8 -- the knight had b6 and c7 and both lose it, and so does staying.
+  const found = bySlug(gameOf(positive.fen, ["b5b6", "h4g5", "c6a8"], "white"), "trapped_piece");
+  assert.equal(found.length, 1);
+
+  const [trap] = found;
+  assert.equal(trap!.event.facts.piece, "knight");
+  assert.equal(trap!.role, "execute");
+  assert.equal(trap!.draft.success, true);
+});
+
+test("one escape is enough not to be trapped", () => {
+  const nearMiss = fixture("trapped_piece/knight-still-has-a-square");
+  assert.deepEqual(bySlug(gameOf(nearMiss.fen, ["b5b6", "h4g5"], "white"), "trapped_piece"), []);
+});
+
+test("a king is never a trapped piece", () => {
+  // A king with no escape is checkmate or stalemate. Both are results of the
+  // game rather than a piece being won, and either one labelled "trapped piece"
+  // is a category error a player would notice at once.
+  // The position *before* the mate: Ra8# leaves Black with no legal move at
+  // all, which is where a naive trapped-piece walk would reach for the king.
+  const mating = gameOf("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1", ["a1a8"], "white");
+  for (const found of detectGame(mating)) {
+    assert.notEqual(
+      found.event.facts.piece,
+      "king",
+      "a king was reported as a trapped piece",
+    );
+  }
+});
+
+test("a trapped piece the subject owns is measured as a response", () => {
+  const positive = fixture("trapped_piece/knight-in-the-corner");
+  const found = bySlug(gameOf(positive.fen, ["b5b6", "h4g5", "c6a8"], "black"), "trapped_piece");
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.role, "respond");
+  assert.equal(found[0]!.draft.success, false, "the knight was lost anyway");
+});

@@ -718,6 +718,8 @@ test("the detector order is a written list, and it is the order of the output", 
       "pin",
       "skewer",
       "discovered_attack",
+      "removal_of_defender",
+      "trapped_piece",
     ],
     "the order is part of the output contract: two runs must emit the same rows "
     + "in the same sequence, or a diff between them means nothing. Adding a "

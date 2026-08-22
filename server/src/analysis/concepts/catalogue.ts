@@ -493,6 +493,75 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       thresholdCp: MATERIAL_THRESHOLD_CP,
     },
   },
+  {
+    slug: "removal_of_defender",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "Taking out the defender",
+    humanDefinition:
+      "You took or drove off the piece that was guarding something, and what it "
+      + "was guarding could then be won. This measures whether you won it -- or, "
+      + "when it was done to you, whether you saved it.",
+    supportedRoles: ["execute", "respond"],
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "defender_map_and_static_exchange",
+      geometry:
+        "a piece that survives the focal move was defended before it by a guard the focal move "
+        + "either captured or attacked hard enough to force away",
+      removalMethods: ["capture", "deflection"],
+      attribution:
+        "with the guard removed from the board, static exchange on what it was guarding must win "
+        + "material. A target with a second adequate defender is a negative -- removing one holder "
+        + "of a shared duty removes nothing",
+      verification:
+        "against every legal reply, static exchange still wins at least the threshold. A target "
+        + "that can simply run away has not been won, however cleanly its guard was removed",
+      execute: "the subject removed the guard; success is taking what it was guarding",
+      respond: "the opponent removed it; success is conceding less than it threatened",
+      censored: "the subject never moved again",
+      abstain:
+        "a shared duty, a target that escapes, a guard that was not actually guarding, or an "
+        + "unreadable position",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+      note:
+        "Overload and attraction are deliberately not separate concepts in this MVP.",
+    },
+  },
+  {
+    slug: "trapped_piece",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "A piece with nowhere to go",
+    humanDefinition:
+      "A piece had no answer left: every square it could reach lost it, and so "
+      + "did staying. This measures whether you collected it -- or, when it was "
+      + "your piece, whether you got it out.",
+    supportedRoles: ["execute", "respond"],
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "exhaustive_reply_walk_and_static_exchange",
+      geometry: "a non-king enemy piece worth at least the threshold, after the focal move",
+      verification:
+        "every legal reply is played and the piece is followed to wherever it ends up. It is "
+        + "trapped only when static exchange wins it in every one of them -- retreating, being "
+        + "defended, counterattacking, and capturing on the way out all count as answers",
+      kingExcluded:
+        "a king with no escape is checkmate or stalemate, which are results of the game rather "
+        + "than a piece being won",
+      execute: "the subject created the trap; success is collecting the piece",
+      respond: "the subject owns the trapped piece; success is conceding less than it was worth",
+      censored: "the subject never moved again",
+      abstain:
+        "any reply that saves it, a piece below the threshold, or an unreadable position. Sound "
+        + "sacrifices are not distinguishable from blunders by static exchange alone, and where "
+        + "the piece is genuinely saved by compensation this records nothing",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+      horizon: "one ply of defence",
+    },
+  },
 ]);
 
 /**

@@ -303,25 +303,27 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
     id: "removal_of_defender/capture-the-pawn-that-guards",
     family: "removal_of_defender",
     shape: "positive",
-    fen: "4k3/8/2p5/3n4/1N6/8/8/3RK3 w - - 0 1",
+    fen: "3k4/8/2p5/3n4/1N6/8/8/3RK3 w - - 0 1",
     move: "b4c6",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "Nxc6 takes the only defender of the knight on d5; Rxd5 then wins it. "
-      + "Event removal_of_defender, method capture, role execute.",
+      "Nxc6 takes the only defender of the knight on d5, which is pinned to the king on d8 by "
+      + "the rook and so cannot run. Rxd5 follows whatever Black does. Written first with the "
+      + "king on e8, where the knight simply moves away -- removing a guard wins nothing if what "
+      + "it was guarding can walk off.",
   },
   {
     id: "removal_of_defender/target-has-a-second-defender",
     family: "removal_of_defender",
     shape: "refuted_geometry",
-    fen: "4k3/4b3/2p5/3n4/1N6/8/8/3RK3 w - - 0 1",
+    fen: "3k4/8/2p1p3/3n4/1N6/8/8/3RK3 w - - 0 1",
     move: "b4c6",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "The bishop on e7 also guards d5, so removing the c6 pawn wins nothing. "
-      + "The duty was shared, and a shared duty is not removed by taking one holder of it.",
+      "The pawn on e6 also guards d5, so removing the c6 pawn wins nothing: Rxd5 is answered by "
+      + "exd5. The duty was shared, and a shared duty is not removed by taking one holder of it.",
   },
 
   // -------------------------------------------------------------------------
@@ -331,26 +333,27 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
     id: "trapped_piece/knight-in-the-corner",
     family: "trapped_piece",
     shape: "positive",
-    fen: "n3k3/8/8/1PP5/8/8/8/4K3 w - - 0 1",
+    fen: "n7/8/2B5/PP6/7k/8/8/4K3 w - - 0 1",
     move: "b5b6",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "b6 takes c7 away from the knight on a8 while the c5 pawn covers b6. "
-      + "Both squares the knight has are gone, so it is lost. Role execute for White; "
-      + "the same event gives Black a respond opportunity on the next ply.",
+      "b6 takes c7 away from the knight on a8 while the a5 pawn covers b6, and the bishop on c6 "
+      + "attacks a8 so staying loses it too. Nxb6 axb6, Nc7 bxc7, anything else Bxa8. Written "
+      + "first without the bishop, where the knight was merely restricted -- a piece nobody is "
+      + "attacking has not been lost yet, however few squares it has.",
   },
   {
     id: "trapped_piece/knight-still-has-a-square",
     family: "trapped_piece",
     shape: "near_miss",
-    fen: "n3k3/8/8/1P6/8/8/8/4K3 w - - 0 1",
+    fen: "n7/8/2B5/1P6/7k/8/8/4K3 w - - 0 1",
     move: "b5b6",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "Without the c5 pawn, b6 is free and the knight escapes there. "
-      + "One escape square is enough — the piece is not trapped, and this is a negative.",
+      "Without the a5 pawn behind it, b6 is undefended and the knight takes it for free. "
+      + "One escape is enough — the piece is not trapped, and this is a negative.",
   },
 ]);
 

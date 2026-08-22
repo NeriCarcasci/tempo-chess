@@ -41,8 +41,8 @@
 
 import { Chess } from "chessops/chess";
 import { makeUci, parseUci } from "chessops/util";
-import type { Color, Move, Square } from "chessops/types";
-import { PIECE_VALUES, see } from "../../engine/attacks.js";
+import type { Color, NormalMove, Square } from "chessops/types";
+import { PIECE_VALUES, attackersTo as attackersToBoard, see } from "../../engine/attacks.js";
 import type { CensorReason, ConceptRole, OpportunityDraft } from "../observations.js";
 import { MATERIAL_THRESHOLD_CP } from "./catalogue.js";
 import {
@@ -78,8 +78,11 @@ const opposite = (color: Color): Color => (color === "white" ? "black" : "white"
  * one that answers a check -- so a refutation search that tried only one would
  * report a forced loss that the defender could actually escape.
  */
-export function legalMoves(position: Chess): Move[] {
-  const moves: Move[] = [];
+// Standard chess has no drops, so every legal move has a from-square. Saying
+// so in the type keeps the callers that follow a piece across a reply from
+// having to re-prove it.
+export function legalMoves(position: Chess): NormalMove[] {
+  const moves: NormalMove[] = [];
   for (const [from, dests] of position.allDests()) {
     const isPawn = position.board.pawn.has(from);
     for (const to of dests) {
@@ -785,10 +788,216 @@ function detectDiscoveredAttack({ game, index }: DetectorContext): DetectedOppor
   return found;
 }
 
+// ---------------------------------------------------------------------------
+// removal_of_defender (FOR-130)
+// ---------------------------------------------------------------------------
+
+/**
+ * Take out the guard, then take what it was guarding.
+ *
+ * The duty is what matters. A piece that merely stands next to another is not
+ * defending it in any sense worth recording -- the question is whether removing
+ * it makes the protected piece winnable, and that is asked directly by taking
+ * the defender off the board and running static exchange on what it was
+ * guarding.
+ *
+ * Two mechanisms, and both are one ply. `capture` is the focal move taking the
+ * defender. `deflection` is the focal move attacking it hard enough that it has
+ * to move or be lost -- in which case the duty is abandoned either way, and
+ * which of the two the defender picks does not change the outcome.
+ *
+ * A target with a second adequate defender is a negative. Removing one holder
+ * of a shared duty removes nothing.
+ */
+function detectRemovalOfDefender({ game, index }: DetectorContext): DetectedOpportunity[] {
+  const found: DetectedOpportunity[] = [];
+
+  for (const transition of game.transitions) {
+    const afterPly = transition.fromPly + 1;
+    const before = index.at(transition.fromPly);
+    const after = index.at(afterPly);
+    if (!before || !after) continue;
+
+    const move = parseUci(transition.playedMoveUci);
+    if (!move || !("from" in move)) continue;
+
+    const actor = transition.actorColor;
+    const enemyBefore = actor === "white"
+      ? before.position.board.black
+      : before.position.board.white;
+
+    for (const target of enemyBefore) {
+      const piece = before.pieceAt(target);
+      if (!piece || piece.role === "king") continue;
+      // The target has to survive the move; if the focal move took it, that is
+      // an ordinary capture and not a duty being removed.
+      if (after.pieceAt(target) === undefined) continue;
+
+      for (const guard of before.defendersOf(target)) {
+        const guardPiece = before.pieceAt(guard);
+        if (!guardPiece) continue;
+
+        const captured = move.to === guard;
+        // Deflection: the guard survives the move but is now attacked hard
+        // enough that staying costs more than the duty is worth.
+        const deflected = !captured
+          && after.pieceAt(guard) !== undefined
+          && bestSeeOnSquare(after, guard, actor) >= MATERIAL_THRESHOLD_CP;
+        if (!captured && !deflected) continue;
+
+        // With the guard gone, is what it was guarding actually winnable? A
+        // shared duty is not removed by taking one of its holders.
+        const bared = after.position.board.clone();
+        if (!captured) bared.take(guard);
+        let winnable = Number.NEGATIVE_INFINITY;
+        for (const from of after.attackersOf(target, actor)) {
+          const gain = see(bared, target, from);
+          if (gain > winnable) winnable = gain;
+        }
+        if (winnable < MATERIAL_THRESHOLD_CP) continue;
+
+        const verification = verifyConsequence(game, index, afterPly, actor);
+        if (!verification) continue;
+
+        const observation = tacticalObservation(game, index, {
+          conceptSlug: "removal_of_defender",
+          eventType: "removal_of_defender",
+          discriminator: `${guard}-${target}`,
+          focalPly: transition.fromPly,
+          actorColor: actor,
+          facts: {
+            defender: guard,
+            defenderRole: guardPiece.role,
+            target,
+            targetRole: piece.role,
+            removalMethod: captured ? "capture" : "deflection",
+            defendersBefore: before.defendersOf(target).size(),
+            targetValueCp: valueOn(before, target),
+            followUpCp: winnable,
+          },
+          difficulty: {
+            targetValueCp: valueOn(before, target),
+            defenderValueCp: valueOn(before, guard),
+            remainingDefenders: before.defendersOf(target).size() - 1,
+            legalReplies: after.legalMoveCount(),
+          },
+          verification,
+        });
+        if (observation) found.push(observation);
+      }
+    }
+  }
+  return found;
+}
+
+// ---------------------------------------------------------------------------
+// trapped_piece (FOR-131)
+// ---------------------------------------------------------------------------
+
+/**
+ * A piece with nowhere left to go.
+ *
+ * Having no legal square is not enough, and neither is being attacked. What
+ * makes a piece trapped is that *every* answer its owner has still loses it --
+ * retreating, defending it, counterattacking, or capturing something on the way
+ * out. So every legal reply is played and the piece is followed to wherever it
+ * ends up, which is the only way a retreat to a square that is also covered
+ * reads as the loss it is.
+ *
+ * The king is never a trapped piece. A king with no escape is checkmate or
+ * stalemate, both of which are the result of the game rather than a piece being
+ * won, and calling either one "trapped piece" is a category error a player
+ * would notice immediately.
+ */
+function detectTrappedPiece({ game, index }: DetectorContext): DetectedOpportunity[] {
+  const found: DetectedOpportunity[] = [];
+
+  for (const transition of game.transitions) {
+    const afterPly = transition.fromPly + 1;
+    const after = index.at(afterPly);
+    if (!after) continue;
+
+    const actor = transition.actorColor;
+    const board = after.position.board;
+    const enemy = actor === "white" ? board.black : board.white;
+    const replies = legalMoves(after.position);
+    if (replies.length === 0) continue;
+
+    for (const square of enemy) {
+      const piece = after.pieceAt(square);
+      if (!piece || piece.role === "king") continue;
+      // Only worth asking about a piece there is something to win.
+      if (valueOn(after, square) < MATERIAL_THRESHOLD_CP) continue;
+
+      let trapped = true;
+      let escapesTried = 0;
+      let worstCase = Number.POSITIVE_INFINITY;
+      for (const reply of replies) {
+        const next = after.position.clone();
+        next.play(reply);
+        // Follow the piece, not the square: a retreat is an escape only if the
+        // square it retreats to is safe.
+        const landedOn = reply.from === square ? reply.to : square;
+        if (reply.from === square) escapesTried += 1;
+        const occupant = next.board.get(landedOn);
+        if (!occupant || occupant.color !== piece.color) {
+          // It left on its own terms, or something else stands there now.
+          trapped = false;
+          break;
+        }
+        const attackers = attackersToBoard(next.board, landedOn, next.board.occupied)
+          .intersect(actor === "white" ? next.board.white : next.board.black);
+        let winnable = Number.NEGATIVE_INFINITY;
+        for (const from of attackers) {
+          const gain = see(next.board, landedOn, from);
+          if (gain > winnable) winnable = gain;
+        }
+        if (winnable < MATERIAL_THRESHOLD_CP) {
+          trapped = false;
+          break;
+        }
+        if (winnable < worstCase) worstCase = winnable;
+      }
+      if (!trapped) continue;
+
+      const verification = verifyConsequence(game, index, afterPly, actor);
+      if (!verification) continue;
+
+      const observation = tacticalObservation(game, index, {
+        conceptSlug: "trapped_piece",
+        eventType: "trapped_piece",
+        discriminator: `${square}`,
+        focalPly: transition.fromPly,
+        actorColor: actor,
+        facts: {
+          piece: piece.role,
+          square,
+          pieceValueCp: valueOn(after, square),
+          attackers: [...after.attackersOf(square, actor)],
+          escapesTried,
+          repliesConsidered: replies.length,
+          expectedLossCp: worstCase === Number.POSITIVE_INFINITY ? 0 : worstCase,
+        },
+        difficulty: {
+          pieceValueCp: valueOn(after, square),
+          escapeSquareCount: escapesTried,
+          attackerCount: after.attackersOf(square, actor).size(),
+          legalReplies: replies.length,
+        },
+        verification,
+      });
+      if (observation) found.push(observation);
+    }
+  }
+  return found;
+}
+
 /** The tactical detectors, in the order they run. */
 export const TACTICAL_DETECTORS = Object.freeze([
   { name: "double_attack", detect: detectDoubleAttack },
   { name: "pin", detect: detectPin },
   { name: "skewer", detect: detectSkewer },
   { name: "discovered_attack", detect: detectDiscoveredAttack },
+  { name: "removal_of_defender", detect: detectRemovalOfDefender },
+  { name: "trapped_piece", detect: detectTrappedPiece },
 ]);
