@@ -57,7 +57,7 @@
     "backfill:games": "tsx src/backfill/cli.ts games",
     "backfill:reconcile": "tsx src/backfill/cli.ts reconcile",
     "backfill:cutover": "tsx src/backfill/cli.ts cutover",
-    "analysis:unit": "tsx src/analysis/observations.test.ts && node --test --import tsx src/analysis/recent-games.test.ts && node --test --import tsx src/analysis/concepts/detect.test.ts src/analysis/concepts/events.test.ts src/analysis/concepts/fixtures.test.ts src/analysis/concepts/versioning.test.ts src/analysis/concepts/evidence.test.ts",
+    "analysis:unit": "tsx src/analysis/observations.test.ts && node --test --import tsx src/analysis/recent-games.test.ts && node --test --import tsx src/analysis/concepts/detect.test.ts src/analysis/concepts/events.test.ts src/analysis/concepts/fixtures.test.ts src/analysis/concepts/versioning.test.ts src/analysis/concepts/evidence.test.ts src/analysis/concepts/tactics.test.ts",
     "analysis:integration": "tsx src/analysis/gates/integration.ts",
     "analysis:security": "tsx src/analysis/gates/security.ts",
     "analysis:migration": "tsx src/analysis/gates/migration.ts",

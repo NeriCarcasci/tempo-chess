@@ -44,6 +44,7 @@ import {
   type Square,
   type TransitionFact,
 } from "./evidence.js";
+import { TACTICAL_DETECTORS } from "./tactics.js";
 
 // The vocabulary lives in `evidence.ts` -- the detectors need the board layer
 // and the board layer needs their types, so one of the two had to own both to
@@ -689,6 +690,7 @@ export const DETECTORS: readonly Detector[] = Object.freeze([
   { name: "material", detect: detectMaterial },
   { name: "decision", detect: decisionConcepts },
   { name: "conversion", detect: conversionConcept },
+  ...TACTICAL_DETECTORS,
 ]);
 
 /**

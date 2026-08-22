@@ -356,6 +356,41 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
         + "judged, and only against what was available in that position.",
     },
   },
+  {
+    slug: "double_attack",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "Attacking two things at once",
+    humanDefinition:
+      "One of your pieces attacked two things your opponent could not both save. "
+      + "This measures whether you collected what it won -- or, when your opponent "
+      + "did it to you, whether you gave up less than it threatened.",
+    supportedRoles: ["execute", "respond"],
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "attack_map_and_static_exchange",
+      geometry:
+        "after the focal move, the piece that moved attacks two or more relevant enemy targets. "
+        + "A target is relevant when it is the king or when taking it wins material by SEE",
+      verification:
+        "against every legal reply the defender has, static exchange still wins at least the "
+        + "material threshold. A motif any single reply defuses is not recorded",
+      storedLine:
+        "where the deep search stored a line for the resulting position, it is replayed and must "
+        + "agree; a stored line that contradicts the static answer abstains rather than being "
+        + "overruled",
+      subtypes: ["fork", "royal_fork"],
+      execute: "the subject created it; success is collecting the material it won, or mating",
+      respond: "the opponent created it; success is conceding less than it threatened",
+      censored: "the subject never moved again, so the game never asked the question",
+      abstain:
+        "fewer than two relevant targets, any reply that saves everything, an unreadable position, "
+        + "or evidence that disagrees with itself",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+      horizon: "one ply of defence, plus a stored line where one exists",
+    },
+  },
 ]);
 
 /**
