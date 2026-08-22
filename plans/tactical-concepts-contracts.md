@@ -66,6 +66,31 @@ FOR-126:
 retained candidate was found, not that a motif was built. `create`, `avoid` and
 `prevent` are supported by the schema and deliberately unused in this MVP.
 
+## Shared evidence layer (FOR-125)
+
+The board and stored-line helpers used by the tactical families have their own
+observable boundary:
+
+* A position FEN is parsed at most once per game and ply. Repeated requests,
+  including an alternate side-to-move view, reuse the indexed board. An
+  alternate view that is not a legal position is null, never a guessed board.
+* `attackersOf` and `attacksFrom` are pseudo-legal for exchange accounting, so a
+  pinned piece still defends. `legalMovesTo` and `destsFrom` answer legal
+  movement for the side to move. These answers are not interchangeable.
+* Absolute pins agree with legal pinned-movement constraints. Relative pins
+  require exactly one front blocker and a strictly more valuable rear target;
+  blocked rays, equal-value alignments, and a pinner absolutely constrained off
+  the attacking ray are negatives.
+* Legal move counts expand each promotion destination into its four UCI moves,
+  matching how retained MultiPV candidates are counted.
+* Candidate lines come only from the deep evaluation pinned by the transition
+  assessment for the same analysis run and materialization. A malformed line
+  makes stored candidate evidence for that ply unavailable; it is not dropped
+  to create a stronger-looking partial set.
+* PV replay is all-or-nothing, starts from a cloned indexed position, and names
+  absent, truncated, malformed and illegal evidence. It never returns a partial
+  replay and never mutates the shared board.
+
 ---
 
 ## Existing families, corrected

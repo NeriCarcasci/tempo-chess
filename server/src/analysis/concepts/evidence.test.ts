@@ -123,16 +123,19 @@ test("a pinned defender still defends", () => {
   // that may not legally move still participates in one. Conflating that with
   // legal movement is how a detector decides a defended piece is hanging.
   //
-  // White rook d1, black knight d5 pinned to the black king d8 by it, and the
-  // black knight also defends f4... using a simpler shape: black bishop c6
-  // defends e4 while pinned along the a8-h1 diagonal is awkward, so assert the
-  // general property on a pin we already have.
-  const view = viewOf("3k4/8/8/3n4/8/3b4/8/3RK3 w - - 0 1")!;
-  // The bishop on d3 is pinned along the d-file? No -- d3 is on the d-file with
-  // the rook on d1 and the knight d5 between. What matters here: both black
-  // pieces on the d-file are counted as attackers of squares they bear on,
-  // regardless of the pin.
-  assert.ok(view.attackersOf(sq("c4"), "black").has(sq("d3")), "a pinned bishop still bears on c4");
+  // White rook d1, black bishop d6 pinned to the black king d8. The bishop has
+  // no legal move, but it still bears on c5 for exchange accounting.
+  const view = viewOf("3k4/8/3b4/8/8/8/8/3RK3 b - - 0 1")!;
+  assert.ok(
+    view.pinsAgainst("black").some((pin) => pin.pinned === sq("d6") && pin.subtype === "absolute"),
+    "the premise is a real absolute pin",
+  );
+  assert.equal(view.destsFrom(sq("d6")).size(), 0, "the pinned bishop cannot legally move");
+  assert.ok(view.attackersOf(sq("c5"), "black").has(sq("d6")), "it still bears on c5");
+  assert.ok(
+    !view.legalMovesTo(sq("c5")).has(sq("d6")),
+    "pseudo-legal exchange defence does not become a legal move",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -204,6 +207,15 @@ test("equal value behind the blocker is alignment, not a pin", () => {
   // Bishop h4, black pawn g5, black pawn f6. Nothing is gained by the front
   // pawn moving, so there is nothing to exploit and nothing to record.
   assert.deepEqual(viewOf("4k3/8/5p2/6p1/7B/8/8/4K3 b - - 0 1")!.pinsAgainst("black"), []);
+});
+
+test("an absolutely pinned pinner cannot create a relative pin off its legal ray", () => {
+  // Black bishop e7 is pinned to its king e8 by the white rook e1. The bishop,
+  // white rook d6 and white queen c5 have relative-pin geometry, but the bishop
+  // cannot legally follow that diagonal, so the geometry is a negative.
+  const view = viewOf("4k3/4b3/3R4/2Q5/8/8/8/4R1K1 w - - 0 1")!;
+  assert.ok(view.pinsAgainst("black").some((pin) => pin.pinned === sq("e7")));
+  assert.deepEqual(view.pinsAgainst("white"), []);
 });
 
 // ---------------------------------------------------------------------------
@@ -324,6 +336,11 @@ test("an unparseable move is named", () => {
   assert.equal(replay.reason, "unparseable_move");
 });
 
+test("a non-string PV member is malformed evidence, not an exception", () => {
+  const replay = replayPv(viewOf(START)!, ["e2e4", 7] as unknown as string[]);
+  assert.deepEqual(replay, { available: false, reason: "unparseable_move" });
+});
+
 test("an absent line is named", () => {
   assert.deepEqual(replayPv(viewOf(START)!, []), { available: false, reason: "no_line" });
   assert.deepEqual(replayPv(viewOf(START)!, undefined), { available: false, reason: "no_line" });
@@ -369,6 +386,9 @@ test("a position can be asked about with the other side to move", () => {
   assert.notEqual(asWhite, null);
   assert.equal(asWhite!.turn, "white");
   assert.ok(asWhite!.isLegal(parseUci("d4e5")!), "White could take the knight if it were their move");
+  assert.match(asWhite!.fen, / w /, "the derived FEN and derived board name the same side to move");
+  assert.equal(index.asIfToMove(0, "white"), asWhite, "the alternate board is reused");
+  assert.equal(index.parseCount, 1, "asking out of turn does not reparse the ply's FEN");
 });
 
 test("flipping the turn into an impossible position answers null", () => {

@@ -50,6 +50,7 @@ function game(over: Partial<GameFacts>): GameFacts {
     positions: [],
     termination: "resign",
     result: "white",
+    candidatesByPly: new Map(),
     ...over,
   };
 }
@@ -731,17 +732,15 @@ test("every detector reads the same board, parsed once per ply", () => {
   const context = { game: facts, index };
   for (const detector of DETECTORS) detector.detect(context);
 
-  // Five positions exist for four moves. Anything at or below that has reused
-  // the cache for every ordinary lookup; the surplus is `asIfToMove`, which
-  // rebuilds deliberately to ask a question out of turn.
-  assert.ok(
-    index.parseCount >= facts.positions.length,
-    "every position the detectors touched was parsed at least once",
+  const pliesRead = new Set(
+    facts.transitions
+      .filter((transition) => transition.actorColor === facts.subjectColor)
+      .flatMap((transition) => [transition.fromPly, transition.fromPly + 1]),
   );
-  assert.ok(
-    index.parseCount <= facts.positions.length * 3,
-    `three detectors over ${facts.positions.length} positions parsed ${index.parseCount} times, `
-    + "which is more than out-of-turn questions can explain",
+  assert.equal(
+    index.parseCount,
+    pliesRead.size,
+    "each position the detectors request is parsed once, including out-of-turn questions",
   );
 });
 

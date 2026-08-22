@@ -42,6 +42,7 @@ import {
   detectGame,
   groupByEvent,
   DETECTOR_VERSION,
+  type CandidateLine,
   type GameFacts,
   type PositionFact,
   type TransitionFact,
@@ -58,6 +59,14 @@ interface RunRow {
   subject_game_id: string | null;
   subject_id: string | null;
   replay_revision_id: string | null;
+}
+
+interface CandidateRow {
+  readonly from_ply: number;
+  readonly rank: number;
+  readonly uci: string;
+  readonly expected_score: string;
+  readonly pv: unknown;
 }
 
 /**
@@ -156,6 +165,7 @@ export async function detectForRun(
              expected_score_before, expected_score_after, phase
       from analysis.transition_assessments
       where analysis_run_id = ${runId}
+        and materialization_run_id = ${materializationRunId}
       order by from_ply
     `;
     if (transitions.length === 0) {
@@ -165,6 +175,49 @@ export async function detectForRun(
         outputSummary: { opportunities: 0, reason: "no_assessed_transitions" },
       };
     }
+
+    // Tactical verification may use only the deep evaluation that this exact
+    // transition assessment pinned. Joining through the assessment prevents a
+    // cached evaluation from another run or replay revision being substituted
+    // merely because it describes similar board geometry.
+    const candidateRows = await tx<CandidateRow[]>`
+      select t.from_ply, c.rank, c.uci, c.expected_score, c.pv
+      from analysis.transition_assessments t
+      join analysis.evaluation_candidates c
+        on c.position_evaluation_id = t.deep_evaluation_id
+      where t.analysis_run_id = ${runId}
+        and t.materialization_run_id = ${materializationRunId}
+      order by t.from_ply, c.rank
+    `;
+    const mutableCandidates = new Map<number, CandidateLine[]>();
+    const malformedCandidatePlies = new Set<number>();
+    for (const row of candidateRows) {
+      const expectedScore = Number(row.expected_score);
+      const pvIsValid = Array.isArray(row.pv)
+        && row.pv.every((move): move is string => typeof move === "string");
+      const valid = Number.isInteger(row.from_ply)
+        && Number.isInteger(row.rank)
+        && row.rank >= 1
+        && row.rank <= 32
+        && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(row.uci)
+        && Number.isFinite(expectedScore)
+        && expectedScore >= 0
+        && expectedScore <= 1
+        && pvIsValid
+        && (row.pv.length === 0 || row.pv[0] === row.uci);
+      if (!valid) {
+        malformedCandidatePlies.add(row.from_ply);
+        continue;
+      }
+      mutableCandidates.set(row.from_ply, [
+        ...(mutableCandidates.get(row.from_ply) ?? []),
+        { rank: row.rank, uci: row.uci, expectedScore, pv: row.pv },
+      ]);
+    }
+    // Silently dropping one bad line would turn a partial searched set into a
+    // complete-looking one. The whole ply is unavailable instead.
+    for (const ply of malformedCandidatePlies) mutableCandidates.delete(ply);
+    const candidatesByPly: ReadonlyMap<number, readonly CandidateLine[]> = mutableCandidates;
 
     const versions = await conceptVersionIds(tx);
     if (versions.size === 0) {
@@ -184,11 +237,7 @@ export async function detectForRun(
         game.result === "white" || game.result === "black" || game.result === "draw"
           ? game.result
           : null,
-      // Empty until FOR-132, which is the ticket that loads stored engine
-      // lines. A detector that needs a line it was never given abstains, which
-      // is its contracted behaviour rather than a gap -- so the tactical
-      // families degrade to "not verified here" instead of guessing.
-      candidatesByPly: new Map(),
+      candidatesByPly,
       positions: positions.map((row): PositionFact => ({ ply: row.ply, fen: row.fen })),
       transitions: transitions.map((row): TransitionFact => ({
         fromPly: row.from_ply,

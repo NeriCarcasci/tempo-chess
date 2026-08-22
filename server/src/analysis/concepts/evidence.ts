@@ -88,7 +88,7 @@ export interface PositionFact {
 export interface CandidateLine {
   readonly rank: number;
   readonly uci: string;
-  /** From the actor's perspective, as `engine/assessments.ts` normalises it. */
+  /** White's perspective, exactly as `evaluation_candidates` stores it. */
   readonly expectedScore: number;
   readonly pv: readonly string[];
 }
@@ -176,7 +176,7 @@ export interface DetectedOpportunity {
  * without redefining what the concept means. Bump it when detection behaviour
  * changes, which is not the same event as bumping a contract.
  */
-export const DETECTOR_VERSION = "2";
+export const DETECTOR_VERSION = "3";
 
 /**
  * The identity of a physical occurrence, stable across runs.
@@ -411,6 +411,14 @@ export class PositionView {
   pinsAgainst(color: Color): PinFact[] {
     const board = this.position.board;
     const king = board.kingOf(color);
+    const legalBlockers = this.position.turn === color
+      ? this.position.ctx().blockers
+      : null;
+    const pinnerColor = color === "white" ? "black" : "white";
+    const pinnerPosition = this.position.clone();
+    pinnerPosition.turn = pinnerColor;
+    pinnerPosition.epSquare = undefined;
+    const pinnerContext = pinnerPosition.ctx();
     const own = color === "white" ? board.white : board.black;
     const enemySliders = (color === "white" ? board.black : board.white)
       .intersect(board.rooksAndQueens().union(board.bishopsAndQueens()));
@@ -430,7 +438,19 @@ export class PositionView {
         if (target === null || !own.has(target)) continue;
 
         const isKing = king !== undefined && target === king;
+        // When this is the side to move, use the very same blocker set as
+        // `dests`. Geometry alone must not call a piece absolutely pinned when
+        // legal move generation does not constrain it.
+        if (isKing && legalBlockers !== null && !legalBlockers.has(pinned)) continue;
         if (!isKing && this.valueAt(target) <= this.valueAt(pinned)) continue;
+        // A slider absolutely pinned to its own king cannot create a relative
+        // pin off that ray: after the front piece moves, capturing the rear
+        // target would still be illegal. Pseudo-legal SEE cannot rescue that
+        // geometry into a verified consequence.
+        if (!isKing && pinnerContext.blockers.has(pinner)) {
+          const pinnerKing = pinnerContext.king;
+          if (pinnerKing === undefined || !ray(pinner, pinnerKing).has(pinned)) continue;
+        }
 
         found.push({
           pinned,
@@ -486,6 +506,7 @@ export class PositionView {
 export class PositionIndex {
   private readonly fens: ReadonlyMap<number, string>;
   private readonly views = new Map<number, PositionView | null>();
+  private readonly alternateTurns = new Map<string, PositionView | null>();
   /** How many FENs have actually been parsed. Asserted by the unit gate. */
   private parses = 0;
 
@@ -516,22 +537,29 @@ export class PositionIndex {
    * moved is left in check -- and `Chess.fromSetup` rejects it, which is the
    * right answer rather than an obstacle.
    *
-   * Not cached: it is derived from a cached FEN and is asked far less often
-   * than the position itself.
+   * The FEN is still parsed only by `at`. An alternate turn is rebuilt from
+   * that cached position, then cached itself, so repeated feature requests do
+   * not quietly defeat the per-game index.
    */
   asIfToMove(ply: number, mover: Color): PositionView | null {
-    const fen = this.fens.get(ply);
-    if (fen === undefined) return null;
-    const parsed = parseFen(fen);
-    if (parsed.isErr) return null;
-    const setup = parsed.unwrap();
-    if (setup.turn !== mover) {
-      setup.turn = mover;
-      setup.epSquare = undefined;
-    }
-    this.parses += 1;
+    const base = this.at(ply);
+    if (!base) return null;
+    if (base.turn === mover) return base;
+
+    const key = `${ply}:${mover}`;
+    if (this.alternateTurns.has(key)) return this.alternateTurns.get(key) ?? null;
+
+    const setup = base.position.toSetup();
+    setup.turn = mover;
+    setup.epSquare = undefined;
     const position = Chess.fromSetup(setup);
-    return position.isErr ? null : new PositionView(ply, fen, position.unwrap());
+    let view: PositionView | null = null;
+    if (position.isOk) {
+      const rebuilt = position.unwrap();
+      view = new PositionView(ply, makeFen(rebuilt.toSetup()), rebuilt);
+    }
+    this.alternateTurns.set(key, view);
+    return view;
   }
 
   /** How many FENs this index has parsed, for the reuse assertion. */
@@ -605,6 +633,10 @@ export function replayPv(
   positions.push(current);
 
   for (const uci of pv) {
+    // The database constrains `pv` to be a JSON array, but old or externally
+    // written evidence can still contain a non-string member. It is malformed
+    // evidence, not an exception and never a line to replay partially.
+    if (typeof uci !== "string") return { available: false, reason: "unparseable_move" };
     const move = parseUci(uci);
     if (!move) return { available: false, reason: "unparseable_move" };
     if (!current.isLegal(move)) return { available: false, reason: "illegal_move" };
