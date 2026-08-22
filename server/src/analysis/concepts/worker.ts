@@ -42,6 +42,7 @@ import { conceptVersionIds } from "./register.js";
 import {
   detectGame,
   groupByEvent,
+  withheldFrom,
   DETECTOR_VERSION,
   type CandidateLine,
   type DetectedOpportunity,
@@ -467,7 +468,7 @@ export async function detectForRun(
 
     // One physical occurrence per group, however many things are measured about
     // it. The grouping is pure and lives in `detect.ts`; this loop only writes.
-    const groups = groupByEvent(detectGame(facts));
+    const groups = groupByEvent(detectGame(facts, { withheld: withheldFrom(process.env) }));
 
     const opponentColor = game.subject_color === "white" ? "black" : "white";
     /** `subject`/`opponent` are relative so the detector stays colour-agnostic. */

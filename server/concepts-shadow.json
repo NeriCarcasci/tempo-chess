@@ -1,0 +1,81 @@
+{
+  "corpusGames": 240,
+  "labels": 3097,
+  "withheld": [],
+  "families": {
+    "critical_moment": {
+      "emitted": 672,
+      "structurallyValid": 672,
+      "structuralPrecision": 1,
+      "censored": 0,
+      "coverageGames": 120,
+      "defects": [],
+      "defectCount": 0
+    },
+    "only_move": {
+      "emitted": 260,
+      "structurallyValid": 260,
+      "structuralPrecision": 1,
+      "censored": 0,
+      "coverageGames": 240,
+      "defects": [],
+      "defectCount": 0
+    },
+    "winning_conversion": {
+      "emitted": 130,
+      "structurallyValid": 130,
+      "structuralPrecision": 1,
+      "censored": 2,
+      "coverageGames": 130,
+      "defects": [],
+      "defectCount": 0
+    },
+    "material_safety": {
+      "emitted": 177,
+      "structurallyValid": 177,
+      "structuralPrecision": 1,
+      "censored": 0,
+      "coverageGames": 119,
+      "defects": [],
+      "defectCount": 0
+    },
+    "free_material": {
+      "emitted": 916,
+      "structurallyValid": 916,
+      "structuralPrecision": 1,
+      "censored": 0,
+      "coverageGames": 202,
+      "defects": [],
+      "defectCount": 0
+    },
+    "worse_position_defence": {
+      "emitted": 922,
+      "structurallyValid": 922,
+      "structuralPrecision": 1,
+      "censored": 0,
+      "coverageGames": 130,
+      "defects": [],
+      "defectCount": 0
+    },
+    "trapped_piece": {
+      "emitted": 16,
+      "structurallyValid": 16,
+      "structuralPrecision": 1,
+      "censored": 2,
+      "coverageGames": 13,
+      "defects": [],
+      "defectCount": 0
+    },
+    "double_attack": {
+      "emitted": 4,
+      "structurallyValid": 4,
+      "structuralPrecision": 1,
+      "censored": 1,
+      "coverageGames": 4,
+      "defects": [],
+      "defectCount": 0
+    }
+  },
+  "duplicates": [],
+  "semanticReviewOutstanding": "Structural validity is decided here. Whether a label is worth showing a player is a judgement about chess that a person has to make, and it has not been made. No number in this file is a reviewed-precision figure."
+}

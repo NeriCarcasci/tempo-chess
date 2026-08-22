@@ -102,6 +102,7 @@
     "editorial": "node --env-file=.env --import tsx src/public/cli.ts",
     "onboarding:reexamine": "tsx src/onboarding/reexamine.ts",
     "concepts:performance": "tsx src/analysis/concepts/gates/performance.ts",
+    "concepts:shadow": "tsx src/analysis/concepts/gates/shadow.ts",
     "concepts:gate": "tsx src/analysis/concepts/gates/gate.ts",
     "concepts:backfill": "tsx src/analysis/concepts/backfill.ts"
   },
