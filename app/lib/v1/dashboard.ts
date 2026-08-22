@@ -151,6 +151,21 @@ const UNAVAILABLE_TEXT: Record<string, string> = {
   metric_not_estimated: "This report did not measure this.",
 };
 
+/**
+ * Why a rating was not placed on Forma's scale, in the reader's words.
+ *
+ * `subject_rating_scale_estimates.suppressed_reason` is free text and nothing
+ * writes it on this branch, so the first producer decides whether it is a
+ * sentence or a slug. A string with no space in it is a slug, and printing one
+ * on a page about somebody's chess is the failure the whole copy layer exists
+ * to prevent — so it is described rather than shown.
+ */
+export function suppressionText(reason: string): string {
+  return reason.includes(" ")
+    ? reason
+    : "Forma did not place this rating on its own scale, and this build does not carry the reason it gave.";
+}
+
 export function unavailableText(reason: string | null): string {
   if (reason === null) return "Forma did not say why there is no figure here.";
   return (

@@ -19,6 +19,7 @@ import {
   quotedRating,
   splitDimensionKey,
   splitFindings,
+  suppressionText,
   todayReport,
   unavailableText,
   widestSample,
@@ -205,6 +206,15 @@ describe("absences", () => {
   test("a reason this build has never seen is described, never printed raw", () => {
     expect(unavailableText("some_new_reason")).not.toContain("some_new_reason");
     expect(unavailableText(null).length).toBeGreaterThan(20);
+  });
+
+  test("a suppression reason that arrives as a slug is described, not printed", () => {
+    // `suppressed_reason` is free text and nothing writes it yet, so the first
+    // producer decides whether it is a sentence or an enum value.
+    expect(suppressionText("outside_calibrated_range")).not.toContain("_");
+    expect(suppressionText("Your pool has too few rated players to calibrate.")).toBe(
+      "Your pool has too few rated players to calibrate.",
+    );
   });
 
   test("a finding type this build has never seen is a plain noun, not a slug", () => {

@@ -4,6 +4,7 @@ import {
   confidenceLabel,
   findingLabel,
   splitFindings,
+  suppressionText,
   unavailableText,
   type MeasureGroup,
 } from "../lib/v1/dashboard";
@@ -342,7 +343,7 @@ export function RatingPools({ profile }: { profile: RatingProfile }) {
               ) : null}
             </p>
             {pool.suppressedReason ? (
-              <p className="rate-why">{pool.suppressedReason}</p>
+              <p className="rate-why">{suppressionText(pool.suppressedReason)}</p>
             ) : pool.inSupportedRange ? null : (
               <p className="rate-why">
                 This rating sits outside the band Forma calibrated against, so it is shown as the
