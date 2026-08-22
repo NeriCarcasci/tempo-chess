@@ -2,6 +2,7 @@ import { useLoaderData, useRouteError } from "react-router";
 import { fetchGame, type GameData } from "../lib/game";
 import { GameReview } from "../components/GameReview";
 import { requireSession } from "../lib/session";
+import { fetchReviewByLichessId, type ReviewLookup } from "../lib/v1/review";
 import type { Route } from "./+types/game";
 
 export function meta() {
@@ -11,8 +12,20 @@ export function meta() {
 export async function clientLoader({ params, request }: Route.ClientLoaderArgs) {
   await requireSession();
   const ply = Number(new URL(request.url).searchParams.get("ply"));
+  const id = params.id ?? "";
+  // Fetched together rather than in sequence: the moves come from Lichess and
+  // the review from Forma, neither needs the other, and waiting for the second
+  // to start the first would add a round trip to the board appearing.
+  //
+  // The review is allowed to be absent. The board is worth drawing for a game
+  // Forma has never seen, so a lookup that finds nothing costs one panel.
+  const [game, review] = await Promise.all([
+    fetchGame(id),
+    fetchReviewByLichessId(id),
+  ]);
   return {
-    game: await fetchGame(params.id ?? ""),
+    game,
+    review,
     initialPly: Number.isInteger(ply) && ply > 0 ? ply : null,
   };
 }
@@ -41,6 +54,10 @@ export function ErrorBoundary() {
 }
 
 export default function GamePage() {
-  const { game, initialPly } = useLoaderData() as { game: GameData; initialPly: number | null };
-  return <GameReview game={game} initialPly={initialPly} />;
+  const { game, initialPly, review } = useLoaderData() as {
+    game: GameData;
+    initialPly: number | null;
+    review: ReviewLookup;
+  };
+  return <GameReview game={game} initialPly={initialPly} review={review} />;
 }

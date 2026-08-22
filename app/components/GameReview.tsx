@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { conceptSectionState, conceptsAtPly, type ReviewLookup } from "../lib/v1/review";
 import { Link } from "react-router";
 import { Chess } from "chess.js";
 import type { GameData, Ply, Judgment } from "../lib/game";
@@ -253,7 +254,149 @@ function NavButton({ children, onClick, disabled, label }: { children: React.Rea
   );
 }
 
-export function GameReview({ game, initialPly }: { game: GameData; initialPly?: number | null }) {
+const FILES = "abcdefgh";
+
+/** `28` as `e4`. The API sends squares as indices; a player reads them as squares. */
+function squareName(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 63) return null;
+  return `${FILES[value & 7]}${(value >> 3) + 1}`;
+}
+
+/**
+ * The fact keys that name a square, and what to call them.
+ *
+ * A whitelist rather than a scan, because "render anything that looks like a
+ * square index" would turn a centipawn count into a square the moment one
+ * happened to fall under 64.
+ */
+const SQUARE_FACTS: readonly (readonly [string, string])[] = [
+  ["mover", "from"],
+  ["to", "to"],
+  ["moverTo", "to"],
+  ["square", "on"],
+  ["target", "target"],
+  ["pinned", "pinned"],
+  ["pinner", "pinner"],
+  ["front", "front"],
+  ["rear", "behind"],
+  ["attacker", "attacker"],
+  ["defender", "defender"],
+  ["uncoveredTarget", "uncovered"],
+  ["discoveredPiece", "from behind"],
+];
+
+/** The board facts of one occurrence, as short labelled squares. */
+function evidenceOf(facts: Record<string, unknown>): { label: string; square: string }[] {
+  const shown: { label: string; square: string }[] = [];
+  for (const [key, label] of SQUARE_FACTS) {
+    const square = squareName(facts[key]);
+    if (square) shown.push({ label, square });
+  }
+  const targets = facts.targets;
+  if (Array.isArray(targets)) {
+    const named = targets.map(squareName).filter((name): name is string => name !== null);
+    if (named.length > 0) shown.push({ label: "targets", square: named.join(" ") });
+  }
+  return shown;
+}
+
+/**
+ * How one observation turned out, in a word plus a colour.
+ *
+ * Never colour alone: `--color-win` and `--color-loss` mean nothing to a reader
+ * who cannot separate them, so the word carries the meaning and the colour only
+ * reinforces it. A censored observation is neither -- nobody was asked -- and it
+ * takes the muted ink rather than a third hue.
+ */
+function outcomeOf(concept: { observed: boolean; success: boolean | null }) {
+  if (!concept.observed) return { word: "not asked", color: "var(--color-ink-faint)" };
+  if (concept.success) return { word: "done", color: "var(--color-win)" };
+  return { word: "missed", color: "var(--color-loss)" };
+}
+
+/**
+ * What Forma saw at this move.
+ *
+ * Tied to the ply the reader is looking at rather than listed as a separate
+ * dashboard: the claim is about this position, and a list somewhere else means
+ * reading a square name and finding it on the board yourself.
+ *
+ * The empty state is the part that has to be right. A game that was measured
+ * and had nothing at this move is not the same as a game nobody measured, and
+ * both are different again from a game Forma has never synced -- so each says
+ * its own sentence instead of all three showing an empty panel.
+ */
+function ConceptsAtMove({
+  events,
+  absence,
+}: {
+  events: ReturnType<typeof conceptsAtPly>;
+  absence: { kind: "ready" } | { kind: "absent"; text: string };
+}) {
+  if (absence.kind === "absent") {
+    return (
+      <div className="mt-4">
+        <div className="cap mb-2">What Forma saw</div>
+        <p className="text-sm text-ink-faint">{absence.text}</p>
+      </div>
+    );
+  }
+  if (events.length === 0) {
+    return (
+      <div className="mt-4">
+        <div className="cap mb-2">What Forma saw</div>
+        <p className="text-sm text-ink-faint">Nothing it names at this move.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-4">
+      <div className="cap mb-2">What Forma saw</div>
+      <ul className="flex flex-col gap-2">
+        {events.map((event) =>
+          event.concepts.map((concept) => {
+            const outcome = outcomeOf(concept);
+            const evidence = evidenceOf(event.facts ?? {});
+            return (
+              <li
+                key={`${event.eventType}:${event.focalPly}:${concept.slug}:${concept.role}`}
+                className="rounded-control bg-surface-2 px-3 py-2"
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-semibold text-ink">{concept.displayName}</span>
+                  <span className="metric text-xs" style={{ color: outcome.color }}>
+                    {outcome.word}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-snug text-ink-muted">{concept.definition}</p>
+                {evidence.length > 0 && (
+                  <p className="metric mt-1.5 text-xs text-ink-faint">
+                    {evidence.map((item) => `${item.label} ${item.square}`).join(" · ")}
+                  </p>
+                )}
+                {!concept.observed && concept.censoredReason && (
+                  <p className="mt-1 text-xs text-ink-faint">
+                    The game ended before you answered it.
+                  </p>
+                )}
+              </li>
+            );
+          }),
+        )}
+      </ul>
+    </div>
+  );
+}
+
+export function GameReview({
+  game,
+  initialPly,
+  review,
+}: {
+  game: GameData;
+  initialPly?: number | null;
+  review?: ReviewLookup | null;
+}) {
   const [analyzed, setAnalyzed] = useState<GameData | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -264,6 +407,10 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
   const [theme] = useState<BoardTheme>(() => loadBoardTheme());
   const [pieceSet] = useState<PieceSet>(() => loadPieceSet());
   const [boardH, setBoardH] = useState(520);
+  // The API numbers plies from the position before a move; the reel numbers
+  // them from one. `idx - 1` is the same move in both.
+  const publishedReview = review?.status === "found" ? review.review : null;
+  const absence = review && review.status === "absent" ? review.reason : null;
   const boardRef = useRef<HTMLDivElement>(null);
   const lastWheel = useRef(0);
 
@@ -399,6 +546,10 @@ export function GameReview({ game, initialPly }: { game: GameData; initialPly?: 
                   </p>
                 </div>
               )}
+              <ConceptsAtMove
+                events={conceptsAtPly(publishedReview, idx - 1)}
+                absence={conceptSectionState(publishedReview, absence)}
+              />
             </div>
           </aside>
 
