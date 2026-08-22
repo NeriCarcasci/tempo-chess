@@ -237,3 +237,104 @@ come after the metric is calibrated, not alongside it.
 3. Version it as a component and put it behind a promotion gate.
 4. Public page, permanent per-game URLs, seed corpus.
 5. Product surfaces.
+
+## Implementation
+
+### What the data actually supports
+
+The metric has to be built on the shape of the evidence rather than the shape of
+the idea, and the two differ in one important way.
+
+`decisionLoss`, `expectedScoreBefore` and `expectedScoreAfter` exist for **every
+transition**: they come from the screening before/after pair. But
+`criticality`, `acceptableMoveCount` and `onlyMove` come from `assessCandidates`,
+which returns null for a search that retained one line
+([`engine/contract.ts`](../server/src/engine/contract.ts)). Only the deep
+selector's positions get MultiPV, capped at twelve per game.
+
+So the terms are assigned to the evidence that actually reaches them:
+
+- **Cleanliness** runs over every ply, weighted by *liveness*, `4e(1-e)` on the
+  expected score before the move. That is 1 in a balanced position and 0 in a
+  decided one, it is computable everywhere, and it encodes the thing criticality
+  would have encoded here: an error in a position that was already over is not
+  an error anyone should be charged for.
+- **Demand** runs over the deep-selected positions only, because criticality and
+  only-move are exactly what it needs and those twelve are exactly the positions
+  worth asking about.
+
+Nothing is defaulted into existence. Where a term has no evidence the output
+says so and the coverage figure moves, following `estimator.ts`.
+
+### The practical reading, concretely
+
+`expectedScoreAfter` already assumes the opponent replies best, so it *is* the
+value when the opponent holds. What is missing is the value when they do not,
+and how likely that is. Both come from one MultiPV search at the position the
+move created plus one human-policy inference there:
+
+    p_save   = policy mass on replies inside TOLERANCE_RULE of the best reply
+    V_hold   = expectedScoreAfter                     (actor perspective)
+    V_miss   = actor value after the best retained reply outside tolerance
+    E_prac   = p_save * V_hold + (1 - p_save) * V_miss
+    pressure = E_prac - V_hold  =  (1 - p_save) * (V_miss - V_hold)
+
+`V_miss >= V_hold` by construction, so pressure is never negative and never
+invents credit. Practical loss is the objective loss less the pressure, and it
+goes negative exactly when a sacrifice was worth more than it cost.
+
+Two refusals:
+
+- When every retained reply is inside tolerance there is no `V_miss` to read.
+  The practical claim is withheld for that decision and the objective loss
+  stands. That is the conservative direction, and it is nearly right anyway: a
+  position with three adequate saves was not under pressure.
+- The unretained policy mass is bracketed rather than ignored. The point
+  estimate assumes the tail splits like the head (`p_save / retainedMass`),
+  which is a stated assumption, and the bounds assume it is all saves and then
+  all misses.
+
+### Strength, concretely
+
+Per decision, `ln P(played | rating)` for each rung of `CONTINUATION_RATINGS`.
+Summed over the game, the maximising rung is the estimate; the rungs within
+1.9207 of the maximum (half of the 95% chi-square point on one degree of
+freedom) are the interval. Book plies and positions with one legal move are
+excluded, for the reason `estimator.ts` excludes censored evidence.
+
+Above `CALIBRATED_RATING_CEILING` the estimate carries `outOfDomain`.
+
+### Combination
+
+    side    = w_s * normalize(strength) + w_c * cleanliness
+    quality = softmin(side_white, side_black)
+    rating  = 10 * quality^g * (demandFloor + (1 - demandFloor) * demand^d)
+
+`softmin` is the log-sum-exp minimum, so one strong side cannot average a weak
+one upward. `demandFloor` is why a flawless sterile game caps mid-scale instead
+of at ten.
+
+### Modules
+
+    server/src/rating/
+      contract.ts    frozen policy, types, the method's version hash
+      decisions.ts   objective and practical readings of one decision
+      strength.ts    the likelihood estimate and its interval
+      demand.ts      what the game asked
+      rating.ts      combination, coverage, named moments
+      rating.test.ts offline invariants
+      corpus.ts      the calibration corpus and its expected orderings
+      gates/calibration.ts   the ordering gate
+
+The scorer is pure and takes an explicit input shape rather than database rows,
+so the pipeline and the public path feed it the same way and the corpus can run
+it with no database at all.
+
+### Order
+
+1. `contract.ts`, `decisions.ts`, `strength.ts`, `demand.ts`, `rating.ts` with
+   unit tests. Offline, no engine.
+2. The corpus and the ordering gate.
+3. Wiring: MultiPV at the after-position for deep-selected transitions, the
+   opponent-conditioned inference, and the rating written as a projection.
+4. The public page and its permanent per-game URLs.
