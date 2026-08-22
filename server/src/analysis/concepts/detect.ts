@@ -25,10 +25,11 @@
 import { Chess } from "chessops/chess";
 import { parseFen } from "chessops/fen";
 import { parseUci } from "chessops/util";
-import type { Square } from "chessops/types";
-import { see } from "../../engine/attacks.js";
+import type { Role, Square } from "chessops/types";
+import { attackersTo, see } from "../../engine/attacks.js";
 import type { CensorReason, ConceptRole, OpportunityDraft } from "../observations.js";
 import {
+  CRITICALITY_THRESHOLD,
   MATERIAL_THRESHOLD_CP,
   WINNING_THRESHOLD,
   WORSE_THRESHOLD,
@@ -44,6 +45,17 @@ export interface TransitionFact {
   readonly playedMoveAcceptable: boolean;
   readonly onlyMove: boolean | null;
   readonly criticality: number | null;
+  /** How many retained candidates were within tolerance. Null below two lines. */
+  readonly acceptableMoveCount: number | null;
+  /**
+   * How many lines the search that answered the candidate questions retained.
+   *
+   * Recorded by `engine/assessments.ts` as `difficultyFeatures.retainedLines`.
+   * It is what separates "the only move among the four we looked at" from "the
+   * only move there is", and without it `only_move` claims the second while
+   * knowing the first.
+   */
+  readonly candidateCount: number | null;
   /** White's perspective, as stored. */
   readonly expectedScoreBefore: number;
   readonly expectedScoreAfter: number;
@@ -64,6 +76,8 @@ export interface GameFacts {
   readonly positions: readonly PositionFact[];
   /** Why the game stopped, from the provider. Decides how a missing move is censored. */
   readonly termination: string | null;
+  /** The winner in board colours, or draw. Needed before naming who resigned. */
+  readonly result: "white" | "black" | "draw" | null;
 }
 
 /** An observation, plus everything the row around it needs. */
@@ -80,7 +94,95 @@ export interface DetectedOpportunity {
     readonly endPly: number;
     readonly facts: Record<string, unknown>;
     readonly completeness: "complete" | "incomplete" | "censored";
+    /**
+     * Deterministic identity of the physical occurrence. See `eventKey`.
+     *
+     * Two observations of the same moment -- recognising a critical position
+     * and executing it -- share this, because they are one thing that happened
+     * and two things measured about it.
+     */
+    readonly detectionKey: string;
+    /**
+     * Who did it, and who it happened to, relative to the subject.
+     *
+     * Relative rather than absolute so this module stays colour-agnostic: the
+     * worker resolves `subject`/`opponent` against the colour the subject
+     * actually played. `null` is a real answer and not a gap -- when a position
+     * became winning, *who made it winning* is genuinely not established by
+     * anything here, and naming the subject as the actor would credit them for
+     * an opponent's mistake.
+     */
+    readonly actor: "subject" | "opponent" | null;
+    readonly affected: "subject" | "opponent" | null;
   };
+}
+
+/**
+ * The generation of detector logic that produced a label.
+ *
+ * Recorded on every `event_concepts` row. Distinct from a concept version: the
+ * concept version says what the rule *is*, this says which build applied it, so
+ * a label that turns out to be wrong can be traced to the code that wrote it
+ * without redefining what the concept means. Bump it when detection behaviour
+ * changes, which is not the same event as bumping a contract.
+ */
+export const DETECTOR_VERSION = "2";
+
+/** One physical occurrence and everything measured about it. */
+export interface EventGroup {
+  readonly event: DetectedOpportunity["event"];
+  readonly observations: readonly DetectedOpportunity[];
+}
+
+/**
+ * Group observations by the occurrence they are about.
+ *
+ * The detector emits an observation at a time because that is the unit it
+ * reasons in, but the database stores an occurrence at a time: one
+ * `chess_events` row, then a `event_concepts` label per concept version and
+ * role. Doing that grouping here rather than inside the worker keeps it pure
+ * and testable, and keeps the worker's job to writing rows.
+ *
+ * Insertion order is preserved, so the row order of two runs over one game is
+ * the same and a diff between them means something changed.
+ */
+export function groupByEvent(detected: readonly DetectedOpportunity[]): EventGroup[] {
+  const groups = new Map<string, { event: DetectedOpportunity["event"]; observations: DetectedOpportunity[] }>();
+  for (const observation of detected) {
+    const existing = groups.get(observation.event.detectionKey);
+    if (existing) {
+      existing.observations.push(observation);
+      continue;
+    }
+    groups.set(observation.event.detectionKey, {
+      event: observation.event,
+      observations: [observation],
+    });
+  }
+  return [...groups.values()];
+}
+
+/**
+ * The identity of a physical occurrence, stable across runs.
+ *
+ * Deliberately excludes the role, the concept and the detector version. A fork
+ * is one fork whether it is labelled once or three times, and it is still the
+ * same fork after the detector that named it is corrected -- so a later version
+ * attaches another label to this event rather than claiming a second fork
+ * happened at the same ply.
+ *
+ * `discriminator` is for the families that can produce two genuinely different
+ * occurrences of the same type on the same ply: one move can create two pins.
+ * The current six cannot, so they leave it out and the key is type and ply.
+ */
+export function eventKey(
+  eventType: string,
+  focalPly: number,
+  discriminator?: string,
+): string {
+  return discriminator === undefined
+    ? `${eventType}:${focalPly}`
+    : `${eventType}:${focalPly}:${discriminator}`;
 }
 
 const opposite = (color: "white" | "black"): "white" | "black" =>
@@ -95,6 +197,10 @@ interface BoardCapture {
   readonly from: Square;
   readonly to: Square;
   readonly gain: number;
+  readonly targetRole: Role;
+  readonly attackerCount: number;
+  readonly defenderCount: number;
+  readonly captureCount: number;
 }
 
 /**
@@ -134,7 +240,8 @@ function bestCapture(fen: string, mover: "white" | "black"): BoardCapture | null
   if (position.isErr) return null;
   const board = position.unwrap();
 
-  let best: BoardCapture | null = null;
+  let bestMove: { from: Square; to: Square; gain: number; targetRole: Role } | null = null;
+  let captureCount = 0;
   for (const [from, dests] of board.allDests()) {
     for (const to of dests) {
       const target = board.board.get(to);
@@ -142,15 +249,106 @@ function bestCapture(fen: string, mover: "white" | "black"): BoardCapture | null
       if (!target || target.color === mover) continue;
       const gain = see(board.board, to, from);
       if (gain < MATERIAL_THRESHOLD_CP) continue;
-      if (!best || gain > best.gain) best = { from, to, gain };
+      captureCount += 1;
+      if (!bestMove || gain > bestMove.gain) {
+        bestMove = { from, to, gain, targetRole: target.role };
+      }
     }
   }
-  return best;
+  if (!bestMove) return null;
+
+  let attackerCount = 0;
+  for (const [, dests] of board.allDests()) {
+    if (dests.has(bestMove.to)) attackerCount += 1;
+  }
+  const target = board.board.get(bestMove.to)!;
+  const defenders = target.color === "white" ? board.board.white : board.board.black;
+  const defenderCount = attackersTo(board.board, bestMove.to, board.board.occupied)
+    .intersect(defenders)
+    .size();
+  return { ...bestMove, attackerCount, defenderCount, captureCount };
 }
 
 /** Whether the opponent could win material if it were their move. */
 function materialHanging(fen: string, opponent: "white" | "black"): BoardCapture | null {
   return bestCapture(fen, opponent);
+}
+
+/**
+ * What `mover` could win by capturing the piece standing on `target`.
+ *
+ * The question `material_safety` actually needs. v1 asked the much broader "is
+ * anything of mine hanging now", which meant saving the attacked knight scored
+ * as a failure if an unrelated pawn had become loose in the meantime -- the
+ * player did the thing being measured and was marked down for something else.
+ *
+ * Null when the position cannot be built, which is not the same as zero: an
+ * unreadable board is a reason to abstain, and reporting "nothing is hanging"
+ * from one would be a measurement invented out of a parse error.
+ */
+function exposureOn(
+  fen: string,
+  mover: "white" | "black",
+  target: Square,
+): number | null {
+  const parsed = parseFen(fen);
+  if (parsed.isErr) return null;
+  const setup = parsed.unwrap();
+  if (setup.turn !== mover) {
+    setup.turn = mover;
+    setup.epSquare = undefined;
+  }
+  const position = Chess.fromSetup(setup);
+  if (position.isErr) return null;
+  const board = position.unwrap();
+
+  const occupant = board.board.get(target);
+  if (!occupant || occupant.color === mover) return 0;
+
+  let best = 0;
+  for (const [from, dests] of board.allDests()) {
+    if (!dests.has(target)) continue;
+    const gain = see(board.board, target, from);
+    if (gain > best) best = gain;
+  }
+  return best;
+}
+
+/**
+ * Where a piece standing on `square` ended up after `uci` was played.
+ *
+ * The piece is what is being tracked, not the square. If the subject moved the
+ * exposed piece to safety, the exposure question has to follow it there;
+ * asking about the square it left would report every rescue as a success
+ * regardless of where the piece went.
+ */
+function squareAfterMove(uci: string, square: Square): Square {
+  const move = parseUci(uci);
+  if (!move || !("from" in move)) return square;
+  return move.from === square ? move.to : square;
+}
+
+/** How many legal moves the side to move has, or null if the position is unreadable. */
+function legalMoveCount(fen: string): number | null {
+  const parsed = parseFen(fen);
+  if (parsed.isErr) return null;
+  const position = Chess.fromSetup(parsed.unwrap());
+  if (position.isErr) return null;
+  const chess = position.unwrap();
+  let total = 0;
+  for (const [from, dests] of chess.allDests()) {
+    total += dests.size();
+    if (!chess.board.pawn.has(from)) continue;
+    // `allDests` is a square set, so it collapses Q/R/B/N promotions onto one
+    // destination. MultiPV counts their UCI moves separately. Add the other
+    // three choices or a promotion position can look fully searched when it is
+    // not.
+    for (const to of dests) {
+      const rank = Math.floor(to / 8);
+      if (rank === 0 || rank === 7) total += 3;
+    }
+  }
+  return total;
 }
 
 /**
@@ -167,7 +365,9 @@ function capturedMaterial(fen: string, uci: string, mover: "white" | "black"): b
   if (parsed.isErr) return false;
   const position = Chess.fromSetup(parsed.unwrap());
   if (position.isErr) return false;
-  const board = position.unwrap().board;
+  const chess = position.unwrap();
+  if (!chess.isLegal(move)) return false;
+  const board = chess.board;
   const target = board.get(move.to);
   if (!target || target.color === mover) return false;
   return see(board, move.to, move.from) >= MATERIAL_THRESHOLD_CP;
@@ -180,13 +380,18 @@ function positionAt(positions: readonly PositionFact[], ply: number): string | n
 /**
  * Why the subject never answered.
  *
- * Read from the provider's own termination rather than guessed. "The game
- * ended" is the honest fallback when the provider said something this does not
- * recognise -- inventing `opponent_resigned` from silence would attribute a
- * decision to a person who may not have made it.
+ * Read from the provider's termination and result rather than guessed. "The
+ * game ended" is the honest fallback when they do not establish who stopped --
+ * a resignation says how the game ended, while the winner says who resigned.
  */
-function censorFor(termination: string | null): CensorReason {
-  if (termination === "resign") return "opponent_resigned";
+function censorFor(
+  termination: string | null,
+  result: GameFacts["result"],
+  subjectColor: GameFacts["subjectColor"],
+): CensorReason {
+  // `termination = resign` says how the game ended, not who resigned. Only the
+  // winner lets us attribute that decision to the opponent.
+  if (termination === "resign" && result === subjectColor) return "opponent_resigned";
   if (termination === "outoftime" || termination === "timeout") return "clock_expired";
   return "game_ended";
 }
@@ -205,43 +410,95 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
     const after = positionAt(game.positions, transition.fromPly + 1);
     if (before === null || after === null) continue;
 
-    // Was something of the subject's hanging, and did they deal with it?
+    // Was a piece of the subject's hanging, and did they deal with *that piece*?
     const exposed = materialHanging(before, opponent);
     if (exposed) {
-      const still = materialHanging(after, opponent);
-      const survived = still === null;
-      found.push({
-        conceptSlug: "material_safety",
-        role: "respond",
-        phase: transition.phase,
-        draft: {
-          role: "respond",
-          opportunityPly: transition.fromPly,
-          responsePly: transition.fromPly,
-          responseObserved: true,
-          censoredReason: null,
-          success: survived,
-          score: null,
-          rubricComponentVersionId: null,
-          // From the position before the move: how much was at stake, and how
-          // many replies there were to choose between.
-          difficulty: { materialAtRiskCp: exposed.gain },
-        },
-        event: {
-          eventType: "material_exposed",
-          startPly: transition.fromPly,
-          focalPly: transition.fromPly,
-          endPly: transition.fromPly + 1,
-          facts: { atRiskCp: exposed.gain, resolved: survived },
-          completeness: "complete",
-        },
-      });
+      const landedOn = squareAfterMove(transition.playedMoveUci, exposed.to);
+      const remaining = exposureOn(after, opponent, landedOn);
+      // An unreadable resulting position is a reason to say nothing, not a
+      // reason to say the piece was saved.
+      if (remaining !== null) {
+        const resolved = remaining < MATERIAL_THRESHOLD_CP;
+        // A piece still hanging after a move the engine judged sound is a
+        // sacrifice, and calling it a blunder would mark a player down for
+        // playing well. Static exchange cannot see the compensation, so this
+        // abstains instead of guessing which one it is looking at.
+        const soundSacrifice = !resolved && transition.playedMoveAcceptable;
+        if (!soundSacrifice) {
+          const move = parseUci(transition.playedMoveUci);
+          const movedFocalPiece = Boolean(move && "from" in move && move.from === exposed.to);
+          const removedPrimaryAttacker = Boolean(
+            move && "from" in move && move.to === exposed.from,
+          );
+          const resolution = !resolved
+            ? "unresolved"
+            : movedFocalPiece
+              ? "moved_to_safety"
+              : removedPrimaryAttacker
+                ? "attacker_removed"
+                : "defended_or_blocked";
+          found.push({
+            conceptSlug: "material_safety",
+            role: "respond",
+            phase: transition.phase,
+            draft: {
+              role: "respond",
+              opportunityPly: transition.fromPly,
+              responsePly: transition.fromPly,
+              responseObserved: true,
+              censoredReason: null,
+              success: resolved,
+              score: null,
+              rubricComponentVersionId: null,
+              // From the position before the move: how much was at stake, and
+              // how many replies there were to choose between.
+              difficulty: {
+                materialAtRiskCp: exposed.gain,
+                attackerCount: exposed.attackerCount,
+                defenderCount: exposed.defenderCount,
+                legalReplies: legalMoveCount(before) ?? 0,
+              },
+            },
+            event: {
+              eventType: "material_exposed",
+              startPly: transition.fromPly,
+              focalPly: transition.fromPly,
+              detectionKey: eventKey("material_exposed", transition.fromPly),
+              actor: "opponent",
+              affected: "subject",
+              endPly: transition.fromPly + 1,
+              facts: {
+                square: exposed.to,
+                piece: exposed.targetRole,
+                atRiskCp: exposed.gain,
+                squareAfter: landedOn,
+                remainingCp: remaining,
+                resolved,
+                resolution,
+              },
+              completeness: "complete",
+            },
+          });
+        }
+      }
     }
 
     // Was something of the opponent's free, and did they take it?
     const offered = bestCapture(before, game.subjectColor);
     if (offered) {
       const tookIt = capturedMaterial(before, transition.playedMoveUci, game.subjectColor);
+      // Taking it is one way to pass. Playing something the engine rates within
+      // tolerance is another: a mate in one, a zwischenzug that wins more, a
+      // stronger recapture. v1 called all of those failures to see free
+      // material, which is the opposite of what happened.
+      const alternativeVerified = !tookIt && transition.playedMoveAcceptable;
+      // Being outside tolerance does not prove this offer was the missed
+      // alternative. The engine may have found a much stronger quiet move. A
+      // failure is defensible when its own best move is a material-winning
+      // capture; otherwise this detector abstains.
+      const captureWasEngineBest = transition.bestMoveUci !== null
+        && capturedMaterial(before, transition.bestMoveUci, game.subjectColor);
+      if (!tookIt && !alternativeVerified && !captureWasEngineBest) continue;
       found.push({
         conceptSlug: "free_material",
         role: "recognize",
@@ -252,17 +509,31 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
           responsePly: transition.fromPly,
           responseObserved: true,
           censoredReason: null,
-          success: tookIt,
+          success: tookIt || alternativeVerified,
           score: null,
           rubricComponentVersionId: null,
-          difficulty: { materialOnOfferCp: offered.gain },
+          difficulty: {
+            materialOnOfferCp: offered.gain,
+            captureCount: offered.captureCount,
+            targetIsDefended: offered.defenderCount > 0 ? 1 : 0,
+            legalReplies: legalMoveCount(before) ?? 0,
+          },
         },
         event: {
           eventType: "material_offered",
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
+          detectionKey: eventKey("material_offered", transition.fromPly),
+          actor: "subject",
+          affected: "opponent",
           endPly: transition.fromPly + 1,
-          facts: { onOfferCp: offered.gain, taken: tookIt },
+          facts: {
+            square: offered.to,
+            piece: offered.targetRole,
+            onOfferCp: offered.gain,
+            taken: tookIt,
+            alternativeVerified,
+          },
           completeness: "complete",
         },
       });
@@ -281,6 +552,8 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
   for (const transition of game.transitions) {
     if (transition.actorColor !== game.subjectColor) continue;
     const subjectBefore = fromSubject(transition.expectedScoreBefore, game.subjectColor);
+    const before = positionAt(game.positions, transition.fromPly);
+    const legalReplies = before === null ? null : legalMoveCount(before);
 
     const base = {
       opportunityPly: transition.fromPly,
@@ -291,44 +564,72 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
       rubricComponentVersionId: null,
     };
 
-    if (transition.criticality !== null) {
-      const difficulty = {
+    // A criticality below the threshold is a position where every line the
+    // search retained said much the same thing, which is not a moment that
+    // decided anything. v1 had no threshold at all, so this fired wherever the
+    // deep search happened to run.
+    if (transition.criticality !== null && transition.criticality >= CRITICALITY_THRESHOLD) {
+      const difficulty: Record<string, number> = {
         criticality: transition.criticality,
         expectedScoreBefore: subjectBefore,
       };
-      // Two observations, deliberately. Considering the right move and choosing
-      // well among what you considered are different skills.
+      // Non-null whenever criticality is -- both come from the same candidate
+      // assessment -- but written as a condition rather than defaulted, because
+      // a zero invented for a missing count would be a real-looking number.
+      if (transition.acceptableMoveCount !== null) {
+        difficulty.acceptableMoveCount = transition.acceptableMoveCount;
+      }
+      // One occurrence, described once. Both observations share these facts so
+      // that whichever is written first describes the moment completely.
+      const facts = {
+        criticality: transition.criticality,
+        rank: transition.playedMoveRank,
+        acceptable: transition.playedMoveAcceptable,
+        acceptableMoveCount: transition.acceptableMoveCount,
+      };
+      const event = {
+        eventType: "critical_moment",
+        startPly: transition.fromPly,
+        focalPly: transition.fromPly,
+        endPly: transition.fromPly + 1,
+        detectionKey: eventKey("critical_moment", transition.fromPly),
+        actor: "subject" as const,
+        affected: "subject" as const,
+        facts,
+        completeness: "complete" as const,
+      };
+      // Two observations, deliberately. Whether the move played was one the
+      // search took seriously and whether it was good enough are different
+      // facts, and a single accuracy number describes neither.
       found.push({
         conceptSlug: "critical_moment",
         role: "recognize",
         phase: transition.phase,
         draft: { ...base, role: "recognize", success: transition.playedMoveRank !== null, difficulty },
-        event: {
-          eventType: "critical_moment",
-          startPly: transition.fromPly,
-          focalPly: transition.fromPly,
-          endPly: transition.fromPly + 1,
-          facts: { criticality: transition.criticality, rank: transition.playedMoveRank },
-          completeness: "complete",
-        },
+        event,
       });
       found.push({
         conceptSlug: "critical_moment",
         role: "execute",
         phase: transition.phase,
         draft: { ...base, role: "execute", success: transition.playedMoveAcceptable, difficulty },
-        event: {
-          eventType: "critical_moment",
-          startPly: transition.fromPly,
-          focalPly: transition.fromPly,
-          endPly: transition.fromPly + 1,
-          facts: { criticality: transition.criticality, acceptable: transition.playedMoveAcceptable },
-          completeness: "complete",
-        },
+        event,
       });
     }
 
     if (transition.onlyMove === true) {
+      // `only_move` is computed over the candidates the search *retained*, so
+      // "everything else lost ground" is a claim about the moves examined. It
+      // is only a claim about every legal move when the search examined every
+      // legal move, and the coverage fact is what says which of those this is.
+      const coverage =
+        transition.candidateCount !== null
+        && legalReplies !== null
+        && transition.candidateCount === legalReplies
+          ? "absolute"
+          : "searched";
+      const difficulty: Record<string, number> = { expectedScoreBefore: subjectBefore };
+      if (legalReplies !== null) difficulty.legalReplies = legalReplies;
       found.push({
         conceptSlug: "only_move",
         role: "recognize",
@@ -337,14 +638,22 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
           ...base,
           role: "recognize",
           success: transition.playedMoveAcceptable,
-          difficulty: { expectedScoreBefore: subjectBefore },
+          difficulty,
         },
         event: {
           eventType: "only_move",
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
+          detectionKey: eventKey("only_move", transition.fromPly),
+          actor: "subject",
+          affected: "subject",
           endPly: transition.fromPly + 1,
-          facts: { acceptable: transition.playedMoveAcceptable },
+          facts: {
+            acceptable: transition.playedMoveAcceptable,
+            coverage,
+            candidateCount: transition.candidateCount,
+            legalMoveCount: legalReplies,
+          },
           completeness: "complete",
         },
       });
@@ -365,6 +674,9 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
           eventType: "defending_worse",
           startPly: transition.fromPly,
           focalPly: transition.fromPly,
+          detectionKey: eventKey("defending_worse", transition.fromPly),
+          actor: "subject",
+          affected: "subject",
           endPly: transition.fromPly + 1,
           facts: { expectedScoreBefore: subjectBefore },
           completeness: "complete",
@@ -396,6 +708,12 @@ function conversionConcept(game: GameFacts): DetectedOpportunity[] {
 
   const after = subjectMoves.filter((move) => move.fromPly > reached.fromPly);
   const last = after[after.length - 1];
+  // The position that is winning is the one *after* the transition that crossed
+  // the threshold. v1 used `reached.fromPly`, which is the position the subject
+  // moved from -- one ply before anything was won -- so every conversion
+  // opportunity was recorded as beginning in a position that was not yet
+  // winning.
+  const winningPly = reached.fromPly + 1;
   const difficulty = {
     expectedScoreAtWin: fromSubject(reached.expectedScoreAfter, game.subjectColor),
     movesRemaining: after.length,
@@ -408,10 +726,10 @@ function conversionConcept(game: GameFacts): DetectedOpportunity[] {
       phase: reached.phase,
       draft: {
         role: "convert",
-        opportunityPly: reached.fromPly,
+        opportunityPly: winningPly,
         responsePly: null,
         responseObserved: false,
-        censoredReason: censorFor(game.termination),
+        censoredReason: censorFor(game.termination, game.result, game.subjectColor),
         success: null,
         score: null,
         rubricComponentVersionId: null,
@@ -419,10 +737,16 @@ function conversionConcept(game: GameFacts): DetectedOpportunity[] {
       },
       event: {
         eventType: "winning_position_reached",
-        startPly: reached.fromPly,
-        focalPly: reached.fromPly,
-        endPly: reached.fromPly,
-        facts: { converted: null, censored: censorFor(game.termination) },
+        startPly: winningPly,
+        focalPly: winningPly,
+        detectionKey: eventKey("winning_position_reached", winningPly),
+        actor: null,
+        affected: "subject",
+        endPly: winningPly,
+        facts: {
+          converted: null,
+          censored: censorFor(game.termination, game.result, game.subjectColor),
+        },
         completeness: "censored",
       },
     }];
@@ -435,7 +759,7 @@ function conversionConcept(game: GameFacts): DetectedOpportunity[] {
     phase: last.phase,
     draft: {
       role: "convert",
-      opportunityPly: reached.fromPly,
+      opportunityPly: winningPly,
       responsePly: last.fromPly,
       responseObserved: true,
       censoredReason: null,
@@ -446,11 +770,17 @@ function conversionConcept(game: GameFacts): DetectedOpportunity[] {
     },
     event: {
       eventType: "winning_position_reached",
-      startPly: reached.fromPly,
-      focalPly: reached.fromPly,
+      startPly: winningPly,
+      focalPly: winningPly,
       endPly: last.fromPly,
       facts: { converted: held, movesPlayed: after.length },
       completeness: "complete",
+      // Same key as the censored branch above: the position that became winning
+      // is the same occurrence whether or not the subject went on to move in
+      // it. Only the observation about it differs.
+      detectionKey: eventKey("winning_position_reached", winningPly),
+      actor: null,
+      affected: "subject",
     },
   }];
 }

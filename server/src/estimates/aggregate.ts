@@ -106,7 +106,22 @@ async function readOpportunities(
   return sql<OpportunityRow[]>`
     select o.concept_version_id, c.slug as concept_slug, o.role, o.speed,
            o.success, o.score, o.censored_reason, o.occurred_at,
-           o.context ->> 'evidenceItemId' as evidence_item_id,
+           -- This observation's own evidence item, not the game's.
+           --
+           -- It used to be "the lowest-numbered opportunity evidence item in
+           -- the same game", because the producer had nowhere typed to record
+           -- which item belonged to which observation. For a game with one
+           -- opportunity that was right by accident; for a game with thirty it
+           -- attached all thirty findings to whichever item was inserted first,
+           -- so "here is the evidence" showed the player a different moment
+           -- from the one the claim was about. A citation pointing at the wrong
+           -- thing is worse than none, because it looks checked.
+           --
+           -- The fallback is not a guess: rows written before FOR-123 recorded
+           -- the correct id in the context blob, and simply had no column to
+           -- put it in. Old rows therefore resolve to exactly the evidence they
+           -- always meant.
+           coalesce(o.evidence_item_id, (o.context->>'evidenceItemId')::bigint) as evidence_item_id,
            o.subject_game_id, o.opportunity_ply, o.phase,
            ta.played_move_uci, ta.best_move_uci
     from analysis.concept_opportunities o

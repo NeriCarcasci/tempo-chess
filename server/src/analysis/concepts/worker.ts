@@ -38,7 +38,14 @@ import { WorkFailure } from "../../ops/retry.js";
 import { isRecordableOpportunity, difficultyIsUncontaminated } from "../observations.js";
 import { conceptBySlug } from "./catalogue.js";
 import { conceptVersionIds } from "./register.js";
-import { detectGame, type GameFacts, type PositionFact, type TransitionFact } from "./detect.js";
+import {
+  detectGame,
+  groupByEvent,
+  DETECTOR_VERSION,
+  type GameFacts,
+  type PositionFact,
+  type TransitionFact,
+} from "./detect.js";
 import { publishedMaterializationRun } from "../../engine/recipe.js";
 
 export const DETECT_TASK = "analysis_detect_concepts";
@@ -88,16 +95,30 @@ export async function detectForRun(
       );
     }
 
+    // Detection is idempotent at observation granularity, but deciding what is
+    // missing and writing it spans several statements. Serialize attempts for
+    // one immutable position graph so a worker retry and a backfill cannot both
+    // pass the reads and then race into the event/opportunity unique indexes.
+    // The lock is transaction-scoped and releases on both commit and rollback.
+    await tx`
+      select pg_advisory_xact_lock(hashtextextended(${materializationRunId}, 0))
+    `;
+
     const [game] = await tx<{
       subject_color: string;
       replay_revision_id: string;
       speed: string | null;
       termination: string | null;
+      result: string;
       played_at: RawTimestamp;
     }[]>`
-      select g.subject_color, r.id as replay_revision_id, r.speed, r.termination, r.played_at
+      select g.subject_color, r.id as replay_revision_id, r.speed, r.termination, r.result, r.played_at
       from chess.subject_games g
-      join chess.game_replay_revisions r on r.id = g.latest_replay_revision_id
+      -- Metadata and positions must describe the same immutable replay. The
+      -- subject game's latest pointer can advance after this analysis run was
+      -- created, so joining through it would mix a corrected replay's result
+      -- and termination with the run-pinned transition evidence.
+      join chess.game_replay_revisions r on r.id = ${run.replay_revision_id}
       where g.id = ${run.subject_game_id}
     `;
     if (!game) throw new WorkFailure("invalid_input", "unknown_game", "no such subject game");
@@ -119,12 +140,19 @@ export async function detectForRun(
       played_move_acceptable: boolean;
       only_move: boolean | null;
       criticality: string | null;
+      acceptable_move_count: number | null;
+      retained_lines: string | null;
       expected_score_before: string;
       expected_score_after: string;
       phase: string | null;
     }[]>`
       select from_ply, actor_color, played_move_uci, best_move_uci, played_move_rank,
-             played_move_acceptable, only_move, criticality,
+             played_move_acceptable, only_move, criticality, acceptable_move_count,
+             -- How many lines the search that answered the candidate questions
+             -- retained. only_move is derived from that set, so without this
+             -- the detector cannot tell "the only move we looked at" from "the
+             -- only move there is" -- and v1 asserted the second.
+             difficulty_features->>'retainedLines' as retained_lines,
              expected_score_before, expected_score_after, phase
       from analysis.transition_assessments
       where analysis_run_id = ${runId}
@@ -152,6 +180,10 @@ export async function detectForRun(
       speed: game.speed,
       playedAt: requiredDate(game.played_at, "game_replay_revisions.played_at"),
       termination: game.termination,
+      result:
+        game.result === "white" || game.result === "black" || game.result === "draw"
+          ? game.result
+          : null,
       positions: positions.map((row): PositionFact => ({ ply: row.ply, fen: row.fen })),
       transitions: transitions.map((row): TransitionFact => ({
         fromPly: row.from_ply,
@@ -162,6 +194,8 @@ export async function detectForRun(
         playedMoveAcceptable: row.played_move_acceptable,
         onlyMove: row.only_move,
         criticality: row.criticality === null ? null : Number(row.criticality),
+        acceptableMoveCount: row.acceptable_move_count,
+        candidateCount: row.retained_lines === null ? null : Number(row.retained_lines),
         expectedScoreBefore: Number(row.expected_score_before),
         expectedScoreAfter: Number(row.expected_score_after),
         phase: row.phase,
@@ -181,97 +215,187 @@ export async function detectForRun(
     // a position graph rather than about one pass of the engine over it, which
     // is why the estimator joins these rows by game and snapshot and never by
     // run at all.
-    const [existing] = await tx<{ count: string }[]>`
-      select count(*)::text from analysis.concept_opportunities
-      where run_id = ${materializationRunId}
-    `;
-    if (existing && Number(existing.count) > 0) {
-      return {
-        outputRef: `run:${runId}`,
-        outputSummary: { opportunities: Number(existing.count), duplicate: true },
-      };
+    // What this run has already produced, at the granularity that actually
+    // repeats.
+    //
+    // This used to be one question -- "does this materialization run have any
+    // opportunity at all?" -- and an early return if it did. Correct for a
+    // re-delivered message and wrong for everything else: adding a seventh
+    // concept could never reach a game that already had rows from the first
+    // six, and correcting a detector could never reach anything. The only way
+    // to pick up a new version was to delete evidence, which `forma_analysis`
+    // is rightly not granted. So identity moves down to the physical occurrence
+    // and the observation, and a second run inserts what is missing.
+    const knownEvents = new Map<string, number>();
+    for (const row of await tx<{ id: string; detection_key: string }[]>`
+      select id, detection_key from analysis.chess_events
+      where run_id = ${materializationRunId} and detection_key is not null
+    `) {
+      knownEvents.set(row.detection_key, Number(row.id));
     }
 
-    const detected = detectGame(facts);
+    const knownOpportunities = new Set<string>();
+    for (const row of await tx<{ detection_key: string; concept_version_id: string; role: string }[]>`
+      select e.detection_key, o.concept_version_id, o.role
+      from analysis.concept_opportunities o
+      join analysis.chess_events e on e.id = o.event_id
+      where o.run_id = ${materializationRunId} and e.detection_key is not null
+    `) {
+      knownOpportunities.add(`${row.detection_key}|${row.concept_version_id}|${row.role}`);
+    }
+
+    // One physical occurrence per group, however many things are measured about
+    // it. The grouping is pure and lives in `detect.ts`; this loop only writes.
+    const groups = groupByEvent(detectGame(facts));
+
+    const opponentColor = game.subject_color === "white" ? "black" : "white";
+    /** `subject`/`opponent` are relative so the detector stays colour-agnostic. */
+    const resolveColor = (side: "subject" | "opponent" | null): string | null =>
+      side === null ? null : side === "subject" ? game.subject_color : opponentColor;
 
     let written = 0;
     let censored = 0;
     let skipped = 0;
+    let alreadyPresent = 0;
+    let events = 0;
+    let labels = 0;
     const byConcept = new Map<string, number>();
 
-    for (const observation of detected) {
-      const conceptVersionId = versions.get(observation.conceptSlug);
-      const definition = conceptBySlug(observation.conceptSlug);
-      if (!conceptVersionId || !definition) {
-        // The catalogue in the database is behind this build. Skipping is the
-        // conservative answer: an unregistered concept has no definition a
-        // player could be shown, so evidence against it could not be explained.
-        skipped += 1;
-        continue;
+    for (const group of groups) {
+      const { detectionKey } = group.event;
+
+      // Decide what is writable before writing anything. An event with no
+      // labels left to attach is an event nobody asked for -- inserting it and
+      // then finding every observation was already present would leave a
+      // physical occurrence with nothing hanging off it.
+      const writable: {
+        observation: (typeof group.observations)[number];
+        conceptVersionId: string;
+        evidenceSourceKind: string;
+      }[] = [];
+
+      for (const observation of group.observations) {
+        const conceptVersionId = versions.get(observation.conceptSlug);
+        const definition = conceptBySlug(observation.conceptSlug);
+        if (!conceptVersionId || !definition) {
+          // The catalogue in the database is behind this build. Skipping is the
+          // conservative answer: an unregistered concept has no definition a
+          // player could be shown, so evidence against it could not be explained.
+          skipped += 1;
+          continue;
+        }
+        // The validators exist so a detector cannot write a row that lies. They
+        // are checked here, on the way in, rather than trusted.
+        if (!isRecordableOpportunity(observation.draft)
+          || !difficultyIsUncontaminated(observation.draft.difficulty)) {
+          skipped += 1;
+          continue;
+        }
+        if (knownOpportunities.has(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`)) {
+          // This exact observation is already recorded under this exact concept
+          // version. Not an error and not a duplicate to write: a re-run that
+          // finds its own previous output is the normal case.
+          alreadyPresent += 1;
+          continue;
+        }
+        writable.push({
+          observation,
+          conceptVersionId,
+          evidenceSourceKind: definition.evidenceSourceKind,
+        });
       }
-      // The validators exist so a detector cannot write a row that lies. They
-      // are checked here, on the way in, rather than trusted.
-      if (!isRecordableOpportunity(observation.draft)
-        || !difficultyIsUncontaminated(observation.draft.difficulty)) {
-        skipped += 1;
-        continue;
+
+      if (writable.length === 0) continue;
+
+      let eventId = knownEvents.get(detectionKey);
+      if (eventId === undefined) {
+        const [event] = await tx<{ id: string }[]>`
+          insert into analysis.chess_events (
+            run_id, replay_revision_id, subject_game_id, event_type, start_ply, focal_ply,
+            end_ply, actor_color, affected_color, facts, detection_confidence, completeness,
+            detection_key
+          ) values (
+            ${materializationRunId}, ${game.replay_revision_id}, ${run.subject_game_id},
+            ${group.event.eventType}, ${group.event.startPly},
+            ${group.event.focalPly}, ${group.event.endPly},
+            ${resolveColor(group.event.actor)}, ${resolveColor(group.event.affected)},
+            ${jsonParam(group.event.facts)}::jsonb, null, ${group.event.completeness},
+            ${detectionKey}
+          )
+          returning id
+        `;
+        if (!event) throw new Error("the event vanished on insert");
+        eventId = Number(event.id);
+        knownEvents.set(detectionKey, eventId);
+        events += 1;
       }
 
-      const [event] = await tx<{ id: string }[]>`
-        insert into analysis.chess_events (
-          run_id, replay_revision_id, subject_game_id, event_type, start_ply, focal_ply,
-          end_ply, actor_color, affected_color, facts, detection_confidence, completeness
-        ) values (
-          ${materializationRunId}, ${game.replay_revision_id}, ${run.subject_game_id},
-          ${observation.event.eventType}, ${observation.event.startPly},
-          ${observation.event.focalPly}, ${observation.event.endPly},
-          ${game.subject_color}, ${game.subject_color},
-          ${jsonParam(observation.event.facts)}::jsonb, null, ${observation.event.completeness}
-        )
-        returning id
-      `;
-      if (!event) throw new Error("the event vanished on insert");
+      for (const { observation, conceptVersionId, evidenceSourceKind } of writable) {
+        // The semantic label. §17.4's many-to-many: this is what lets one
+        // moment carry `recognize` and `execute` as separate observations
+        // without being stored as two separate moments.
+        //
+        // `color` is the side whose behaviour the role describes, which for
+        // every concept in this catalogue is the subject -- `respond` measures
+        // the subject answering an opponent's threat, and it is the answer
+        // being labelled, not the threat. The threat's owner is on the event,
+        // in `actor_color`.
+        const labelled = await tx`
+          insert into analysis.event_concepts (
+            event_id, concept_version_id, color, role, label_confidence, detector_version
+          ) values (
+            ${eventId}, ${conceptVersionId}, ${game.subject_color}, ${observation.draft.role},
+            null, ${DETECTOR_VERSION}
+          )
+          on conflict (event_id, concept_version_id, color, role) do nothing
+        `;
+        if (labelled.count > 0) labels += 1;
 
-      const [evidence] = await tx<{ id: string }[]>`
-        insert into analysis.evidence_items (
-          run_id, evidence_kind, subject_id, subject_game_id, occurred_at, confidence
-        ) values (
-          ${materializationRunId}, 'opportunity', ${run.subject_id}, ${run.subject_game_id},
-          ${facts.playedAt.toISOString()}, null
-        )
-        returning id
-      `;
-      if (!evidence) throw new Error("the evidence item vanished on insert");
+        const [evidence] = await tx<{ id: string }[]>`
+          insert into analysis.evidence_items (
+            run_id, evidence_kind, subject_id, subject_game_id, occurred_at, confidence
+          ) values (
+            ${materializationRunId}, 'opportunity', ${run.subject_id}, ${run.subject_game_id},
+            ${facts.playedAt.toISOString()}, null
+          )
+          returning id
+        `;
+        if (!evidence) throw new Error("the evidence item vanished on insert");
 
-      await tx`
-        insert into analysis.concept_opportunities (
-          run_id, subject_id, subject_game_id, event_id, concept_version_id, role,
-          opportunity_ply, response_ply, response_observed, censored_reason, success,
-          score, rubric_component_version_id, difficulty, phase, speed, context,
-          confidence, evidence_source_kind, occurred_at
-        ) values (
-          ${materializationRunId}, ${run.subject_id}, ${run.subject_game_id}, ${event.id}, ${conceptVersionId},
-          ${observation.draft.role}, ${observation.draft.opportunityPly},
-          ${observation.draft.responsePly}, ${observation.draft.responseObserved},
-          ${observation.draft.censoredReason}, ${observation.draft.success},
-          ${observation.draft.score}, ${observation.draft.rubricComponentVersionId},
-          ${jsonParam(observation.draft.difficulty)}::jsonb, ${observation.phase},
-          ${game.speed}, ${jsonParam({ evidenceItemId: evidence.id })}::jsonb, null,
-          ${definition.evidenceSourceKind}, ${facts.playedAt.toISOString()}
-        )
-      `;
+        await tx`
+          insert into analysis.concept_opportunities (
+            run_id, subject_id, subject_game_id, event_id, concept_version_id, role,
+            opportunity_ply, response_ply, response_observed, censored_reason, success,
+            score, rubric_component_version_id, difficulty, phase, speed, context,
+            confidence, evidence_source_kind, occurred_at, evidence_item_id
+          ) values (
+            ${materializationRunId}, ${run.subject_id}, ${run.subject_game_id}, ${eventId},
+            ${conceptVersionId}, ${observation.draft.role}, ${observation.draft.opportunityPly},
+            ${observation.draft.responsePly}, ${observation.draft.responseObserved},
+            ${observation.draft.censoredReason}, ${observation.draft.success},
+            ${observation.draft.score}, ${observation.draft.rubricComponentVersionId},
+            ${jsonParam(observation.draft.difficulty)}::jsonb, ${observation.phase},
+            ${game.speed}, ${jsonParam({ evidenceItemId: evidence.id })}::jsonb, null,
+            ${evidenceSourceKind}, ${facts.playedAt.toISOString()}, ${Number(evidence.id)}
+          )
+        `;
 
-      written += 1;
-      if (!observation.draft.responseObserved) censored += 1;
-      byConcept.set(observation.conceptSlug, (byConcept.get(observation.conceptSlug) ?? 0) + 1);
+        knownOpportunities.add(`${detectionKey}|${conceptVersionId}|${observation.draft.role}`);
+        written += 1;
+        if (!observation.draft.responseObserved) censored += 1;
+        byConcept.set(observation.conceptSlug, (byConcept.get(observation.conceptSlug) ?? 0) + 1);
+      }
     }
 
     return {
       outputRef: `run:${runId}`,
       outputSummary: {
         opportunities: written,
+        events,
+        labels,
         censored,
         skipped,
+        alreadyPresent,
         concepts: Object.fromEntries(byConcept),
       },
       metrics: { inputCount: transitions.length, outputCount: written },

@@ -4,7 +4,7 @@ import { Chess } from "chessops/chess";
 import { parseFen, makeFen, INITIAL_FEN } from "chessops/fen";
 import { parseUci } from "chessops/util";
 import { detectGame, type GameFacts, type PositionFact, type TransitionFact } from "./detect.js";
-import { CONCEPT_CATALOGUE, conceptVersionHash } from "./catalogue.js";
+import { CONCEPT_CATALOGUE, CRITICALITY_THRESHOLD, conceptVersionHash } from "./catalogue.js";
 import { difficultyIsUncontaminated, isRecordableOpportunity } from "../observations.js";
 
 /** Replay UCI moves from a starting position, recording the FEN at every ply. */
@@ -25,6 +25,8 @@ function transition(over: Partial<TransitionFact> & { fromPly: number; actorColo
     playedMoveAcceptable: true,
     onlyMove: null,
     criticality: null,
+    acceptableMoveCount: null,
+    candidateCount: null,
     expectedScoreBefore: 0.5,
     expectedScoreAfter: 0.5,
     phase: "middlegame",
@@ -40,6 +42,7 @@ function game(over: Partial<GameFacts>): GameFacts {
     transitions: [],
     positions: [],
     termination: "resign",
+    result: "white",
     ...over,
   };
 }
@@ -174,6 +177,16 @@ test("the censor reason follows the provider, and never guesses", () => {
   assert.equal(reasonFor(null), "game_ended", "silence is not a resignation");
 });
 
+test("a resignation is attributed to the opponent only when the subject won", () => {
+  const positions = play(["e2e4"]);
+  const transitions = [
+    transition({ fromPly: 0, actorColor: "white", playedMoveUci: "e2e4", expectedScoreAfter: 0.95 }),
+  ];
+  const reason = detectGame(game({ positions, transitions, termination: "resign", result: "black" }))
+    .find((o) => o.conceptSlug === "winning_conversion")?.draft.censoredReason;
+  assert.equal(reason, "game_ended", "termination alone does not identify who resigned");
+});
+
 test("a win that was played out is observed, not censored", () => {
   const moves = ["e2e4", "e7e5", "g1f3", "b8c6"];
   const positions = play(moves);
@@ -239,9 +252,65 @@ test("a free piece taken counts, and the same piece left alone does not", () => 
 
   const ignored = detectGame(game({
     positions: play(["e1e2"], fen),
-    transitions: [transition({ fromPly: 0, actorColor: "white", playedMoveUci: "e1e2" })],
+    transitions: [transition({
+      fromPly: 0,
+      actorColor: "white",
+      playedMoveUci: "e1e2",
+      // Walking past it *and* losing ground by doing so. Without this the move
+      // is one the engine rated fine, which v2 treats as playing something at
+      // least as good -- see the zwischenzug case below.
+      playedMoveAcceptable: false,
+      bestMoveUci: "d4e5",
+    })],
   })).find((o) => o.conceptSlug === "free_material");
   assert.equal(ignored?.draft.success, false, "walking past a free knight should not count");
+});
+
+test("a stronger move is not a missed offer", () => {
+  // FOR-124. v1 asked only "was the move a capture", so a mate in one, a
+  // winning zwischenzug and a stronger recapture all scored as failing to see
+  // free material -- the detector marked a player down for playing better than
+  // the thing it was measuring.
+  const fen = "4k3/8/8/4n3/3P4/8/8/4K3 w - - 0 1";
+  const found = detectGame(game({
+    positions: play(["e1e2"], fen),
+    transitions: [transition({
+      fromPly: 0,
+      actorColor: "white",
+      playedMoveUci: "e1e2",
+      playedMoveAcceptable: true,
+    })],
+  })).find((o) => o.conceptSlug === "free_material");
+  assert.equal(found?.draft.success, true, "a move the engine rated within tolerance is not a miss");
+  assert.equal(found?.event.facts.taken, false);
+  assert.equal(found?.event.facts.alternativeVerified, true, "the facts must say which it was");
+});
+
+test("a bad quiet move is not blamed on an offer the engine did not prefer", () => {
+  const fen = "4k3/8/8/4n3/3P4/8/8/4K3 w - - 0 1";
+  const found = detectGame(game({
+    positions: play(["e1e2"], fen),
+    transitions: [transition({
+      fromPly: 0,
+      actorColor: "white",
+      playedMoveUci: "e1e2",
+      bestMoveUci: "e1f2",
+      playedMoveAcceptable: false,
+    })],
+  })).filter((o) => o.conceptSlug === "free_material");
+  assert.equal(found.length, 0, "a bad move does not prove which opportunity was missed");
+});
+
+test("material observations carry the facts their contracts require", () => {
+  const fen = "4k3/8/8/4n3/3P4/8/8/4K3 w - - 0 1";
+  const found = detectGame(game({
+    positions: play(["d4e5"], fen),
+    transitions: [transition({ fromPly: 0, actorColor: "white", playedMoveUci: "d4e5" })],
+  })).find((o) => o.conceptSlug === "free_material");
+  assert.equal(found?.event.facts.piece, "knight");
+  assert.equal(typeof found?.event.facts.alternativeVerified, "boolean");
+  assert.equal(typeof found?.draft.difficulty?.captureCount, "number");
+  assert.equal(typeof found?.draft.difficulty?.targetIsDefended, "number");
 });
 
 test("material is not called free when taking it loses the exchange", () => {
@@ -267,13 +336,279 @@ test("saving a hanging piece succeeds and abandoning it fails", () => {
     transitions: [transition({ fromPly: 0, actorColor: "black", playedMoveUci: "e5c6" })],
   })).find((o) => o.conceptSlug === "material_safety");
   assert.equal(saved?.draft.success, true);
+  assert.equal(saved?.event.facts.piece, "knight");
+  assert.equal(saved?.event.facts.resolution, "moved_to_safety");
+  assert.equal(typeof saved?.draft.difficulty?.attackerCount, "number");
+  assert.equal(typeof saved?.draft.difficulty?.defenderCount, "number");
 
   const abandoned = detectGame(game({
     subjectColor: "black",
     positions: play(["e8d8"], fen),
-    transitions: [transition({ fromPly: 0, actorColor: "black", playedMoveUci: "e8d8" })],
+    transitions: [transition({
+      fromPly: 0,
+      actorColor: "black",
+      playedMoveUci: "e8d8",
+      // Left it hanging *and* lost ground. A move the engine rated fine that
+      // leaves a piece en prise is a sacrifice, which v2 abstains on rather
+      // than calling a blunder -- asserted separately below.
+      playedMoveAcceptable: false,
+    })],
   })).find((o) => o.conceptSlug === "material_safety");
   assert.equal(abandoned?.draft.success, false);
+});
+
+test("a sound sacrifice is not a hung piece", () => {
+  // FOR-124. Static exchange cannot see compensation, so a piece deliberately
+  // left en prise looks identical to one left by accident. When the engine
+  // rated the move acceptable, the honest answer is to say nothing rather than
+  // to record a failure the evidence does not support.
+  const fen = "4k3/8/8/4n3/3P4/8/8/4K3 b - - 0 1";
+  const found = detectGame(game({
+    subjectColor: "black",
+    positions: play(["e8d8"], fen),
+    transitions: [transition({
+      fromPly: 0,
+      actorColor: "black",
+      playedMoveUci: "e8d8",
+      playedMoveAcceptable: true,
+    })],
+  })).filter((o) => o.conceptSlug === "material_safety");
+  assert.equal(found.length, 0, "an abstention is no row at all, not a row saying null");
+});
+
+test("saving the focal piece is judged on that piece alone", () => {
+  // FOR-124. v1 asked whether *anything* of the subject's was hanging after the
+  // move, so rescuing the attacked knight while an unrelated pawn became loose
+  // scored as a failure: the player did exactly the thing being measured and
+  // was marked down for something else.
+  //
+  // Black knight on e5 attacked by the d4 pawn; black pawn on b5 attacked by
+  // the white bishop on e2 and defended by nothing. Moving the knight to
+  // safety leaves b5 loose, which is a different question.
+  const fen = "4k3/8/8/1p2n3/3P4/8/4B3/4K3 b - - 0 1";
+  const found = detectGame(game({
+    subjectColor: "black",
+    positions: play(["e5c6"], fen),
+    transitions: [transition({
+      fromPly: 0,
+      actorColor: "black",
+      playedMoveUci: "e5c6",
+      playedMoveAcceptable: false,
+    })],
+  })).find((o) => o.conceptSlug === "material_safety");
+  assert.equal(found?.draft.success, true, "the focal piece reached safety, which is the question");
+});
+
+// ---------------------------------------------------------------------------
+// FOR-124: what the corrected contracts refuse to claim
+// ---------------------------------------------------------------------------
+
+/** One subject move from the opening position, with whatever assessment is under test. */
+function oneMove(over: Partial<TransitionFact>): GameFacts {
+  return game({
+    positions: play(["e2e4"]),
+    transitions: [transition({
+      fromPly: 0,
+      actorColor: "white",
+      playedMoveUci: "e2e4",
+      ...over,
+    })],
+  });
+}
+
+test("a position where every retained line agreed is not a critical moment", () => {
+  // The v1 bug. `criticality` is the spread between the best and worst
+  // candidate the search kept, and it is non-null the moment two lines come
+  // back -- so a position where both were equal became "a moment where the
+  // moves available led to genuinely different games". The concept was partly
+  // measuring where the deep search happened to run.
+  const flat = detectGame(oneMove({ criticality: 0, playedMoveRank: 1, acceptableMoveCount: 2 }))
+    .filter((o) => o.conceptSlug === "critical_moment");
+  assert.equal(flat.length, 0, "zero spread is zero at stake");
+
+  const marginal = detectGame(oneMove({ criticality: 0.05, playedMoveRank: 1, acceptableMoveCount: 2 }))
+    .filter((o) => o.conceptSlug === "critical_moment");
+  assert.equal(marginal.length, 0, "a spread inside the threshold is still not a decision");
+
+  const real = detectGame(oneMove({ criticality: 0.4, playedMoveRank: 1, acceptableMoveCount: 2 }))
+    .filter((o) => o.conceptSlug === "critical_moment");
+  assert.equal(real.length, 2, "a real spread is still measured, in both roles");
+});
+
+test("the threshold is exactly the published one", () => {
+  // Pinned against the constant rather than the literal, so moving the
+  // threshold is a deliberate act that shows up as a version bump rather than
+  // a test quietly following the code.
+  const atThreshold = detectGame(oneMove({
+    criticality: CRITICALITY_THRESHOLD,
+    playedMoveRank: 1,
+    acceptableMoveCount: 2,
+  })).filter((o) => o.conceptSlug === "critical_moment");
+  assert.equal(atThreshold.length, 2, "the threshold is inclusive");
+
+  const justUnder = detectGame(oneMove({
+    criticality: CRITICALITY_THRESHOLD - 0.001,
+    playedMoveRank: 1,
+    acceptableMoveCount: 2,
+  })).filter((o) => o.conceptSlug === "critical_moment");
+  assert.equal(justUnder.length, 0);
+});
+
+test("recognising is about the search, not about the player", () => {
+  // The wording changed because the claim had to. What is observable is
+  // whether the move played was among the candidates the search retained --
+  // `played_move_rank` -- and nothing here can see what was considered.
+  const listed = detectGame(oneMove({ criticality: 0.4, playedMoveRank: 2, acceptableMoveCount: 2 }))
+    .find((o) => o.conceptSlug === "critical_moment" && o.role === "recognize");
+  assert.equal(listed?.draft.success, true);
+
+  const unlisted = detectGame(oneMove({ criticality: 0.4, playedMoveRank: null, acceptableMoveCount: 2 }))
+    .find((o) => o.conceptSlug === "critical_moment" && o.role === "recognize");
+  assert.equal(unlisted?.draft.success, false, "a move the search never listed is the negative case");
+});
+
+test("an unsearched alternative does not prove an absolute only move", () => {
+  // `only_move` is computed over the candidates the search retained, so v1's
+  // "exactly one move held and everything else lost ground" asserted a proof
+  // over all legal moves that a MultiPV search does not perform. v2 records
+  // which claim it is actually making.
+  //
+  // The opening position has twenty legal moves. A search that kept three of
+  // them cannot have ruled out the other seventeen.
+  const searched = detectGame(oneMove({ onlyMove: true, candidateCount: 3, acceptableMoveCount: 1 }))
+    .find((o) => o.conceptSlug === "only_move");
+  assert.equal(searched?.event.facts.coverage, "searched");
+  assert.equal(searched?.event.facts.legalMoveCount, 20);
+  assert.equal(searched?.event.facts.candidateCount, 3);
+
+  const absolute = detectGame(oneMove({ onlyMove: true, candidateCount: 20, acceptableMoveCount: 1 }))
+    .find((o) => o.conceptSlug === "only_move");
+  assert.equal(
+    absolute?.event.facts.coverage,
+    "absolute",
+    "a search that examined every legal move may claim the stronger thing",
+  );
+});
+
+test("an unknown candidate count is the weaker claim, not the stronger one", () => {
+  // The failure mode worth guarding: a missing count must not read as full
+  // coverage. Old assessments have no `retainedLines`, and defaulting those to
+  // "absolute" would put the overclaim back with no way to see it.
+  const unknown = detectGame(oneMove({ onlyMove: true, candidateCount: null, acceptableMoveCount: 1 }))
+    .find((o) => o.conceptSlug === "only_move");
+  assert.equal(unknown?.event.facts.coverage, "searched");
+});
+
+test("promotion choices are separate legal moves for only-move coverage", () => {
+  const fen = "7k/P7/8/8/8/8/8/7K w - - 0 1";
+  const found = detectGame(game({
+    positions: play(["a7a8q"], fen),
+    transitions: [transition({
+      fromPly: 0,
+      actorColor: "white",
+      playedMoveUci: "a7a8q",
+      onlyMove: true,
+      candidateCount: 4,
+      acceptableMoveCount: 1,
+    })],
+  })).find((o) => o.conceptSlug === "only_move");
+  assert.equal(found?.event.facts.legalMoveCount, 7);
+  assert.equal(found?.event.facts.coverage, "searched");
+});
+
+test("a search that retained one line has no only-move to report", () => {
+  const none = detectGame(oneMove({ onlyMove: null, candidateCount: 1 }))
+    .filter((o) => o.conceptSlug === "only_move");
+  assert.equal(none.length, 0, "null is not false, and neither is an answer");
+});
+
+test("the conversion opportunity begins in the position that was winning", () => {
+  // v1 used the ply the subject moved *from*, which is one before anything was
+  // won: the opportunity was recorded as beginning in a position that was not
+  // yet winning, and every conversion in the database pointed one ply early.
+  const moves = ["e2e4", "e7e5", "g1f3", "b8c6"];
+  const found = detectGame(game({
+    positions: play(moves),
+    transitions: moves.map((uci, index) => transition({
+      fromPly: index,
+      actorColor: index % 2 === 0 ? "white" : "black",
+      playedMoveUci: uci,
+      // White's move at ply 0 is the one that crosses the threshold.
+      expectedScoreAfter: index === 0 ? 0.9 : 0.8,
+    })),
+  })).find((o) => o.conceptSlug === "winning_conversion");
+
+  assert.equal(found?.draft.opportunityPly, 1, "the winning position is the one after the move");
+  assert.equal(found?.event.startPly, 1);
+  assert.equal(found?.event.focalPly, 1);
+  assert.equal(found?.draft.responsePly, 2, "the response is the subject's last move");
+  assert.ok(
+    found!.draft.responsePly! >= found!.draft.opportunityPly,
+    "the ply ordering constraint the database enforces",
+  );
+});
+
+test("a win with nothing played after it is still censored, at the corrected ply", () => {
+  const found = detectGame(game({
+    positions: play(["e2e4"]),
+    transitions: [transition({
+      fromPly: 0,
+      actorColor: "white",
+      playedMoveUci: "e2e4",
+      expectedScoreAfter: 0.9,
+    })],
+    termination: "resign",
+  })).find((o) => o.conceptSlug === "winning_conversion");
+  assert.equal(found?.draft.responseObserved, false);
+  assert.equal(found?.draft.success, null, "silence is censored, never failed");
+  assert.equal(found?.draft.censoredReason, "opponent_resigned");
+  assert.equal(found?.draft.opportunityPly, 1);
+  assert.equal(found?.event.completeness, "censored");
+});
+
+test("worse-position defence was not changed, and still reads both colours", () => {
+  // Reconfirmed rather than corrected, so it keeps version 1 -- which is the
+  // point of FOR-122. Expected scores are stored from White's perspective and
+  // flipped for Black, and the rule has to mean the same thing either way.
+  const asWhite = detectGame(oneMove({ expectedScoreBefore: 0.2, playedMoveAcceptable: true }))
+    .find((o) => o.conceptSlug === "worse_position_defence");
+  assert.equal(asWhite?.draft.success, true);
+
+  const asBlack = detectGame(game({
+    subjectColor: "black",
+    positions: play(["e2e4", "e7e5"]),
+    transitions: [transition({
+      fromPly: 1,
+      actorColor: "black",
+      playedMoveUci: "e7e5",
+      // 0.8 for White is 0.2 for Black, which is below the worse threshold.
+      expectedScoreBefore: 0.8,
+      playedMoveAcceptable: true,
+    })],
+  })).find((o) => o.conceptSlug === "worse_position_defence");
+  assert.equal(asBlack?.draft.success, true, "a stored White score of 0.8 is 0.2 for Black");
+  // Compared with a tolerance because `1 - 0.8` is 0.19999999999999996. The
+  // perspective flip does not round, so Black's difficulty vectors carry float
+  // noise. Harmless -- nothing thresholds on it -- and left alone deliberately:
+  // rounding it would change what `worse_position_defence` records, and this
+  // concept keeps version 1 precisely because its rule did not change.
+  assert.ok(
+    Math.abs((asBlack?.draft.difficulty?.expectedScoreBefore ?? 0) - 0.2) < 1e-9,
+    `expected the subject's score to flip to 0.2, got ${asBlack?.draft.difficulty?.expectedScoreBefore}`,
+  );
+});
+
+test("every corrected concept carries a version, and the unchanged one did not move", () => {
+  const version = (slug: string) =>
+    CONCEPT_CATALOGUE.find((concept) => concept.slug === slug)?.versionNo;
+  for (const slug of ["material_safety", "free_material", "critical_moment", "only_move", "winning_conversion"]) {
+    assert.equal(version(slug), 2, `${slug} changed its rule and must carry a new version`);
+  }
+  assert.equal(
+    version("worse_position_defence"),
+    1,
+    "an unchanged rule must not be given a new version just because its neighbours were",
+  );
 });
 
 // ---------------------------------------------------------------------------
