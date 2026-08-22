@@ -3,6 +3,14 @@
 -- Record, on the tables themselves, that the opening catalogue is retained
 -- reference data and not part of the legacy `public` schema being retired.
 --
+-- Every statement is guarded on ownership. `forma_migrator` does not own the
+-- prototype's `public` tables -- `postgres` does -- and only an owner may
+-- COMMENT, so an unguarded version fails and takes the whole migration batch
+-- down with it, including other people's. The note is worth having where a
+-- person reading the database will meet it, but not at the cost of blocking
+-- every deploy behind it; where it cannot be set, this file is still the
+-- record.
+--
 -- Hand-written and reviewed. Comments only: no column, constraint, policy,
 -- grant or row is touched, and re-running it is a no-op.
 --
@@ -50,12 +58,44 @@
 
 set local role forma_migrator
 --> statement-breakpoint
-comment on table public.opening_positions is 'Retained shared reference data, not legacy tenant data: the Lichess CC0 named-opening catalogue (database architecture 31, "Retain as versioned shared catalogue/structural data with clear source/version"). No owner, no subject column; position_key is the same four-field core key as chess.core_positions.core_key, which is how the explorer names an opening. The forma_api policy is using (true), which is role scoping rather than tenancy. Do NOT drop this with the rest of the prototype public schema; relocating it to chess needs its own migration, a revision of the frozen E01 containment contract, and a deploy ordered ahead of the API.'
+do $$
+begin
+  if pg_catalog.pg_get_userbyid((select relowner from pg_class
+       where oid = 'public.opening_positions'::regclass)) = current_user then
+    execute 'comment on table public.opening_positions is ''Retained shared reference data, not legacy tenant data: the Lichess CC0 named-opening catalogue (database architecture 31, "Retain as versioned shared catalogue/structural data with clear source/version"). No owner, no subject column; position_key is the same four-field core key as chess.core_positions.core_key, which is how the explorer names an opening. The forma_api policy is using (true), which is role scoping rather than tenancy. Do NOT drop this with the rest of the prototype public schema; relocating it to chess needs its own migration, a revision of the frozen E01 containment contract, and a deploy ordered ahead of the API.''';
+  else
+    raise notice 'not the owner of public.opening_positions; the note stays in the migration file';
+  end if;
+end $$
 --> statement-breakpoint
-comment on table public.opening_edges is 'Retained shared reference data, not legacy tenant data: the move graph of the Lichess CC0 opening catalogue (database architecture 31). (from_key, move_uci) -> to_key is what lets a UCI line be followed through the book without a legal-move generator, which is how server/src/openings/book.ts finds where a player left the book. Same retention and relocation notes as public.opening_positions.'
+do $$
+begin
+  if pg_catalog.pg_get_userbyid((select relowner from pg_class
+       where oid = 'public.opening_edges'::regclass)) = current_user then
+    execute 'comment on table public.opening_edges is ''Retained shared reference data, not legacy tenant data: the move graph of the Lichess CC0 opening catalogue (database architecture 31). (from_key, move_uci) -> to_key is what lets a UCI line be followed through the book without a legal-move generator, which is how server/src/openings/book.ts finds where a player left the book. Same retention and relocation notes as public.opening_positions.''';
+  else
+    raise notice 'not the owner of public.opening_edges; the note stays in the migration file';
+  end if;
+end $$
 --> statement-breakpoint
-comment on column public.opening_positions.source_revision is 'The chess-openings commit the row was imported from. This is the "clear source/version" database architecture 31 asks retained catalogue data to carry: a name on this table is only checkable against the revision that produced it.'
+do $$
+begin
+  if pg_catalog.pg_get_userbyid((select relowner from pg_class
+       where oid = 'public.opening_positions'::regclass)) = current_user then
+    execute 'comment on column public.opening_positions.source_revision is ''The chess-openings commit the row was imported from. This is the "clear source/version" database architecture 31 asks retained catalogue data to carry: a name on this table is only checkable against the revision that produced it.''';
+  else
+    raise notice 'not the owner of public.opening_positions; the note stays in the migration file';
+  end if;
+end $$
 --> statement-breakpoint
-comment on column public.opening_positions.catalogue is 'True for a row the catalogue import wrote. A false row is a position the product recorded for its own reasons and is not part of the CC0 source, so it may not be re-exported under that licence.'
+do $$
+begin
+  if pg_catalog.pg_get_userbyid((select relowner from pg_class
+       where oid = 'public.opening_positions'::regclass)) = current_user then
+    execute 'comment on column public.opening_positions.catalogue is ''True for a row the catalogue import wrote. A false row is a position the product recorded for its own reasons and is not part of the CC0 source, so it may not be re-exported under that licence.''';
+  else
+    raise notice 'not the owner of public.opening_positions; the note stays in the migration file';
+  end if;
+end $$
 --> statement-breakpoint
 reset role
