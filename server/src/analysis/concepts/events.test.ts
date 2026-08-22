@@ -84,6 +84,13 @@ test("grouping loses nothing and invents nothing", () => {
   assert.deepEqual(new Set(regrouped), new Set(detected));
 });
 
+test("duplicate detector output cannot become a duplicate database identity", () => {
+  const [observation] = detectGame(game());
+  assert.ok(observation);
+  const [group] = groupByEvent([observation, observation]);
+  assert.equal(group!.observations.length, 1);
+});
+
 test("group order is the order the detector found them", () => {
   const first = groupByEvent(detectGame(game())).map((group) => group.event.detectionKey);
   const second = groupByEvent(detectGame(game())).map((group) => group.event.detectionKey);

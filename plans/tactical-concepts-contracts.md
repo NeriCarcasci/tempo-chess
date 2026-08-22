@@ -262,38 +262,50 @@ All six families share one proof, and it is worth stating once rather than six
 times.
 
 **One-ply minimax over static exchange.** Play every legal reply the defender
-has, ask what static exchange still wins for the attacker afterwards, and keep
-the worst case. A motif that any single reply defuses is not recorded. This is
-what makes a fork on two defended pieces a negative, a counterattack that takes
-the forking piece a refutation, and a check a verification -- check leaves few
-replies and none of them save the second target.
+has, follow the motif's named target or targets when one moves, ask what static
+exchange still wins from those targets, subtract any material the reply itself
+wins, and keep the worst case. A motif that any single reply defuses is not
+recorded. This is what makes a fork on two defended pieces a negative, a
+counterattack that takes the forking piece a refutation, and a check a
+verification -- check leaves few replies and none of them save the second target.
 
 Promotions are expanded into their four choices, because a defender who can
 promote has four replies and underpromotion is sometimes the only one that
 answers a check.
 
-**Attribution, separately from size.** The minimax says the attacker wins
-material somewhere; it does not say the motif won it. Each family additionally
-proves the gain belongs to the thing being recorded — the pinned square must be
-winnable, the skewer's rear target must fall once the front one is removed from
-the board, the removed guard's charge must be winnable once the guard is gone.
+**Attribution is part of every leaf, not a pre-check.** A global minimax says
+the attacker wins material somewhere; it does not say the motif won it. Every
+reply is therefore evaluated only against the named payoff — the pinned square
+must be winnable, the skewer's rear target must fall once the front one is
+removed from the board, the removed guard's charge must be winnable once the
+guard is gone.
 Without this, a move that creates a meaningless alignment while leaving a queen
 hanging elsewhere would have the alignment credited with the queen.
 
+**Evidence never makes the detector less able to speak.** A stored line too
+short to reach the follow-up is the same evidential position as no line at all,
+and both fall back to static exchange with `seeOnly` confidence. Only evidence
+that actively disagrees — a line the search stored that does not realise the
+motif — or that is corrupt — unparseable, illegal in the position it claims to
+start from, or a ply the worker marked unusable — causes an abstention.
+
 **The horizon is one ply, and is stated in every event.** Where the deep search
-stored a line for the resulting position, it is replayed and must agree; a line
-that contradicts the static answer abstains rather than being overruled, because
-two pieces of evidence disagreeing is not a fact about the game. `confidence`
-records which answered: PV-proven or static-exchange-only.
+stored a line for the resulting position, it is replayed and its actual
+follow-up must collect a named target or deliver mate; a line that contradicts
+the static answer abstains rather than being overruled, because two pieces of
+evidence disagreeing is not a fact about the game. `confidence` records which
+answered: PV-proven or static-exchange-only.
 
 **A forced mate outranks every material outcome** so that a mating motif is
 never rejected for winning too little material. It is a sort order, not a claim
 that mate is worth ten queens.
 
 **Neither role is scored on the motif existing.** `execute` is judged on the
-follow-up actually collecting what the motif won; `respond` on conceding less
-than it threatened. A player who finds a fork and then plays something else has
-done something that a rate of "100% of forks played" could never show.
+follow-up actually collecting a named target; an acceptable non-target
+continuation abstains because it may be stronger. `respond` succeeds when the
+reply concedes no more than the verified best-defence bound, including any
+material the reply captures. A player who finds a fork and then plays something
+else has done something that a rate of "100% of forks played" could never show.
 
 ### What this excludes, on purpose
 
@@ -321,14 +333,14 @@ abstain rather than guess.
 | Physical event | `double_attack` |
 | Roles | `execute` (subject creates), `respond` (opponent creates, subject answers) |
 | Focal ply | The ply of the move that creates the double attack |
-| Response window | `execute`: the focal ply. `respond`: the subject's next move. |
+| Response window | The subject's next move for both roles; immediate mate is observed at the focal ply. |
 | Trigger | One legal move leaves a single attacking unit giving two or more simultaneous relevant threats. |
 | Verification | SEE and/or a stored PV shows at least one target, or a decisive outcome, cannot be saved without conceding an equivalent amount. |
-| Success (`execute`) | The subject played the move and the verified consequence follows in the stored line. |
-| Success (`respond`) | The subject's reply meets both threats, or concedes less than the verified consequence. |
+| Success (`execute`) | The subject's follow-up captures a named payoff target, or the focal move was mate. |
+| Success (`respond`) | The subject's reply reaches the verified best-defence bound or better after counter-captures. |
 | Subtypes | `fork` (one piece, two or more targets), `royal_fork` (a target is the king), `double_attack` (generic) — stored as event facts, never as separate skill dimensions. |
-| Abstain | Both threats can be met, the attacker is illegally pinned, the sequence is unsound, or the PV is absent/truncated/illegal. |
-| Censor | `respond` where the game ended before the subject moved. |
+| Abstain | Both threats can be met, the attacker is illegally pinned, the sequence is unsound, a stored PV is malformed/truncated/illegal, or an acceptable follow-up does not capture a named target. No stored candidate permits SEE-only verification. |
+| Censor | Either role where the game ended before the subject's follow-up. |
 | Difficulty | `targetCount`, `targetValueCp`, `kingInvolved`, `defendedTargets`, `legalReplies` |
 | Required facts | `mover`, `from`, `to`, `targets[]`, `targetValues[]`, `kingInvolved`, `subtype`, `verificationLine`, `expectedGainCp` |
 | Confidence | From verification strength: PV-proven vs SEE-only |
@@ -341,14 +353,14 @@ abstain rather than guess.
 | Physical event | `pin` |
 | Roles | `execute`, `respond` |
 | Focal ply | The ply of the move that creates or exploits the pin |
-| Response window | `execute`: focal ply. `respond`: the subject's next move. |
+| Response window | The subject's next move for both roles; immediate mate is observed at the focal ply. |
 | Trigger | A legal sliding attack where a pinner, a pinned piece, and a king or higher-value target lie on one ray with no other blocker. |
 | Verification | The pin must not have existed before the focal move, and the pinned square must be winnable by static exchange in its own right, and the shared one-ply proof must hold. Immobilising a piece and winning one are different claims; only the second is recorded. |
-| Success (`execute`) | The subject created or exploited the pin and the verified consequence follows. |
-| Success (`respond`) | The subject broke the pin, defended adequately, or counter-attacked for equivalent value. |
+| Success (`execute`) | The subject's follow-up captures the named pinned piece, or the focal move was mate. |
+| Success (`respond`) | The subject reached the verified best-defence bound by breaking the pin, defending adequately, or counter-attacking for equivalent value. |
 | Subtypes | `absolute` (target is the king), `relative` (target is higher-value). |
 | Abstain | Alignment with no verified consequence, pinner illegally pinned itself, or evidence incomplete. |
-| Censor | `respond` where the subject never moved again. |
+| Censor | Either role where the subject never moved again. |
 | Difficulty | `pinnedValueCp`, `targetValueCp`, `subtype`, `rayLength`, `legalReplies` |
 | Required facts | `pinner`, `pinned`, `target`, `ray[]`, `subtype`, `verificationLine` |
 | Confidence | PV-proven vs SEE-only |
@@ -361,13 +373,13 @@ abstain rather than guess.
 | Physical event | `skewer` |
 | Roles | `execute`, `respond` |
 | Focal ply | The ply of the move that creates the skewer |
-| Response window | `execute`: focal ply. `respond`: the subject's next move. |
+| Response window | The subject's next move for both roles; immediate mate is observed at the focal ply. |
 | Trigger | A legal sliding attack on a ray where the **front** target is the higher-priority one and a rear target stands behind it. |
 | Verification | With the front target removed from the board, static exchange on the rear one must still win material, and the shared one-ply proof must hold. Front strictly more valuable than rear; equal is neither idea. |
-| Success (`execute`) | The subject created it and the verified gain follows. |
-| Success (`respond`) | The subject saved both, or conceded less than the verified amount. |
+| Success (`execute`) | The subject's follow-up captures the named rear target, or the focal move was mate. |
+| Success (`respond`) | The subject reached the verified best-defence bound or better. |
 | Abstain | Front target need not move, rear target is defended adequately, or evidence incomplete. |
-| Censor | `respond` where the subject never moved again. |
+| Censor | Either role where the subject never moved again. |
 | Difficulty | `frontValueCp`, `rearValueCp`, `rayLength`, `legalReplies` |
 | Required facts | `attacker`, `front`, `rear`, `ray[]`, `verificationLine`, `expectedGainCp` |
 | Confidence | PV-proven vs SEE-only |
@@ -384,14 +396,14 @@ comparing values along the ray and emits exactly one of the two.
 | Physical event | `discovered_attack` |
 | Roles | `execute`, `respond` |
 | Focal ply | The ply of the move that vacates the line |
-| Response window | `execute`: focal ply. `respond`: the subject's next move. |
+| Response window | The subject's next move for both roles; immediate mate is observed at the focal ply. |
 | Trigger | Comparing the legal attack maps before and after the focal move, a moved blocker uncovers a rook, bishop or queen line onto a relevant target. |
 | Verification | A discovery onto a piece must win that piece by static exchange. A discovered check wins nothing by itself, so it is worth whatever the position yields once the check has been answered. Plus the shared one-ply proof. |
-| Success (`execute`) | The subject played it and the verified consequence follows. |
-| Success (`respond`) | The subject's reply meets the uncovered threat and the moving piece's threat, or concedes less. |
+| Success (`execute`) | The subject's follow-up captures a named payoff target, or the focal move was mate. |
+| Success (`respond`) | The subject's reply reaches the verified best-defence bound or better. |
 | Subtypes | `discovered_attack`, `discovered_check`, `double_check` — facts under one family. |
 | Abstain | The uncovered line hits nothing relevant, the threat is adequately met, or evidence incomplete. |
-| Censor | `respond` where the subject never moved again. |
+| Censor | Either role where the subject never moved again. |
 | Difficulty | `uncoveredTargetValueCp`, `moverThreatValueCp`, `subtype`, `legalReplies` |
 | Required facts | `mover`, `from`, `to`, `discoveredPiece`, `uncoveredTarget`, `moverTarget`, `subtype`, `verificationLine` |
 | Confidence | PV-proven vs SEE-only |
@@ -404,13 +416,13 @@ comparing values along the ray and emits exactly one of the two.
 | Physical event | `removal_of_defender` |
 | Roles | `execute`, `respond` |
 | Focal ply | The ply of the move that removes or deflects the defender |
-| Response window | `execute`: focal ply. `respond`: the subject's next move. |
+| Response window | The subject's next move for both roles; immediate mate is observed at the focal ply. |
 | Trigger | In the pre-move position a target is protected by an identified defender with a specific duty; the focal move captures that defender or forces it onto a square where the duty is lost. |
 | Verification | The target must survive the focal move, and with the guard removed from the board it must be winnable by static exchange. Plus the shared one-ply proof — a target that can simply run away has not been won, however cleanly its guard went. |
-| Success (`execute`) | The subject removed the defender and the verified follow-up is available. |
-| Success (`respond`) | The subject restored the defence, moved the target, or conceded less than the verified amount. |
+| Success (`execute`) | The subject's follow-up captures the named charge, or the focal move was mate. |
+| Success (`respond`) | The subject restored the defence, moved the target, counter-captured, or otherwise reached the verified best-defence bound. |
 | Abstain | The target has another adequate defender, the duty was not actually lost, or evidence incomplete. |
-| Censor | `respond` where the subject never moved again. |
+| Censor | Either role where the subject never moved again. |
 | Difficulty | `targetValueCp`, `defenderValueCp`, `remainingDefenders`, `legalReplies` |
 | Required facts | `target`, `defender`, `duty`, `removalMethod` (`capture` \| `deflection`), `followUp`, `verificationLine` |
 | Confidence | PV-proven vs SEE-only |
@@ -423,13 +435,13 @@ comparing values along the ray and emits exactly one of the two.
 | Physical event | `trapped_piece` |
 | Roles | `execute` (subject traps), `respond` (subject's piece is trapped) |
 | Focal ply | The ply at which the piece becomes trapped |
-| Response window | `execute`: focal ply. `respond`: the subject's next move. |
-| Trigger | A non-king piece is under attack or newly restricted. |
+| Response window | The subject's next move for both roles; immediate mate is observed at the focal ply. |
+| Trigger | The focal move changes a non-king piece from not provably lost at this horizon to under attack and lost against every legal reply. |
 | Verification | Every legal reply is played and the piece is followed to wherever it ends up. Trapped only when static exchange wins it in all of them. Following the piece rather than the square is what makes a retreat to a covered square read as the loss it is. |
-| Success (`execute`) | The subject created the trap and the piece cannot escape. |
-| Success (`respond`) | The subject saved the piece or conceded less than the verified amount. |
+| Success (`execute`) | The subject's follow-up captures the named trapped piece, or the focal move was mate. |
+| Success (`respond`) | The subject reaches the verified best-defence bound or better. |
 | Abstain | Any adequate escape exists, the piece is a king, or evidence incomplete. |
-| Censor | `respond` where the subject never moved again. |
+| Censor | Either role where the subject never moved again. |
 | Difficulty | `pieceValueCp`, `escapeSquareCount`, `attackerCount`, `legalReplies` |
 | Required facts | `piece`, `square`, `attackers[]`, `escapesTried[]`, `verificationLine`, `expectedLossCp` |
 | Confidence | PV-proven vs SEE-only |
@@ -451,7 +463,7 @@ does not replay is not evidence.
 | `refuted_geometry` | The motif exists but the defender holds. Negative, not a missed chance. |
 | `alternative_better` | The motif exists and a stronger move also existed. Must not score as failure. |
 | `illegal_attacker` | The would-be attacker is pinned and cannot legally play the move. Negative. |
-| `incomplete_evidence` | The PV is absent or truncated. Abstain — no row at all. |
+| `incomplete_evidence` | A stored PV is malformed, illegal or too short for the claim. Abstain — no row at all. A ply with no stored candidate can use SEE-only verification. |
 
 Colour-reversed variants are required for every tactical family, because a
 detector that only works for White is a detector that measures half the players.

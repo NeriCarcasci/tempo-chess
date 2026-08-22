@@ -20,6 +20,7 @@ import { detectGame } from "./detect.js";
 import { CONCEPT_CATALOGUE } from "./catalogue.js";
 import { fixturesFor, type ConceptFixture } from "./fixtures.js";
 import { guaranteedGain, legalMoves, MATE_GAIN_CP } from "./tactics.js";
+import { CONFIDENCE } from "./evidence.js";
 import { PIECE_VALUES } from "../../engine/attacks.js";
 import type { GameFacts, PositionFact, TransitionFact } from "./evidence.js";
 
@@ -110,6 +111,18 @@ test("a fork with check is verified, because check must be answered", () => {
   assert.notEqual(verdict.bestDefence, null);
 });
 
+test("the verifier attributes gain to the named motif targets", () => {
+  const position = Chess.fromSetup(
+    parseFen("rb2k2q/2N5/8/8/8/8/8/4K2R b - - 0 1").unwrap(),
+  ).unwrap();
+  assert.ok(guaranteedGain(position, "white").gainCp >= PIECE_VALUES.rook);
+  assert.equal(
+    guaranteedGain(position, "white", [sq("b8")]).gainCp,
+    0,
+    "a queen hanging elsewhere is not payoff from the named target",
+  );
+});
+
 test("no legal reply is mate when it is check and nothing when it is not", () => {
   // Back-rank mate: the rook checks along the eighth from a distance the king
   // cannot reach, and its own pawns take away the escape. Put the rook next to
@@ -173,9 +186,105 @@ test("creating a fork and not collecting it is a failure, not a success", () => 
   // who finds the fork and then plays something else has done something a rate
   // of "100% of forks played" could never show.
   const positive = fixture("double_attack/knight-fork-king-rook");
-  const found = forksIn(gameOf(positive.fen, ["b5c7", "e8d7", "e1e2"], "white"));
+  const baseGame = gameOf(positive.fen, ["b5c7", "e8d7", "e1e2"], "white");
+  const found = forksIn({
+    ...baseGame,
+    transitions: baseGame.transitions.map((entry, index) =>
+      index === 2 ? { ...entry, playedMoveAcceptable: false } : entry),
+  });
   assert.equal(found.length, 1);
   assert.equal(found[0]!.draft.success, false);
+});
+
+test("capturing unrelated material does not execute the fork", () => {
+  const baseGame = gameOf(
+    "r3k2q/8/8/1N6/8/8/8/4K2R w - - 0 1",
+    ["b5c7", "e8d7", "h1h8"],
+    "white",
+  );
+  const found = forksIn({
+    ...baseGame,
+    transitions: baseGame.transitions.map((entry, index) =>
+      index === 2 ? { ...entry, playedMoveAcceptable: false } : entry),
+  });
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.draft.success, false, "the rook on a8 was not collected");
+});
+
+test("a stronger acceptable follow-up abstains instead of failing the fork", () => {
+  const found = forksIn(gameOf(
+    "r3k2q/8/8/1N6/8/8/8/4K2R w - - 0 1",
+    ["b5c7", "e8d7", "h1h8"],
+    "white",
+  ));
+  assert.deepEqual(found, []);
+});
+
+test("corrupt stored evidence abstains", () => {
+  const positive = fixture("double_attack/knight-fork-king-rook");
+  const baseGame = gameOf(positive.fen, ["b5c7", "e8d7", "c7a8"], "white");
+
+  // The worker marked the whole ply unusable, so there is nothing to read.
+  assert.deepEqual(forksIn({
+    ...baseGame,
+    unavailableCandidatePlies: new Set([1]),
+  }), []);
+
+  // A line whose moves are not legal in the position it claims to start from is
+  // corrupt rather than short, and corrupt evidence is a reason to say nothing.
+  assert.deepEqual(forksIn({
+    ...baseGame,
+    candidatesByPly: new Map([[1, [{
+      rank: 1,
+      uci: "e8d7",
+      expectedScore: 0.5,
+      pv: ["e8d7", "a1a2"],
+    }]]]),
+  }), [], "a1a2 is not legal there");
+});
+
+test("a stored line that does not realise the motif contradicts it", () => {
+  const positive = fixture("double_attack/knight-fork-king-rook");
+  const baseGame = gameOf(positive.fen, ["b5c7", "e8d7", "c7a8"], "white");
+  assert.deepEqual(forksIn({
+    ...baseGame,
+    candidatesByPly: new Map([[1, [{
+      rank: 1,
+      uci: "e8d7",
+      expectedScore: 0.5,
+      pv: ["e8d7", "e1e2"],
+    }]]]),
+  }), [], "two pieces of evidence disagreeing is not a fact about the game");
+});
+
+test("a line too short to check is no worse than no line at all", () => {
+  // The one place the review overreached. A truncated line has not contradicted
+  // anything -- it simply does not reach the follow-up. Abstaining on it while
+  // recording happily when no line exists would mean the detector speaks when
+  // it knows nothing and falls silent when it knows a little, which is exactly
+  // backwards.
+  const positive = fixture("double_attack/knight-fork-king-rook");
+  const baseGame = gameOf(positive.fen, ["b5c7", "e8d7", "c7a8"], "white");
+
+  const withNoLine = forksIn(baseGame);
+  assert.equal(withNoLine.length, 1);
+  assert.equal(withNoLine[0]!.event.confidence, CONFIDENCE.seeOnly);
+
+  const withShortLine = forksIn({
+    ...baseGame,
+    candidatesByPly: new Map([[1, [{
+      rank: 1,
+      uci: "e8d7",
+      expectedScore: 0.5,
+      pv: ["e8d7"],
+    }]]]),
+  });
+  assert.equal(withShortLine.length, 1, "a short line must not silence a motif static exchange proved");
+  assert.equal(
+    withShortLine[0]!.event.confidence,
+    CONFIDENCE.seeOnly,
+    "and it must not be dressed up as line-proven either",
+  );
 });
 
 test("the colour-reversed fork behaves identically", () => {
@@ -221,7 +330,7 @@ test("a fork the opponent creates is measured as a response", () => {
   assert.equal(fork!.event.actor, "opponent", "the opponent did it");
   assert.equal(fork!.event.affected, "subject");
   assert.equal(fork!.draft.responsePly, 1, "the subject's reply is the move being judged");
-  assert.equal(fork!.draft.success, false, "the rook was still lost");
+  assert.equal(fork!.draft.success, true, "the subject chose a best damage-limiting reply");
 });
 
 test("a fork nobody answered is censored, never failed", () => {
@@ -351,7 +460,12 @@ test("a pin that was already on the board is not something the player just did",
   // survives, and a player who pinned a knight once is credited with pinning it
   // eleven times.
   const positive = fixture("pin/rook-pins-knight-and-wins-it");
-  const found = pinsIn(gameOf(positive.fen, ["a1d1", "d8c8", "h1g1", "c8d8", "g1h1"], "white"));
+  const baseGame = gameOf(positive.fen, ["a1d1", "d8c8", "h1g1", "c8d8", "g1h1"], "white");
+  const found = pinsIn({
+    ...baseGame,
+    transitions: baseGame.transitions.map((entry, index) =>
+      index === 2 ? { ...entry, playedMoveAcceptable: false } : entry),
+  });
   assert.equal(found.length, 1, "created once, recorded once");
   assert.equal(found[0]!.draft.opportunityPly, 0);
 });
@@ -362,7 +476,7 @@ test("a pin the opponent creates is measured as a response", () => {
   assert.equal(found.length, 1);
   assert.equal(found[0]!.role, "respond");
   assert.equal(found[0]!.event.actor, "opponent");
-  assert.equal(found[0]!.draft.success, false, "the knight was lost anyway");
+  assert.equal(found[0]!.draft.success, true, "the king chose a best damage-limiting reply");
 });
 
 test("a pin nobody answered is censored", () => {
@@ -525,6 +639,17 @@ test("removing the guard wins what it was guarding", () => {
   assert.equal(removal!.draft.success, true);
 });
 
+test("the colour-reversed removal behaves identically", () => {
+  const twin = fixture("removal_of_defender/capture-the-pawn-that-guards-black");
+  const found = bySlug(
+    gameOf(twin.fen, ["g5f3", "e1f2", "e8e4"], "black"),
+    "removal_of_defender",
+  );
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.role, "execute");
+  assert.equal(found[0]!.draft.success, true);
+});
+
 test("a duty two pieces share is not removed by taking one of them", () => {
   const refuted = fixture("removal_of_defender/target-has-a-second-defender");
   assert.deepEqual(
@@ -556,6 +681,17 @@ test("a piece whose every answer still loses it is trapped", () => {
   assert.equal(trap!.draft.success, true);
 });
 
+test("the colour-reversed trap behaves identically", () => {
+  const twin = fixture("trapped_piece/knight-in-the-corner-black");
+  const found = bySlug(
+    gameOf(twin.fen, ["g4g3", "a5b5", "f3h1"], "black"),
+    "trapped_piece",
+  );
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.role, "execute");
+  assert.equal(found[0]!.draft.success, true);
+});
+
 test("one escape is enough not to be trapped", () => {
   const nearMiss = fixture("trapped_piece/knight-still-has-a-square");
   assert.deepEqual(bySlug(gameOf(nearMiss.fen, ["b5b6", "h4g5"], "white"), "trapped_piece"), []);
@@ -582,5 +718,5 @@ test("a trapped piece the subject owns is measured as a response", () => {
   const found = bySlug(gameOf(positive.fen, ["b5b6", "h4g5", "c6a8"], "black"), "trapped_piece");
   assert.equal(found.length, 1);
   assert.equal(found[0]!.role, "respond");
-  assert.equal(found[0]!.draft.success, false, "the knight was lost anyway");
+  assert.equal(found[0]!.draft.success, true, "the subject chose a best damage-limiting reply");
 });

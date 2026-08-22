@@ -127,7 +127,9 @@ export async function detectForRun(
       -- subject game's latest pointer can advance after this analysis run was
       -- created, so joining through it would mix a corrected replay's result
       -- and termination with the run-pinned transition evidence.
-      join chess.game_replay_revisions r on r.id = ${run.replay_revision_id}
+      join chess.game_replay_revisions r
+        on r.id = ${run.replay_revision_id}
+       and r.provider_game_id = g.provider_game_id
       where g.id = ${run.subject_game_id}
     `;
     if (!game) throw new WorkFailure("invalid_input", "unknown_game", "no such subject game");
@@ -175,6 +177,22 @@ export async function detectForRun(
         outputSummary: { opportunities: 0, reason: "no_assessed_transitions" },
       };
     }
+    const transitionsAreUsable = transitions.every((row) =>
+      Number.isInteger(row.from_ply)
+      && (row.actor_color === "white" || row.actor_color === "black")
+      && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(row.played_move_uci)
+      && Number.isFinite(Number(row.expected_score_before))
+      && Number.isFinite(Number(row.expected_score_after))
+      && (row.criticality === null || Number.isFinite(Number(row.criticality)))
+      && (row.retained_lines === null || Number.isInteger(Number(row.retained_lines))));
+    if (!transitionsAreUsable) {
+      // Dropping a malformed transition would make a partial game look whole,
+      // and coercing an unknown colour to Black would make the stronger claim.
+      return {
+        outputRef: `run:${runId}`,
+        outputSummary: { opportunities: 0, reason: "malformed_transition_evidence" },
+      };
+    }
 
     // Tactical verification may use only the deep evaluation that this exact
     // transition assessment pinned. Joining through the assessment prevents a
@@ -191,6 +209,8 @@ export async function detectForRun(
     `;
     const mutableCandidates = new Map<number, CandidateLine[]>();
     const malformedCandidatePlies = new Set<number>();
+    const candidateRanks = new Map<number, Set<number>>();
+    const candidateMoves = new Map<number, Set<string>>();
     for (const row of candidateRows) {
       const expectedScore = Number(row.expected_score);
       const pvIsValid = Array.isArray(row.pv)
@@ -209,6 +229,16 @@ export async function detectForRun(
         malformedCandidatePlies.add(row.from_ply);
         continue;
       }
+      const ranks = candidateRanks.get(row.from_ply) ?? new Set<number>();
+      const moves = candidateMoves.get(row.from_ply) ?? new Set<string>();
+      if (ranks.has(row.rank) || moves.has(row.uci)) {
+        malformedCandidatePlies.add(row.from_ply);
+        continue;
+      }
+      ranks.add(row.rank);
+      moves.add(row.uci);
+      candidateRanks.set(row.from_ply, ranks);
+      candidateMoves.set(row.from_ply, moves);
       mutableCandidates.set(row.from_ply, [
         ...(mutableCandidates.get(row.from_ply) ?? []),
         { rank: row.rank, uci: row.uci, expectedScore, pv: row.pv },
@@ -238,10 +268,11 @@ export async function detectForRun(
           ? game.result
           : null,
       candidatesByPly,
+      unavailableCandidatePlies: malformedCandidatePlies,
       positions: positions.map((row): PositionFact => ({ ply: row.ply, fen: row.fen })),
       transitions: transitions.map((row): TransitionFact => ({
         fromPly: row.from_ply,
-        actorColor: row.actor_color === "white" ? "white" : "black",
+        actorColor: row.actor_color as "white" | "black",
         playedMoveUci: row.played_move_uci,
         bestMoveUci: row.best_move_uci,
         playedMoveRank: row.played_move_rank,

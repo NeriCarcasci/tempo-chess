@@ -112,6 +112,8 @@ export interface GameFacts {
    * therefore degrade to "no verification available" rather than to a guess.
    */
   readonly candidatesByPly: ReadonlyMap<number, readonly CandidateLine[]>;
+  /** Plies where stored candidate evidence existed but was malformed. */
+  readonly unavailableCandidatePlies?: ReadonlySet<number>;
 }
 
 /**
@@ -176,7 +178,7 @@ export interface DetectedOpportunity {
  * without redefining what the concept means. Bump it when detection behaviour
  * changes, which is not the same event as bumping a contract.
  */
-export const DETECTOR_VERSION = "3";
+export const DETECTOR_VERSION = "4";
 
 /**
  * The identity of a physical occurrence, stable across runs.

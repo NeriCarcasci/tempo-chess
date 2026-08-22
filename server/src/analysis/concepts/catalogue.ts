@@ -374,15 +374,15 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
         "after the focal move, the piece that moved attacks two or more relevant enemy targets. "
         + "A target is relevant when it is the king or when taking it wins material by SEE",
       verification:
-        "against every legal reply the defender has, static exchange still wins at least the "
-        + "material threshold. A motif any single reply defuses is not recorded",
+        "against every legal reply, after following the named targets and subtracting any material "
+        + "the reply captures, static exchange still wins at least the threshold",
       storedLine:
         "where the deep search stored a line for the resulting position, it is replayed and must "
         + "agree; a stored line that contradicts the static answer abstains rather than being "
         + "overruled",
       subtypes: ["fork", "royal_fork"],
-      execute: "the subject created it; success is collecting the material it won, or mating",
-      respond: "the opponent created it; success is conceding less than it threatened",
+      execute: "success is a follow-up capture of a named target, or immediate mate; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better, including counter-captures",
       censored: "the subject never moved again, so the game never asked the question",
       abstain:
         "fewer than two relevant targets, any reply that saves everything, an unreadable position, "
@@ -412,10 +412,10 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
         "the pin must not have existed before the focal move. A pin that has been on the board for "
         + "three moves is not something the player just did",
       verification:
-        "against every legal reply, static exchange still wins material. Alignment with no way to "
+        "against every legal reply, the named pinned piece remains winnable after counter-captures. Alignment with no way to "
         + "increase the pressure has cost the opponent nothing and is not recorded",
-      execute: "the subject created it; success is winning the material it was worth",
-      respond: "the opponent created it; success is conceding less than it threatened",
+      execute: "success is a follow-up capture of the named pinned piece; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better",
       censored: "the subject never moved again",
       abstain:
         "a pin that already existed, alignment with no verified consequence, equal or beneficial "
@@ -450,9 +450,9 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
         "with the front piece removed from the board, static exchange on the rear one must still "
         + "win material -- otherwise the skewer is credited with material won elsewhere",
       verification:
-        "against every legal reply, static exchange still wins at least the material threshold",
-      execute: "the subject created it; success is collecting what was behind",
-      respond: "the opponent created it; success is conceding less than it threatened",
+        "against every legal reply, the named rear target remains winnable after counter-captures",
+      execute: "success is a follow-up capture of the named rear target; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better",
       censored: "the subject never moved again",
       abstain:
         "equal or inverted values, a rear piece that survives once the front one moves, any reply "
@@ -481,10 +481,10 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       doubleCheck: "the moving piece also gives check, which no interposition or capture answers",
       verification:
         "a discovered attack on a piece must win that piece by static exchange. A discovered "
-        + "check wins nothing by itself, so what it is worth is whatever the position yields once "
-        + "the check has been answered -- and against every legal reply",
-      execute: "the subject played it; success is collecting what it won, or mating",
-      respond: "the opponent played it; success is conceding less than it threatened",
+        + "check wins nothing by itself, so a named payoff target must remain winnable once "
+        + "the check has been answered -- against every legal reply and after counter-captures",
+      execute: "success is a follow-up capture of a named payoff target, or immediate mate; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better",
       censored: "the subject never moved again",
       abstain:
         "a line that opens onto nothing, a target that survives the exchange, or any reply that "
@@ -516,10 +516,10 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
         + "material. A target with a second adequate defender is a negative -- removing one holder "
         + "of a shared duty removes nothing",
       verification:
-        "against every legal reply, static exchange still wins at least the threshold. A target "
+        "against every legal reply, the named charge remains winnable after counter-captures. A target "
         + "that can simply run away has not been won, however cleanly its guard was removed",
-      execute: "the subject removed the guard; success is taking what it was guarding",
-      respond: "the opponent removed it; success is conceding less than it threatened",
+      execute: "success is a follow-up capture of the named charge; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better",
       censored: "the subject never moved again",
       abstain:
         "a shared duty, a target that escapes, a guard that was not actually guarding, or an "
@@ -543,7 +543,7 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
     evidenceSourceKind: "deterministic",
     detectorContract: {
       method: "exhaustive_reply_walk_and_static_exchange",
-      geometry: "a non-king enemy piece worth at least the threshold, after the focal move",
+      geometry: "the focal move changes an attacked non-king enemy piece from not provably lost at this horizon to lost",
       verification:
         "every legal reply is played and the piece is followed to wherever it ends up. It is "
         + "trapped only when static exchange wins it in every one of them -- retreating, being "
@@ -551,8 +551,8 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       kingExcluded:
         "a king with no escape is checkmate or stalemate, which are results of the game rather "
         + "than a piece being won",
-      execute: "the subject created the trap; success is collecting the piece",
-      respond: "the subject owns the trapped piece; success is conceding less than it was worth",
+      execute: "success is a follow-up capture of the named trapped piece; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better",
       censored: "the subject never moved again",
       abstain:
         "any reply that saves it, a piece below the threshold, or an unreadable position. Sound "

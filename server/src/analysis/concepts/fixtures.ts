@@ -314,6 +314,16 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
       + "it was guarding can walk off.",
   },
   {
+    id: "removal_of_defender/capture-the-pawn-that-guards-black",
+    family: "removal_of_defender",
+    shape: "positive",
+    fen: "3kr3/8/8/6n1/4N3/5P2/8/4K3 b - - 0 1",
+    move: "g5f3",
+    expectLegal: true,
+    subjectColor: "black",
+    expectation: "The colour-reversed removal: Nxf3 removes the knight on e4's only guard.",
+  },
+  {
     id: "removal_of_defender/target-has-a-second-defender",
     family: "removal_of_defender",
     shape: "refuted_geometry",
@@ -355,6 +365,80 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
       "Without the a5 pawn behind it, b6 is undefended and the knight takes it for free. "
       + "One escape is enough — the piece is not trapped, and this is a negative.",
   },
+  {
+    id: "trapped_piece/knight-in-the-corner-black",
+    family: "trapped_piece",
+    shape: "positive",
+    fen: "3k4/8/8/K7/6pp/5b2/8/7N b - - 0 1",
+    move: "g4g3",
+    expectLegal: true,
+    subjectColor: "black",
+    expectation: "The colour-reversed trap: ...g3 removes the white knight's last safe square.",
+  },
+
+  // -------------------------------------------------------------------------
+  // Contract-matrix evidence variants. Alternative and incomplete cases reuse
+  // the positive board deliberately: the premise that changes is stored search
+  // evidence, not geometry. Illegal cases use a genuinely pinned focal mover.
+  // -------------------------------------------------------------------------
+  ...[
+    ["double_attack/stronger-follow-up", "double_attack", "alternative_better", "r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1", "b5c7", true,
+      "The fork exists, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["double_attack/truncated-line", "double_attack", "incomplete_evidence", "r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1", "b5c7", true,
+      "The fork exists, but a stored line shorter than its claim produces no row."],
+
+    ["pin/stronger-follow-up", "pin", "alternative_better", "3k4/8/8/3n4/8/8/8/R6K w - - 0 1", "a1d1", true,
+      "The pin exists, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["pin/pinner-is-pinned", "pin", "illegal_attacker", "r3k3/8/8/4n3/8/8/R7/K7 w - - 0 1", "a2e2", false,
+      "The rook would create a pin on the e-file, but it is pinned to its own king on a1."],
+    ["pin/truncated-line", "pin", "incomplete_evidence", "3k4/8/8/3n4/8/8/8/R6K w - - 0 1", "a1d1", true,
+      "The pin exists, but a stored line shorter than its claim produces no row."],
+
+    ["skewer/one-square-short", "skewer", "near_miss", "8/4r3/8/8/4k3/8/8/R6K w - - 0 1", "a1a2", true,
+      "Ra2 does not land on the king and rook's e-file, so no skewer is created."],
+    ["skewer/stronger-follow-up", "skewer", "alternative_better", "8/4r3/8/8/4k3/8/8/R6K w - - 0 1", "a1e1", true,
+      "The skewer exists, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["skewer/skewering-rook-is-pinned", "skewer", "illegal_attacker", "r3r3/8/8/4k3/8/8/R7/K7 w - - 0 1", "a2e2", false,
+      "The rook would skewer on the e-file, but moving it exposes its own king on a1."],
+    ["skewer/truncated-line", "skewer", "incomplete_evidence", "8/4r3/8/8/4k3/8/8/R6K w - - 0 1", "a1e1", true,
+      "The skewer exists, but a stored line shorter than its claim produces no row."],
+
+    ["discovered_attack/equal-payoff", "discovered_attack", "refuted_geometry", "8/2n3k1/8/8/3N4/8/8/B6K w - - 0 1", "d4b5", true,
+      "The line opens with check, but the mover attacks only an equal knight; no material is won."],
+    ["discovered_attack/stronger-follow-up", "discovered_attack", "alternative_better", "8/2r3k1/8/8/3N4/8/8/B6K w - - 0 1", "d4b5", true,
+      "The discovery exists, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["discovered_attack/mover-is-pinned", "discovered_attack", "illegal_attacker", "3r4/2r3k1/8/8/3N4/8/8/B2K4 w - - 0 1", "d4b5", false,
+      "The knight would uncover the bishop, but it is pinned to the king on d1."],
+    ["discovered_attack/truncated-line", "discovered_attack", "incomplete_evidence", "8/2r3k1/8/8/3N4/8/8/B6K w - - 0 1", "d4b5", true,
+      "The discovery exists, but a stored line shorter than its claim produces no row."],
+
+    ["removal_of_defender/guard-not-touched", "removal_of_defender", "near_miss", "3k4/8/2p5/3n4/1N6/8/8/3RK3 w - - 0 1", "b4a6", true,
+      "Na6 neither captures nor deflects the pawn on c6, so its duty remains."],
+    ["removal_of_defender/stronger-follow-up", "removal_of_defender", "alternative_better", "3k4/8/2p5/3n4/1N6/8/8/3RK3 w - - 0 1", "b4c6", true,
+      "The guard is removed, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["removal_of_defender/remover-is-pinned", "removal_of_defender", "illegal_attacker", "1r1k4/2p5/8/1N1n4/8/8/8/1K1R4 w - - 0 1", "b5c7", false,
+      "The knight would capture the guard on c7, but it is pinned to the king on b1."],
+    ["removal_of_defender/truncated-line", "removal_of_defender", "incomplete_evidence", "3k4/8/2p5/3n4/1N6/8/8/3RK3 w - - 0 1", "b4c6", true,
+      "The guard is removed, but a stored line shorter than its claim produces no row."],
+
+    ["trapped_piece/restriction-does-not-win", "trapped_piece", "refuted_geometry", "n7/8/2B5/1P6/7k/8/8/4K3 w - - 0 1", "b5b6", true,
+      "The knight is restricted but can capture b6 safely, so the geometry is refuted."],
+    ["trapped_piece/stronger-follow-up", "trapped_piece", "alternative_better", "n7/8/2B5/PP6/7k/8/8/4K3 w - - 0 1", "b5b6", true,
+      "The trap exists, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["trapped_piece/restricting-pawn-is-pinned", "trapped_piece", "illegal_attacker", "n7/8/b1B5/PP6/7k/8/4K3/8 w - - 0 1", "b5b6", false,
+      "The pawn would remove the knight's last square, but moving exposes the king on e2."],
+    ["trapped_piece/truncated-line", "trapped_piece", "incomplete_evidence", "n7/8/2B5/PP6/7k/8/8/4K3 w - - 0 1", "b5b6", true,
+      "The trap exists, but a stored line shorter than its claim produces no row."],
+  ].map(([id, family, shape, fen, move, expectLegal, expectation]) => ({
+    id,
+    family,
+    shape,
+    fen,
+    move,
+    expectLegal,
+    subjectColor: "white" as const,
+    expectation,
+  } as ConceptFixture)),
 ]);
 
 export function fixturesFor(family: string): readonly ConceptFixture[] {

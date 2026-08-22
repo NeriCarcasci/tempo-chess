@@ -12,10 +12,10 @@
  * ## How a consequence is proven
  *
  * `guaranteedGain` is the whole verification story, and it is a one-ply
- * minimax over static exchange: play every legal reply the defender has, ask
- * what the attacker can still take afterwards, and keep the worst case. If the
- * attacker still wins material against the defender's *best* answer, the motif
- * is real. If any single reply saves everything, it is not.
+ * minimax over static exchange: play every legal reply the defender has, follow
+ * the motif's named targets, subtract any counter-capture, and keep the worst
+ * case. If the attacker still wins a named target against the defender's *best*
+ * answer, the motif is real. If any single reply saves everything, it is not.
  *
  * That answers the questions the contracts actually ask, without a search:
  *
@@ -42,7 +42,7 @@
 import { Chess } from "chessops/chess";
 import { makeUci, parseUci } from "chessops/util";
 import type { Color, NormalMove, Square } from "chessops/types";
-import { PIECE_VALUES, attackersTo as attackersToBoard, see } from "../../engine/attacks.js";
+import { PIECE_VALUES, see } from "../../engine/attacks.js";
 import type { CensorReason, ConceptRole, OpportunityDraft } from "../observations.js";
 import { MATERIAL_THRESHOLD_CP } from "./catalogue.js";
 import {
@@ -124,14 +124,54 @@ export interface VerifiedGain {
   readonly mate: boolean;
 }
 
+function captureGain(position: Chess, move: NormalMove, mover: Color): number {
+  const target = position.board.get(move.to);
+  if (!target || target.color === mover) return 0;
+  return Math.max(0, see(position.board, move.to, move.from));
+}
+
+function trackedTargetsAfter(
+  position: Chess,
+  reply: NormalMove,
+  targets: readonly Square[],
+  defender: Color,
+): Square[] {
+  const next = position.clone();
+  next.play(reply);
+  const tracked: Square[] = [];
+  for (const square of targets) {
+    const landedOn = reply.from === square ? reply.to : square;
+    const piece = next.board.get(landedOn);
+    if (piece?.color === defender && piece.role !== "king") tracked.push(landedOn);
+  }
+  return tracked;
+}
+
+/** Best legal SEE capture of one of the named motif targets. */
+function bestTargetGain(position: Chess, attacker: Color, targets: readonly Square[]): number {
+  if (position.turn !== attacker) return 0;
+  const targetSet = new Set<Square>(targets);
+  let best = 0;
+  for (const move of legalMoves(position)) {
+    if (!targetSet.has(move.to)) continue;
+    best = Math.max(best, captureGain(position, move, attacker));
+  }
+  return best;
+}
+
 /**
  * What the attacker still wins after the defender's best answer.
  *
  * The defender is to move in `position`. One ply, exhaustive, with static
- * exchange at the leaves. Taking the minimum is the point: a motif that any
+ * exchange at the leaves. When targets are supplied, only their loss is
+ * credited and a reply's own capture is deducted. Taking the minimum is the point: a motif that any
  * single reply defuses has not been proven, however good it looks.
  */
-export function guaranteedGain(position: Chess, attacker: Color): VerifiedGain {
+export function guaranteedGain(
+  position: Chess,
+  attacker: Color,
+  targets?: readonly Square[],
+): VerifiedGain {
   const defender = opposite(attacker);
   if (position.turn !== defender) {
     // Asked about the wrong side to move. Refuse rather than answer about a
@@ -150,9 +190,19 @@ export function guaranteedGain(position: Chess, attacker: Color): VerifiedGain {
   let worst = Number.POSITIVE_INFINITY;
   let bestDefence: string | null = null;
   for (const reply of replies) {
+    const replyGain = captureGain(position, reply, defender);
     const next = position.clone();
     next.play(reply);
-    const gain = bestCaptureGain(next, attacker);
+    const remainingTargets = targets === undefined
+      ? undefined
+      : trackedTargetsAfter(position, reply, targets, defender);
+    const followUp = remainingTargets === undefined
+      ? bestCaptureGain(next, attacker)
+      : bestTargetGain(next, attacker, remainingTargets);
+    // A counter-capture is part of the defender's answer. Crediting the motif
+    // with the follow-up while ignoring what its owner just lost would assign
+    // unrelated material to the tactic.
+    const gain = Math.max(0, followUp - replyGain);
     if (gain < worst) {
       worst = gain;
       bestDefence = makeUci(reply);
@@ -188,12 +238,15 @@ export function verifyConsequence(
   index: PositionIndex,
   afterPly: number,
   attacker: Color,
+  targets: readonly Square[],
+  preverified?: VerifiedGain,
 ): Verification | null {
   const view = index.at(afterPly);
   if (!view) return null;
-  const staticGain = guaranteedGain(view.position, attacker);
+  const staticGain = preverified ?? guaranteedGain(view.position, attacker, targets);
   if (staticGain.gainCp < MATERIAL_THRESHOLD_CP) return null;
 
+  if (game.unavailableCandidatePlies?.has(afterPly)) return null;
   const lines = game.candidatesByPly.get(afterPly);
   const best = lines && lines.length > 0
     ? [...lines].sort((a, b) => a.rank - b.rank)[0]
@@ -213,24 +266,44 @@ export function verifyConsequence(
   // the attacker's follow-up is the capture the static answer promised.
   const replay = replayPv(view, best.pv, 2);
   if (!replay.available) {
-    return {
-      gainCp: staticGain.gainCp,
-      confidence: CONFIDENCE.seeOnly,
-      bestDefence: staticGain.bestDefence,
-      mate: staticGain.mate,
-      line: null,
-    };
+    // A line too short to reach the follow-up has not contradicted anything.
+    // It is the same evidential position as no line at all, and abstaining on
+    // it would mean a detector speaks when it knows nothing and falls silent
+    // when it knows a little -- more evidence making it less able to answer.
+    if (replay.reason === "line_too_short" || replay.reason === "no_line") {
+      return {
+        gainCp: staticGain.gainCp,
+        confidence: CONFIDENCE.seeOnly,
+        bestDefence: staticGain.bestDefence,
+        mate: staticGain.mate,
+        line: null,
+      };
+    }
+    // Unparseable, illegal, or unreadable is corrupt evidence for this ply, and
+    // corrupt evidence is a reason to say nothing.
+    return null;
   }
   const afterDefence = replay.positions[1];
   if (!afterDefence) return null;
-  const followUp = bestCaptureGain(afterDefence, attacker);
-  if (followUp < MATERIAL_THRESHOLD_CP && !staticGain.mate) {
+  const firstMove = replay.moves[0];
+  if (!firstMove || !("from" in firstMove)) return null;
+  const remainingTargets = trackedTargetsAfter(view.position, firstMove, targets, opposite(attacker));
+  const secondMove = replay.moves[1];
+  if (!secondMove || !("from" in secondMove)) return null;
+  const followUp = remainingTargets.includes(secondMove.to)
+    ? captureGain(afterDefence, secondMove, attacker)
+    : 0;
+  const lineEndsInMate = replay.positions[2]?.isCheckmate() ?? false;
+  if (followUp < MATERIAL_THRESHOLD_CP && !lineEndsInMate && !staticGain.mate) {
     // The engine's own line says the attacker wins nothing here. Static
     // exchange said otherwise. Disagreement is not a fact.
     return null;
   }
   return {
-    gainCp: Math.min(staticGain.gainCp, Math.max(followUp, staticGain.mate ? MATE_GAIN_CP : 0)),
+    gainCp: Math.min(
+      staticGain.gainCp,
+      lineEndsInMate ? staticGain.gainCp : Math.max(followUp, staticGain.mate ? MATE_GAIN_CP : 0),
+    ),
     confidence: CONFIDENCE.pvProven,
     bestDefence: staticGain.bestDefence,
     mate: staticGain.mate,
@@ -273,6 +346,8 @@ export interface TacticalFinding {
   readonly facts: Record<string, unknown>;
   readonly difficulty: Record<string, number>;
   readonly verification: Verification;
+  /** The pieces whose loss the motif, rather than some other tactic, proves. */
+  readonly targets: readonly Square[];
 }
 
 /**
@@ -324,6 +399,22 @@ export function tacticalObservation(
     difficulty: finding.difficulty,
   };
 
+  if (subjectIsActor && finding.verification.mate) {
+    return {
+      conceptSlug: finding.conceptSlug,
+      role,
+      phase: null,
+      draft: {
+        ...base,
+        responsePly: finding.focalPly,
+        responseObserved: true,
+        censoredReason: null,
+        success: true,
+      } satisfies OpportunityDraft,
+      event: { ...event, endPly: finding.focalPly + 1, completeness: "complete" },
+    };
+  }
+
   if (reply === null) {
     // Nobody moved after it. Whether the motif would have been collected or
     // answered is a question the game never asked.
@@ -345,22 +436,53 @@ export function tacticalObservation(
   // What the position looked like after the subject actually replied.
   const afterReply = index.at(reply.fromPly + 1);
   const attacker = subjectIsActor ? game.subjectColor : opposite(game.subjectColor);
-  const stillAvailable = afterReply
-    ? bestCaptureGain(
-      afterReply.position.turn === attacker
-        ? afterReply.position
-        : (index.asIfToMove(reply.fromPly + 1, attacker)?.position ?? afterReply.position),
-      attacker,
-    )
-    : 0;
+  const beforeReply = index.at(reply.fromPly);
+  if (!beforeReply || !afterReply) return null;
+  const parsedReply = parseUci(reply.playedMoveUci);
+  if (!parsedReply || !("from" in parsedReply) || !beforeReply.isLegal(parsedReply)) return null;
 
-  const success = subjectIsActor
-    // Executing means collecting it. The subject's own follow-up either took
-    // the material the motif won or it did not.
-    ? capturedAtLeast(index, reply.fromPly, reply.playedMoveUci, game.subjectColor, finding.verification.gainCp)
-      || finding.verification.mate
-    // Responding means conceding less than it threatened.
-    : stillAvailable < finding.verification.gainCp;
+  if (subjectIsActor) {
+    const success = capturedTargetAtLeast(
+      index,
+      reply.fromPly,
+      reply.playedMoveUci,
+      game.subjectColor,
+      finding.verification.gainCp,
+      finding.targets,
+    );
+    if (!success && reply.playedMoveAcceptable) return null;
+    return {
+      conceptSlug: finding.conceptSlug,
+      role,
+      phase: reply.phase,
+      draft: {
+        ...base,
+        responsePly: reply.fromPly,
+        responseObserved: true,
+        censoredReason: null,
+        success,
+      } satisfies OpportunityDraft,
+      event,
+    };
+  }
+
+  const remainingTargets = trackedTargetsAfter(
+    beforeReply.position,
+    parsedReply,
+    finding.targets,
+    opposite(attacker),
+  );
+  const attackView = afterReply.position.turn === attacker
+    ? afterReply.position
+    : index.asIfToMove(reply.fromPly + 1, attacker)?.position;
+  if (!attackView) return null;
+  const stillAvailable = bestTargetGain(attackView, attacker, remainingTargets);
+  const replyGain = captureGain(beforeReply.position, parsedReply, opposite(attacker));
+  const netConcession = Math.max(0, stillAvailable - replyGain);
+
+  // Responding well means reaching the best bound the verifier proved, not
+  // doing the impossible and conceding strictly less than its minimum.
+  const success = netConcession <= finding.verification.gainCp;
 
   return {
     conceptSlug: finding.conceptSlug,
@@ -383,12 +505,13 @@ export function tacticalObservation(
  * A mating gain is never matched by a capture, which is why the caller treats
  * mate separately rather than asking this to compare against `MATE_GAIN_CP`.
  */
-function capturedAtLeast(
+function capturedTargetAtLeast(
   index: PositionIndex,
   ply: number,
   uci: string,
   mover: Color,
   atLeast: number,
+  targets: readonly Square[],
 ): boolean {
   const view = index.at(ply);
   if (!view) return false;
@@ -397,6 +520,7 @@ function capturedAtLeast(
   if (!view.isLegal(move)) return false;
   const target = view.pieceAt(move.to);
   if (!target || target.color === mover) return false;
+  if (!targets.includes(move.to)) return false;
   return view.see(move.to, move.from) >= atLeast;
 }
 
@@ -489,7 +613,13 @@ function detectDoubleAttack({ game, index }: DetectorContext): DetectedOpportuni
     if (targetCount < 2) continue;
 
     // Geometry established. Now the part that matters: can it be answered?
-    const verification = verifyConsequence(game, index, afterPly, transition.actorColor);
+    const verification = verifyConsequence(
+      game,
+      index,
+      afterPly,
+      transition.actorColor,
+      winnable,
+    );
     if (!verification) continue;
 
     const squares = [...winnable].sort((a, b) => a - b);
@@ -516,6 +646,7 @@ function detectDoubleAttack({ game, index }: DetectorContext): DetectedOpportuni
         legalReplies: after.legalMoveCount(),
       },
       verification,
+      targets: winnable,
     });
     if (observation) found.push(observation);
   }
@@ -564,15 +695,20 @@ function detectPin({ game, index }: DetectorContext): DetectedOpportunity[] {
     const created = after.pinsAgainst(defender).filter((pin) => !existing.has(pinIdentity(pin)));
     if (created.length === 0) continue;
 
-    const verification = verifyConsequence(game, index, afterPly, transition.actorColor);
-    if (!verification) continue;
-
     for (const pin of created) {
       // The gain has to be the pinned piece, not something unrelated the same
       // move happened to win. A pinned knight the attacker cannot profitably
       // take is an alignment, and the contract calls that a negative.
       const winnable = bestSeeOnSquare(after, pin.pinned, transition.actorColor);
       if (winnable < MATERIAL_THRESHOLD_CP) continue;
+      const verification = verifyConsequence(
+        game,
+        index,
+        afterPly,
+        transition.actorColor,
+        [pin.pinned],
+      );
+      if (!verification) continue;
 
       const observation = tacticalObservation(game, index, {
         conceptSlug: "pin",
@@ -598,6 +734,7 @@ function detectPin({ game, index }: DetectorContext): DetectedOpportunity[] {
           legalReplies: after.legalMoveCount(),
         },
         verification,
+        targets: [pin.pinned],
       });
       if (observation) found.push(observation);
     }
@@ -660,7 +797,13 @@ function detectSkewer({ game, index }: DetectorContext): DetectedOpportunity[] {
       bared.take(xray.front);
       if (see(bared, xray.rear, attackerSquare) < MATERIAL_THRESHOLD_CP) continue;
 
-      const verification = verifyConsequence(game, index, afterPly, transition.actorColor);
+      const verification = verifyConsequence(
+        game,
+        index,
+        afterPly,
+        transition.actorColor,
+        [xray.rear],
+      );
       if (!verification) continue;
 
       const observation = tacticalObservation(game, index, {
@@ -676,6 +819,7 @@ function detectSkewer({ game, index }: DetectorContext): DetectedOpportunity[] {
           frontValueCp: frontValue,
           rearValueCp: rearValue,
           frontIsKing: front.role === "king",
+          ray: [...after.between(attackerSquare, xray.rear)],
         },
         difficulty: {
           frontValueCp: frontValue,
@@ -684,6 +828,7 @@ function detectSkewer({ game, index }: DetectorContext): DetectedOpportunity[] {
           legalReplies: after.legalMoveCount(),
         },
         verification,
+        targets: [xray.rear],
       });
       if (observation) found.push(observation);
     }
@@ -755,7 +900,14 @@ function detectDiscoveredAttack({ game, index }: DetectorContext): DetectedOppor
         if (!targetIsKing
           && bestSeeOnSquare(after, target, actor) < MATERIAL_THRESHOLD_CP) continue;
 
-        const verification = verifyConsequence(game, index, afterPly, actor);
+        const payoffTargets = targetIsKing
+          ? [...after.attacksFrom(move.to).intersect(enemy)].filter((square) =>
+            square !== enemyKing
+            && bestSeeOnSquare(after, square, actor) >= MATERIAL_THRESHOLD_CP)
+          : [target];
+        if (payoffTargets.length === 0) continue;
+
+        const verification = verifyConsequence(game, index, afterPly, actor, payoffTargets);
         if (!verification) continue;
 
         const observation = tacticalObservation(game, index, {
@@ -768,9 +920,12 @@ function detectDiscoveredAttack({ game, index }: DetectorContext): DetectedOppor
             discoveredPiece: slider,
             mover: move.from,
             moverTo: move.to,
+            from: move.from,
+            to: move.to,
             uncoveredTarget: target,
             uncoveredValueCp: valueOn(after, target),
             moverChecks,
+            moverTarget: payoffTargets[0] ?? null,
             subtype,
           },
           difficulty: {
@@ -780,6 +935,7 @@ function detectDiscoveredAttack({ game, index }: DetectorContext): DetectedOppor
             legalReplies: after.legalMoveCount(),
           },
           verification,
+          targets: payoffTargets,
         });
         if (observation) found.push(observation);
       }
@@ -856,7 +1012,7 @@ function detectRemovalOfDefender({ game, index }: DetectorContext): DetectedOppo
         }
         if (winnable < MATERIAL_THRESHOLD_CP) continue;
 
-        const verification = verifyConsequence(game, index, afterPly, actor);
+        const verification = verifyConsequence(game, index, afterPly, actor, [target]);
         if (!verification) continue;
 
         const observation = tacticalObservation(game, index, {
@@ -870,10 +1026,12 @@ function detectRemovalOfDefender({ game, index }: DetectorContext): DetectedOppo
             defenderRole: guardPiece.role,
             target,
             targetRole: piece.role,
+            duty: `${guard}->${target}`,
             removalMethod: captured ? "capture" : "deflection",
             defendersBefore: before.defendersOf(target).size(),
             targetValueCp: valueOn(before, target),
             followUpCp: winnable,
+            followUp: target,
           },
           difficulty: {
             targetValueCp: valueOn(before, target),
@@ -882,6 +1040,7 @@ function detectRemovalOfDefender({ game, index }: DetectorContext): DetectedOppo
             legalReplies: after.legalMoveCount(),
           },
           verification,
+          targets: [target],
         });
         if (observation) found.push(observation);
       }
@@ -914,8 +1073,9 @@ function detectTrappedPiece({ game, index }: DetectorContext): DetectedOpportuni
 
   for (const transition of game.transitions) {
     const afterPly = transition.fromPly + 1;
+    const before = index.at(transition.fromPly);
     const after = index.at(afterPly);
-    if (!after) continue;
+    if (!before || !after) continue;
 
     const actor = transition.actorColor;
     const board = after.position.board;
@@ -928,39 +1088,28 @@ function detectTrappedPiece({ game, index }: DetectorContext): DetectedOpportuni
       if (!piece || piece.role === "king") continue;
       // Only worth asking about a piece there is something to win.
       if (valueOn(after, square) < MATERIAL_THRESHOLD_CP) continue;
+      // A trap is created, not merely rediscovered. Restrict the expensive
+      // minimax to attacked candidates, then prove that this move changed the
+      // target from escapable to lost.
+      if (after.attackersOf(square, actor).isEmpty()) continue;
+      const beforeForDefender = index.asIfToMove(transition.fromPly, opposite(actor));
+      if (!beforeForDefender) continue;
+      if (guaranteedGain(beforeForDefender.position, actor, [square]).gainCp
+        >= MATERIAL_THRESHOLD_CP) continue;
 
-      let trapped = true;
-      let escapesTried = 0;
-      let worstCase = Number.POSITIVE_INFINITY;
-      for (const reply of replies) {
-        const next = after.position.clone();
-        next.play(reply);
-        // Follow the piece, not the square: a retreat is an escape only if the
-        // square it retreats to is safe.
-        const landedOn = reply.from === square ? reply.to : square;
-        if (reply.from === square) escapesTried += 1;
-        const occupant = next.board.get(landedOn);
-        if (!occupant || occupant.color !== piece.color) {
-          // It left on its own terms, or something else stands there now.
-          trapped = false;
-          break;
-        }
-        const attackers = attackersToBoard(next.board, landedOn, next.board.occupied)
-          .intersect(actor === "white" ? next.board.white : next.board.black);
-        let winnable = Number.NEGATIVE_INFINITY;
-        for (const from of attackers) {
-          const gain = see(next.board, landedOn, from);
-          if (gain > winnable) winnable = gain;
-        }
-        if (winnable < MATERIAL_THRESHOLD_CP) {
-          trapped = false;
-          break;
-        }
-        if (winnable < worstCase) worstCase = winnable;
-      }
-      if (!trapped) continue;
-
-      const verification = verifyConsequence(game, index, afterPly, actor);
+      const trappedGain = guaranteedGain(after.position, actor, [square]);
+      if (trappedGain.gainCp < MATERIAL_THRESHOLD_CP) continue;
+      const escapeMovesTried = replies
+        .filter((reply) => reply.from === square)
+        .map((reply) => makeUci(reply));
+      const verification = verifyConsequence(
+        game,
+        index,
+        afterPly,
+        actor,
+        [square],
+        trappedGain,
+      );
       if (!verification) continue;
 
       const observation = tacticalObservation(game, index, {
@@ -974,17 +1123,18 @@ function detectTrappedPiece({ game, index }: DetectorContext): DetectedOpportuni
           square,
           pieceValueCp: valueOn(after, square),
           attackers: [...after.attackersOf(square, actor)],
-          escapesTried,
+          escapesTried: escapeMovesTried,
           repliesConsidered: replies.length,
-          expectedLossCp: worstCase === Number.POSITIVE_INFINITY ? 0 : worstCase,
+          expectedLossCp: trappedGain.gainCp,
         },
         difficulty: {
           pieceValueCp: valueOn(after, square),
-          escapeSquareCount: escapesTried,
+          escapeSquareCount: escapeMovesTried.length,
           attackerCount: after.attackersOf(square, actor).size(),
           legalReplies: replies.length,
         },
         verification,
+        targets: [square],
       });
       if (observation) found.push(observation);
     }

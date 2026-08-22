@@ -93,9 +93,17 @@ export interface EventGroup {
  */
 export function groupByEvent(detected: readonly DetectedOpportunity[]): EventGroup[] {
   const groups = new Map<string, { event: DetectedOpportunity["event"]; observations: DetectedOpportunity[] }>();
+  const identities = new Map<string, Set<string>>();
   for (const observation of detected) {
+    const identity = `${observation.conceptSlug}|${observation.role}`;
     const existing = groups.get(observation.event.detectionKey);
     if (existing) {
+      const seen = identities.get(observation.event.detectionKey)!;
+      // The database permits exactly one observation for this identity. A
+      // detector finding the same physical role twice is one finding, not two
+      // inserts racing the unique index in the same transaction.
+      if (seen.has(identity)) continue;
+      seen.add(identity);
       existing.observations.push(observation);
       continue;
     }
@@ -103,6 +111,7 @@ export function groupByEvent(detected: readonly DetectedOpportunity[]): EventGro
       event: observation.event,
       observations: [observation],
     });
+    identities.set(observation.event.detectionKey, new Set([identity]));
   }
   return [...groups.values()];
 }
