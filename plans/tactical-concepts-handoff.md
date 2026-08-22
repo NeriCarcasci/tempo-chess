@@ -173,6 +173,16 @@ batches -- 361, then 9,930. Every one of those rows carries its own
 agree at 10,291 each. Every label carries detector version 4, and no other
 version exists.
 
+Detection was then re-run over all 333 with `--verify`, which wrote **zero
+opportunities** and reported zero abstentions, zero failures and, most
+importantly, **zero runs concluding differently**. That last number is the one
+worth reading: every stored manifest still matches what this build concludes, so
+detection is deterministic across the whole archive and no existing evidence was
+rewritten. The database agrees independently of the command's own report --
+`max(created_at)` on `run_concept_opportunities` predates the verification run,
+so nothing was written by the database's clock rather than by the tool's
+accounting of itself.
+
 ### The four states, observed rather than asserted
 
 | State | Live instances |
@@ -240,10 +250,9 @@ tests in this archive. A newly analysed game will not recreate it.
 
 ### The procedure that would prove the rest
 
-Steps 1, 2 and 4 were carried out against production by the release above, and
-step 8's idempotence was checked by re-running the backfill to completion. Steps
-3, 5, 6 and 7 remain, and they are the ones that need an engine, a session and a
-person.
+Steps 1, 2, 4 and 8 were carried out against production by the release above.
+Steps 3, 5, 6 and 7 remain, and they are the ones that need an engine, a session
+and a person.
 
 Against a disposable database with the engine available, set `DATABASE_URL`
 and the required database-role credentials for that database. Keep
