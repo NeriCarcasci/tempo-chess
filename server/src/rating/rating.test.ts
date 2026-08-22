@@ -28,6 +28,8 @@ import { estimateStrength } from "./strength.js";
 import { findMoments, normalizeStrength, rateGame, readCleanliness, softMin } from "./rating.js";
 import { decisionsFromReview, missingEvidence } from "./evidence.js";
 import type { ReviewMove } from "../engine/review.js";
+import { likelihoodsFor, type RungPolicy } from "./likelihood.js";
+import { normalizePolicy } from "../models/policy.js";
 
 const failures: string[] = [];
 let passed = 0;
@@ -533,6 +535,83 @@ test("a rating always arrives with its decomposition", () => {
   assert.equal(result.black.cleanliness.status, "available");
   assert.equal(result.demand.status, "available");
   assert.ok(result.coverage.decisions > 0);
+});
+
+// ---------------------------------------------------------------------------
+// Likelihoods
+// ---------------------------------------------------------------------------
+
+function rung(rating: number, moves: [string, number][], limit = 12): RungPolicy {
+  return {
+    rating,
+    policy: normalizePolicy(
+      moves.map(([uci, probability]) => ({ uci, probability })),
+      limit,
+    ),
+  };
+}
+
+test("a retained move takes its probability straight from the model", () => {
+  const result = likelihoodsFor("e2e4", [rung(1600, [["e2e4", 0.5], ["d2d4", 0.5]])], 30);
+  assert.equal(result.status, "available");
+  if (result.status !== "available") return;
+  close(result.byRating[1600]!, Math.log(0.5));
+  assert.equal(result.estimatedRungs.length, 0);
+});
+
+test("a move in the tail is spread over the moves that were dropped", () => {
+  // Two moves retained of twenty legal, so eighteen share the dropped mass.
+  const result = likelihoodsFor(
+    "h2h4",
+    [rung(1600, [["e2e4", 0.5], ["d2d4", 0.3], ["c2c4", 0.2]], 2)],
+    20,
+  );
+  assert.equal(result.status, "available");
+  if (result.status !== "available") return;
+  close(result.byRating[1600]!, Math.log(0.2 / 18));
+  assert.deepEqual([...result.estimatedRungs], [1600]);
+});
+
+test("a tail move with no legal move count is refused rather than guessed", () => {
+  const result = likelihoodsFor(
+    "h2h4",
+    [rung(1600, [["e2e4", 0.5], ["d2d4", 0.5]], 1)],
+    null,
+  );
+  assert.equal(result.status === "unavailable" && result.reason, "unretained_without_legal_move_count");
+});
+
+test("a move missing from a distribution that covered everything is an inconsistency", () => {
+  // Nothing was dropped, so the move should have been there. Assigning it a
+  // probability would launder a mismatched position into a strength claim.
+  const result = likelihoodsFor("h2h4", [rung(1600, [["e2e4", 0.5], ["d2d4", 0.5]])], 2);
+  assert.equal(result.status === "unavailable" && result.reason, "unretained_with_no_room");
+});
+
+test("the ladder is answered completely or not at all", () => {
+  // The first rung retains the move, the second does not and cannot estimate.
+  const result = likelihoodsFor(
+    "h2h4",
+    [rung(1200, [["h2h4", 0.4], ["e2e4", 0.6]]), rung(2000, [["e2e4", 0.6], ["d2d4", 0.4]])],
+    2,
+  );
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.status === "unavailable" && result.rating, 2000);
+});
+
+test("the tail assignment ranks a weak rung above a strong one for a weak move", () => {
+  // The whole point: "no 2000 plays this" is what says the player is not 2000.
+  const result = likelihoodsFor(
+    "h2h4",
+    [
+      rung(1200, [["h2h4", 0.15], ["e2e4", 0.85]]),
+      rung(2000, [["e2e4", 0.7], ["d2d4", 0.29], ["c2c4", 0.01]], 2),
+    ],
+    20,
+  );
+  assert.equal(result.status, "available");
+  if (result.status !== "available") return;
+  assert.ok(result.byRating[1200]! > result.byRating[2000]!);
 });
 
 // ---------------------------------------------------------------------------

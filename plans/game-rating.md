@@ -332,9 +332,40 @@ it with no database at all.
 
 ### Order
 
-1. `contract.ts`, `decisions.ts`, `strength.ts`, `demand.ts`, `rating.ts` with
-   unit tests. Offline, no engine.
-2. The corpus and the ordering gate.
-3. Wiring: MultiPV at the after-position for deep-selected transitions, the
-   opponent-conditioned inference, and the rating written as a projection.
-4. The public page and its permanent per-game URLs.
+1. **Done.** `contract.ts`, `decisions.ts`, `strength.ts`, `demand.ts`,
+   `rating.ts`, offline with unit tests. `npm run rating:unit`.
+2. **Done.** The corpus and the ordering gate. `npm run rating:calibration`.
+   Seven archetypes ordered; eight real games written down and reported as
+   pending, because their evidence does not exist yet.
+3. **Done.** `evidence.ts`, the adapter from the published review, and
+   `likelihood.ts`, the per-rung likelihoods including the unretained tail.
+4. **Next, and it needs the engine.** Two reads per deep-selected transition:
+   a MultiPV search at the position *after* the move, for
+   `expectedScoreIfMissed`, and one policy inference per rung of the ladder at
+   the position *before* it, for the strength estimate. The second is the
+   expensive one: nine inferences a ply is affordable for one pasted game and
+   not for a whole archive, so the public path and the pipeline path will want
+   different budgets. Then register the method as a `projection` component
+   version and publish the rating behind a promotion gate.
+5. Score the eight corpus games and settle the policy constants against them.
+   Until this happens the gate proves the formula's orderings, not the scale's,
+   and nothing should be shown to a stranger.
+6. The public page and its permanent per-game URLs.
+
+### What the numbers look like now
+
+From `npm run rating:calibration`, on the constructed archetypes:
+
+    9.8  masterpiece      two masters, near-flawless, only-moves throughout
+    8.4  brilliancy       a long combination the engine dislikes and nobody refutes
+    7.1  strong_grind     two strong players, clean, moderate tension
+    6.6  sterile_draw     two masters, perfect, nothing ever at stake
+    4.5  club_sharp       two club players, sharp game, real mistakes
+    1.7  mismatch         a strong player against a weak one
+    0.3  mutual_collapse  two weak players trading blunders
+
+The brilliancy is the load-bearing row. Scored against the engine alone it rates
+6.2 and falls *below* the quiet grind, which is the Tal problem exactly. The
+practical reading is worth 2.2 of rating there and the gate asserts the
+reversal, so a change that quietly disables the correction fails in the build
+rather than in public.
