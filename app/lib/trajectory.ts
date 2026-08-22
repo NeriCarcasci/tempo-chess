@@ -79,6 +79,23 @@ export interface ConePoint {
   p75: number;
   /** `p75 - p25`. How far apart the middle half of the games is here. */
   spread: number;
+  /**
+   * The bin's own 95% bootstrap interval on the median — four hundred seeded
+   * resamples, computed in `estimates/trajectory.ts` and stored with the bin.
+   *
+   * It was being dropped here, which is why the median read as a flat rule that
+   * says nothing. The median of a whole archive sits at level by construction —
+   * for every game going well there is one going badly — so the line on its own
+   * carries no claim. With its interval it carries a testable one: where the
+   * interval excludes level the player really is tilted at that point in a game,
+   * and where it straddles level the figure is saying it cannot tell finer than
+   * this rather than drawing a confident flat line.
+   *
+   * Null when the bin held fewer than three games, which is the floor the
+   * resampler refuses below.
+   */
+  intervalLow: number | null;
+  intervalHigh: number | null;
   games: number;
   phase: string;
   binOrdinal: number;
@@ -209,6 +226,8 @@ export function buildCone(bins: readonly TrajectoryBin[]): Cone | null {
         p25: round(p25),
         p75: round(p75),
         spread: round(p75 - p25),
+        intervalLow: bin.intervalLow === null ? null : round(clamp01(bin.intervalLow)),
+        intervalHigh: bin.intervalHigh === null ? null : round(clamp01(bin.intervalHigh)),
         games: bin.gamesContributing,
         phase,
         binOrdinal: bin.binOrdinal,
@@ -427,6 +446,83 @@ export function railPath(
     edge,
     area: `${edge}L${round(box.x + box.width)} ${floor}L${round(box.x)} ${floor}Z`,
   };
+}
+
+/**
+ * The median's own uncertainty, as a ribbon around it.
+ *
+ * Drawn from the stored bootstrap interval, so this is the figure saying how
+ * precisely it knows the line it is drawing. Bins without an interval — fewer
+ * than three games, which is the floor the resampler refuses below — break the
+ * ribbon rather than being bridged, because a bridge would draw a precision
+ * that was never computed.
+ */
+export function medianIntervalPaths(
+  points: readonly ConePoint[],
+  box: PlotBox,
+): string[] {
+  const runs: ConePoint[][] = [];
+  for (const point of points) {
+    if (point.intervalLow === null || point.intervalHigh === null) {
+      if (runs[runs.length - 1]?.length) runs.push([]);
+      continue;
+    }
+    if (runs.length === 0) runs.push([]);
+    runs[runs.length - 1]!.push(point);
+  }
+  return runs
+    .filter((run) => run.length > 0)
+    .map((run) =>
+      areaPath(
+        run,
+        box,
+        (point) => Math.max(point.intervalHigh!, point.intervalLow!),
+        (point) => Math.min(point.intervalHigh!, point.intervalLow!),
+      ),
+    );
+}
+
+/**
+ * How wide the middle half is at each bin, as one mark per bin.
+ *
+ * This register replaces the cost lane the figure carried against the legacy
+ * tables, and it is the better question anyway. The median cannot move — an
+ * archive is half wins and half losses — so the centre of this distribution
+ * says nothing and its *width* says everything: a game where the middle half of
+ * your archive spans four points is still anyone's, and one where it spans
+ * eighty is decided. "Your games are decided in the opening" is a claim about
+ * this row, and the phase cards already state it in numbers; this draws it.
+ *
+ * The thresholds are in expected-score points and stated rather than tuned: a
+ * quarter of the scale apart is a game visibly going two ways, and half the
+ * scale apart is a distribution with winning and losing games in it and little
+ * in between.
+ */
+export const SPREAD_OPENING_UP = 0.25;
+export const SPREAD_DECIDED = 0.5;
+
+export interface SpreadCell {
+  key: string;
+  spread: number;
+  games: number;
+  phase: string;
+  /** The same three-step ramp the openings sheet uses, on this measure. */
+  heat: "holds" | "shaky" | "tears";
+}
+
+export function spreadCells(cone: Cone): SpreadCell[] {
+  return cone.points.map((point) => ({
+    key: `${point.phase}-${point.binOrdinal}`,
+    spread: point.spread,
+    games: point.games,
+    phase: point.phase,
+    heat:
+      point.spread >= SPREAD_DECIDED
+        ? "tears"
+        : point.spread >= SPREAD_OPENING_UP
+          ? "shaky"
+          : "holds",
+  }));
 }
 
 /** The median, as an open path. One point becomes a short flat tick. */

@@ -8,10 +8,12 @@ import {
   coneText,
   decayStops,
   LEVEL,
+  medianIntervalPaths,
   medianPath,
   phaseCards,
   project,
   railPath,
+  spreadCells,
 } from "../lib/trajectory";
 
 /**
@@ -129,6 +131,8 @@ export function Trajectory({
 
   const finding = coneFinding(cone);
   const band = bandPath(cone.points, PLOT);
+  const medianInterval = medianIntervalPaths(cone.points, PLOT);
+  const spread = spreadCells(cone);
   const stops = decayStops(cone);
   const cards = phaseCards(cone, accuracy);
   const rowFinding = accuracyFinding(cards);
@@ -219,6 +223,12 @@ export function Trajectory({
               vectorEffect="non-scaling-stroke"
             />
 
+            {/* How precisely the median is known, from the stored bootstrap.
+                Under the line it qualifies, over the band it sits inside. */}
+            {medianInterval.map((d, index) => (
+              <path key={index} className="cone-median-interval" d={d} vectorEffect="non-scaling-stroke" />
+            ))}
+
             <path
               className="cone-median"
               d={medianPath(cone.points, PLOT)}
@@ -253,6 +263,26 @@ export function Trajectory({
               ) : null;
             })()}
           </svg>
+        </div>
+
+        {/* Where the games are actually being decided.
+            The median cannot move — an archive is half wins and half losses —
+            so the width of the middle half is the measure that carries the
+            claim, and this is that width, bin by bin. */}
+        <div className="cone-spread-row">
+          <span className="cap cone-reg">spread</span>
+          <div className="cone-spread" role="img" aria-label={`How far apart the middle half of your games is, across ${spread.length} points of a game.`}>
+            {spread.map((cell) => (
+              <span key={cell.key} className="cone-spread-cell">
+                <span
+                  className="line-sq"
+                  data-heat={cell.heat}
+                  data-state="scored"
+                  title={`${Math.round(cell.spread * 100)} points apart · ${cell.games} games · ${cell.phase}`}
+                />
+              </span>
+            ))}
+          </div>
         </div>
 
         <ol className="phase-cards">
