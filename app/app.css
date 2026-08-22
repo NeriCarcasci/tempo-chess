@@ -3191,11 +3191,17 @@
   /* The spread register, on the openings sheet's own three-step ramp so a
      reader who has learned that ramp anywhere in the product reads this row
      without being taught it again. */
-  .cone-spread-row { position: relative; padding-left: 4.5rem; margin-top: 0.7rem; }
+  /* `display: contents` so the label and the lane become items of the frame's
+     own two-column grid, the way the axis and the plot already are. Wrapped in
+     a div with its own padding instead, the lane sat in the content column and
+     the label fell out of the gutter. */
+  .cone-spread-row { display: contents; }
   .cone-reg {
-    position: absolute; left: 0; top: 0.35rem; color: var(--color-ink-faint);
+    grid-column: 1; align-self: center; justify-self: end;
+    color: var(--color-ink-faint);
   }
   .cone-spread {
+    grid-column: 2;
     display: flex; gap: 0; align-items: stretch;
     padding: 4px; border-radius: var(--radius-control);
     background: var(--color-surface-2);
