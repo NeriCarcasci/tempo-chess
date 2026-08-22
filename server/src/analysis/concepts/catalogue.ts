@@ -356,6 +356,284 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
         + "judged, and only against what was available in that position.",
     },
   },
+  {
+    slug: "double_attack",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "Attacking two things at once",
+    humanDefinition:
+      "One of your pieces attacked two things your opponent could not both save. "
+      + "This measures whether you collected what it won -- or, when your opponent "
+      + "did it to you, whether you gave up less than it threatened.",
+    supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "attack two things at once and take one of them",
+        succeeded: "took what the double attack won",
+        missed: "attacked two things and did not collect either",
+      },
+      respond: {
+        opportunity: "answer a double attack against you",
+        succeeded: "saved more than the double attack threatened",
+        missed: "lost what the double attack threatened",
+      },
+    },
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "attack_map_and_static_exchange",
+      geometry:
+        "after the focal move, the piece that moved attacks two or more relevant enemy targets. "
+        + "A target is relevant when it is the king or when taking it wins material by SEE",
+      verification:
+        "against every legal reply, after following the named targets and subtracting any material "
+        + "the reply captures, static exchange still wins at least the threshold",
+      storedLine:
+        "where the deep search stored a line for the resulting position, it is replayed and must "
+        + "agree; a stored line that contradicts the static answer abstains rather than being "
+        + "overruled",
+      subtypes: ["fork", "royal_fork"],
+      execute: "success is a follow-up capture of a named target, or immediate mate; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better, including counter-captures",
+      censored: "the subject never moved again, so the game never asked the question",
+      abstain:
+        "fewer than two relevant targets, any reply that saves everything, an unreadable position, "
+        + "or evidence that disagrees with itself",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+      horizon: "one ply of defence, plus a stored line where one exists",
+    },
+  },
+  {
+    slug: "pin",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "Pinning a piece",
+    humanDefinition:
+      "A piece could not move without giving up something worth more behind it, "
+      + "and that was worth material. This measures whether you won it -- or, when "
+      + "it was done to you, whether you got out of it.",
+    supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "pin a piece and win it",
+        succeeded: "won the pinned piece",
+        missed: "pinned a piece and let it go",
+      },
+      respond: {
+        opportunity: "get out of a pin",
+        succeeded: "got out of the pin for less than it threatened",
+        missed: "lost the pinned piece",
+      },
+    },
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "ray_geometry_and_static_exchange",
+      geometry:
+        "a pinner, a pinned piece and a more valuable target behind it on one ray, with nothing "
+        + "else between. Absolute when the target is the king; relative otherwise",
+      created:
+        "the pin must not have existed before the focal move. A pin that has been on the board for "
+        + "three moves is not something the player just did",
+      verification:
+        "against every legal reply, the named pinned piece remains winnable after counter-captures. Alignment with no way to "
+        + "increase the pressure has cost the opponent nothing and is not recorded",
+      execute: "success is a follow-up capture of the named pinned piece; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better",
+      censored: "the subject never moved again",
+      abstain:
+        "a pin that already existed, alignment with no verified consequence, equal or beneficial "
+        + "exchanges, or an unreadable position",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+      note:
+        "Which side of the ray is more valuable is what separates this from a skewer, and the two "
+        + "detectors take opposite cases of the same geometry.",
+    },
+  },
+  {
+    slug: "skewer",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "Attacking through a piece",
+    humanDefinition:
+      "You attacked something valuable, and when it moved, what was sheltering "
+      + "behind it was taken. This measures whether you collected it -- or, when it "
+      + "was done to you, whether you saved more than it threatened.",
+    supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "attack through a piece and take what is behind it",
+        succeeded: "took what was behind",
+        missed: "attacked through a piece and did not take what was behind",
+      },
+      respond: {
+        opportunity: "answer an attack that goes through one of your pieces",
+        succeeded: "saved more than the attack threatened",
+        missed: "lost the piece behind",
+      },
+    },
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "ray_geometry_and_static_exchange",
+      geometry:
+        "after the focal move, the piece that moved attacks an enemy piece with a second enemy "
+        + "piece directly behind it on the same ray, and the front one is worth strictly more",
+      distinguishedFromPin:
+        "a pin has the valuable piece behind; a skewer has it in front. Equal values are neither, "
+        + "so the two detectors cannot both label one shape",
+      attribution:
+        "with the front piece removed from the board, static exchange on the rear one must still "
+        + "win material -- otherwise the skewer is credited with material won elsewhere",
+      verification:
+        "against every legal reply, the named rear target remains winnable after counter-captures",
+      execute: "success is a follow-up capture of the named rear target; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better",
+      censored: "the subject never moved again",
+      abstain:
+        "equal or inverted values, a rear piece that survives once the front one moves, any reply "
+        + "that saves everything, or an unreadable position",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+    },
+  },
+  {
+    slug: "discovered_attack",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "Uncovering an attack",
+    humanDefinition:
+      "Moving one piece uncovered an attack from the piece behind it. This "
+      + "measures whether you collected what that won -- or, when it was done to "
+      + "you, whether you gave up less than it threatened.",
+    supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "move one piece to uncover an attack from another",
+        succeeded: "took what the uncovered attack won",
+        missed: "uncovered an attack and did not collect it",
+      },
+      respond: {
+        opportunity: "answer an attack uncovered against you",
+        succeeded: "conceded less than the uncovered attack threatened",
+        missed: "lost what the uncovered attack threatened",
+      },
+    },
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "attack_map_difference_and_static_exchange",
+      geometry:
+        "a slider of the moving side attacks a target after the move that it did not attack "
+        + "before, and the square the mover left lies between them",
+      subtypes: ["discovered_attack", "discovered_check", "double_check"],
+      doubleCheck: "the moving piece also gives check, which no interposition or capture answers",
+      verification:
+        "a discovered attack on a piece must win that piece by static exchange. A discovered "
+        + "check wins nothing by itself, so a named payoff target must remain winnable once "
+        + "the check has been answered -- against every legal reply and after counter-captures",
+      execute: "success is a follow-up capture of a named payoff target, or immediate mate; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better",
+      censored: "the subject never moved again",
+      abstain:
+        "a line that opens onto nothing, a target that survives the exchange, or any reply that "
+        + "saves everything. Almost every piece move uncovers some ray and almost none of them "
+        + "matter",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+    },
+  },
+  {
+    slug: "removal_of_defender",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "Taking out the defender",
+    humanDefinition:
+      "You took or drove off the piece that was guarding something, and what it "
+      + "was guarding could then be won. This measures whether you won it -- or, "
+      + "when it was done to you, whether you saved it.",
+    supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "remove a defender and take what it was guarding",
+        succeeded: "took what the defender was guarding",
+        missed: "removed the defender and left what it guarded",
+      },
+      respond: {
+        opportunity: "hold something whose defender was removed",
+        succeeded: "held it for less than it threatened",
+        missed: "lost what the removed defender was guarding",
+      },
+    },
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "defender_map_and_static_exchange",
+      geometry:
+        "a piece that survives the focal move was defended before it by a guard the focal move "
+        + "either captured or attacked hard enough to force away",
+      removalMethods: ["capture", "deflection"],
+      attribution:
+        "with the guard removed from the board, static exchange on what it was guarding must win "
+        + "material. A target with a second adequate defender is a negative -- removing one holder "
+        + "of a shared duty removes nothing",
+      verification:
+        "against every legal reply, the named charge remains winnable after counter-captures. A target "
+        + "that can simply run away has not been won, however cleanly its guard was removed",
+      execute: "success is a follow-up capture of the named charge; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better",
+      censored: "the subject never moved again",
+      abstain:
+        "a shared duty, a target that escapes, a guard that was not actually guarding, or an "
+        + "unreadable position",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+      note:
+        "Overload and attraction are deliberately not separate concepts in this MVP.",
+    },
+  },
+  {
+    slug: "trapped_piece",
+    family: "tactics",
+    category: "tactical",
+    versionNo: 1,
+    displayName: "A piece with nowhere to go",
+    humanDefinition:
+      "A piece had no answer left: every square it could reach lost it, and so "
+      + "did staying. This measures whether you collected it -- or, when it was "
+      + "your piece, whether you got it out.",
+    supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "trap a piece and take it",
+        succeeded: "took the trapped piece",
+        missed: "trapped a piece and let it go",
+      },
+      respond: {
+        opportunity: "rescue a piece with nowhere to go",
+        succeeded: "got it out for less than it was worth",
+        missed: "lost the trapped piece",
+      },
+    },
+    evidenceSourceKind: "deterministic",
+    detectorContract: {
+      method: "exhaustive_reply_walk_and_static_exchange",
+      geometry: "the focal move changes an attacked non-king enemy piece from not provably lost at this horizon to lost",
+      verification:
+        "every legal reply is played and the piece is followed to wherever it ends up. It is "
+        + "trapped only when static exchange wins it in every one of them -- retreating, being "
+        + "defended, counterattacking, and capturing on the way out all count as answers",
+      kingExcluded:
+        "a king with no escape is checkmate or stalemate, which are results of the game rather "
+        + "than a piece being won",
+      execute: "success is a follow-up capture of the named trapped piece; an acceptable non-target follow-up abstains",
+      respond: "success is reaching the verified best-defence bound or better",
+      censored: "the subject never moved again",
+      abstain:
+        "any reply that saves it, a piece below the threshold, or an unreadable position. Sound "
+        + "sacrifices are not distinguishable from blunders by static exchange alone, and where "
+        + "the piece is genuinely saved by compensation this records nothing",
+      thresholdCp: MATERIAL_THRESHOLD_CP,
+      horizon: "one ply of defence",
+    },
+  },
 ]);
 
 /**

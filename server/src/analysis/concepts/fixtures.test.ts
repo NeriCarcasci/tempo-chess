@@ -34,6 +34,16 @@ test("every fixture FEN is a legal position", () => {
   }
 });
 
+test("the side to move is not already in check", () => {
+  for (const fixture of CONCEPT_FIXTURES) {
+    assert.equal(
+      positionOf(fixture)!.isCheck(),
+      false,
+      `${fixture.id} starts with the focal player already in check`,
+    );
+  }
+});
+
 test("every fixture move is legal exactly when the fixture says it is", () => {
   for (const fixture of CONCEPT_FIXTURES) {
     const position = positionOf(fixture);
@@ -98,14 +108,7 @@ test("every fixture shape is a declared shape", () => {
   }
 });
 
-/**
- * Coverage, stated as a floor rather than a total.
- *
- * The six MVP families each need a positive to be worth anything. The rest of
- * the shape matrix is completed by the detector tickets that implement them --
- * FOR-126 through FOR-131 -- and asserting the full grid here would fail this
- * milestone for work another milestone owns.
- */
+/** The frozen matrix requires every shape for every detector in this milestone. */
 const MVP_FAMILIES = [
   "double_attack",
   "pin",
@@ -115,24 +118,18 @@ const MVP_FAMILIES = [
   "trapped_piece",
 ] as const;
 
-test("every MVP family has at least one positive fixture", () => {
+test("every MVP family has every contracted fixture shape", () => {
   for (const family of MVP_FAMILIES) {
-    const positives = fixturesFor(family).filter((fixture) => fixture.shape === "positive");
-    assert.ok(positives.length > 0, `${family} has no positive fixture`);
+    const present = new Set(fixturesFor(family).map((fixture) => fixture.shape));
+    for (const shape of FIXTURE_SHAPES) {
+      assert.ok(present.has(shape), `${family} has no ${shape} fixture`);
+    }
   }
 });
 
-test("every MVP family has at least one negative fixture", () => {
-  for (const family of MVP_FAMILIES) {
-    const negatives = fixturesFor(family).filter((fixture) => fixture.shape !== "positive");
-    assert.ok(negatives.length > 0, `${family} has no negative fixture`);
-  }
-});
-
-test("the families with a colour-reversed twin have one on both sides", () => {
+test("every MVP family has a colour-reversed positive", () => {
   for (const family of MVP_FAMILIES) {
     const positives = fixturesFor(family).filter((fixture) => fixture.shape === "positive");
-    if (positives.length < 2) continue;
     const colors = new Set(positives.map((fixture) => fixture.subjectColor));
     assert.equal(
       colors.size,

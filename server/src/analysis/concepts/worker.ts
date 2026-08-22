@@ -42,6 +42,7 @@ import {
   detectGame,
   groupByEvent,
   DETECTOR_VERSION,
+  type CandidateLine,
   type GameFacts,
   type PositionFact,
   type TransitionFact,
@@ -58,6 +59,14 @@ interface RunRow {
   subject_game_id: string | null;
   subject_id: string | null;
   replay_revision_id: string | null;
+}
+
+interface CandidateRow {
+  readonly from_ply: number;
+  readonly rank: number;
+  readonly uci: string;
+  readonly expected_score: string;
+  readonly pv: unknown;
 }
 
 /**
@@ -118,7 +127,9 @@ export async function detectForRun(
       -- subject game's latest pointer can advance after this analysis run was
       -- created, so joining through it would mix a corrected replay's result
       -- and termination with the run-pinned transition evidence.
-      join chess.game_replay_revisions r on r.id = ${run.replay_revision_id}
+      join chess.game_replay_revisions r
+        on r.id = ${run.replay_revision_id}
+       and r.provider_game_id = g.provider_game_id
       where g.id = ${run.subject_game_id}
     `;
     if (!game) throw new WorkFailure("invalid_input", "unknown_game", "no such subject game");
@@ -156,6 +167,7 @@ export async function detectForRun(
              expected_score_before, expected_score_after, phase
       from analysis.transition_assessments
       where analysis_run_id = ${runId}
+        and materialization_run_id = ${materializationRunId}
       order by from_ply
     `;
     if (transitions.length === 0) {
@@ -165,6 +177,77 @@ export async function detectForRun(
         outputSummary: { opportunities: 0, reason: "no_assessed_transitions" },
       };
     }
+    const transitionsAreUsable = transitions.every((row) =>
+      Number.isInteger(row.from_ply)
+      && (row.actor_color === "white" || row.actor_color === "black")
+      && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(row.played_move_uci)
+      && Number.isFinite(Number(row.expected_score_before))
+      && Number.isFinite(Number(row.expected_score_after))
+      && (row.criticality === null || Number.isFinite(Number(row.criticality)))
+      && (row.retained_lines === null || Number.isInteger(Number(row.retained_lines))));
+    if (!transitionsAreUsable) {
+      // Dropping a malformed transition would make a partial game look whole,
+      // and coercing an unknown colour to Black would make the stronger claim.
+      return {
+        outputRef: `run:${runId}`,
+        outputSummary: { opportunities: 0, reason: "malformed_transition_evidence" },
+      };
+    }
+
+    // Tactical verification may use only the deep evaluation that this exact
+    // transition assessment pinned. Joining through the assessment prevents a
+    // cached evaluation from another run or replay revision being substituted
+    // merely because it describes similar board geometry.
+    const candidateRows = await tx<CandidateRow[]>`
+      select t.from_ply, c.rank, c.uci, c.expected_score, c.pv
+      from analysis.transition_assessments t
+      join analysis.evaluation_candidates c
+        on c.position_evaluation_id = t.deep_evaluation_id
+      where t.analysis_run_id = ${runId}
+        and t.materialization_run_id = ${materializationRunId}
+      order by t.from_ply, c.rank
+    `;
+    const mutableCandidates = new Map<number, CandidateLine[]>();
+    const malformedCandidatePlies = new Set<number>();
+    const candidateRanks = new Map<number, Set<number>>();
+    const candidateMoves = new Map<number, Set<string>>();
+    for (const row of candidateRows) {
+      const expectedScore = Number(row.expected_score);
+      const pvIsValid = Array.isArray(row.pv)
+        && row.pv.every((move): move is string => typeof move === "string");
+      const valid = Number.isInteger(row.from_ply)
+        && Number.isInteger(row.rank)
+        && row.rank >= 1
+        && row.rank <= 32
+        && /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(row.uci)
+        && Number.isFinite(expectedScore)
+        && expectedScore >= 0
+        && expectedScore <= 1
+        && pvIsValid
+        && (row.pv.length === 0 || row.pv[0] === row.uci);
+      if (!valid) {
+        malformedCandidatePlies.add(row.from_ply);
+        continue;
+      }
+      const ranks = candidateRanks.get(row.from_ply) ?? new Set<number>();
+      const moves = candidateMoves.get(row.from_ply) ?? new Set<string>();
+      if (ranks.has(row.rank) || moves.has(row.uci)) {
+        malformedCandidatePlies.add(row.from_ply);
+        continue;
+      }
+      ranks.add(row.rank);
+      moves.add(row.uci);
+      candidateRanks.set(row.from_ply, ranks);
+      candidateMoves.set(row.from_ply, moves);
+      mutableCandidates.set(row.from_ply, [
+        ...(mutableCandidates.get(row.from_ply) ?? []),
+        { rank: row.rank, uci: row.uci, expectedScore, pv: row.pv },
+      ]);
+    }
+    // Silently dropping one bad line would turn a partial searched set into a
+    // complete-looking one. The whole ply is unavailable instead.
+    for (const ply of malformedCandidatePlies) mutableCandidates.delete(ply);
+    const candidatesByPly: ReadonlyMap<number, readonly CandidateLine[]> = mutableCandidates;
 
     const versions = await conceptVersionIds(tx);
     if (versions.size === 0) {
@@ -184,10 +267,12 @@ export async function detectForRun(
         game.result === "white" || game.result === "black" || game.result === "draw"
           ? game.result
           : null,
+      candidatesByPly,
+      unavailableCandidatePlies: malformedCandidatePlies,
       positions: positions.map((row): PositionFact => ({ ply: row.ply, fen: row.fen })),
       transitions: transitions.map((row): TransitionFact => ({
         fromPly: row.from_ply,
-        actorColor: row.actor_color === "white" ? "white" : "black",
+        actorColor: row.actor_color as "white" | "black",
         playedMoveUci: row.played_move_uci,
         bestMoveUci: row.best_move_uci,
         playedMoveRank: row.played_move_rank,
@@ -319,7 +404,8 @@ export async function detectForRun(
             ${group.event.eventType}, ${group.event.startPly},
             ${group.event.focalPly}, ${group.event.endPly},
             ${resolveColor(group.event.actor)}, ${resolveColor(group.event.affected)},
-            ${jsonParam(group.event.facts)}::jsonb, null, ${group.event.completeness},
+            ${jsonParam(group.event.facts)}::jsonb, ${group.event.confidence},
+            ${group.event.completeness},
             ${detectionKey}
           )
           returning id

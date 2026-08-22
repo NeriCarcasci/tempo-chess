@@ -127,26 +127,51 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
   {
     id: "pin/bishop-pins-knight-to-king",
     family: "pin",
-    shape: "positive",
+    shape: "refuted_geometry",
     fen: "8/4k3/5n2/8/7B/8/8/4K3 w - - 0 1",
     move: "h4g5",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "Bg5 pins the knight on f6 against the king on e7 along the g5-f6-e7 diagonal. "
-      + "Absolute pin: the knight cannot legally move. Event pin, subtype absolute, role execute.",
+      "Bg5 pins the knight on f6 against the king on e7, and the knight cannot legally move. "
+      + "It still wins nothing: Bxf6 is answered by Kxf6, so the pinned piece is not winnable. "
+      + "Written first as a positive, which was the mistake -- immobilising a piece and winning "
+      + "one are different claims, and the contract records only the second.",
+  },
+  {
+    id: "pin/rook-pins-knight-and-wins-it",
+    family: "pin",
+    shape: "positive",
+    fen: "3k4/8/8/3n4/8/8/8/R6K w - - 0 1",
+    move: "a1d1",
+    expectLegal: true,
+    subjectColor: "white",
+    expectation:
+      "Rd1 pins the undefended knight on d5 against the king on d8. Every black reply loses it: "
+      + "moving the king leaves it hanging and it cannot move itself. Event pin, subtype "
+      + "absolute, role execute, payoff a knight.",
+  },
+  {
+    id: "pin/rook-pins-knight-and-wins-it-black",
+    family: "pin",
+    shape: "positive",
+    fen: "r6k/8/8/8/3N4/8/8/3K4 b - - 0 1",
+    move: "a8d8",
+    expectLegal: true,
+    subjectColor: "black",
+    expectation: "The same winning pin with the colours reversed.",
   },
   {
     id: "pin/bishop-pins-knight-to-king-black",
     family: "pin",
-    shape: "positive",
+    shape: "refuted_geometry",
     fen: "4k3/8/8/8/1b6/8/3N4/4K3 b - - 0 1",
     move: "b4c3",
     expectLegal: true,
     subjectColor: "black",
     expectation:
-      "The colour-reversed twin: Bc3 pins the knight on d2 against the king on e1 along "
-      + "c3-d2-e1. Absolute pin, role execute, subject Black.",
+      "The colour-reversed twin of the bishop pin, and a negative for the same reason: Bxd2 is "
+      + "answered by Kxd2.",
   },
   {
     id: "pin/alignment-with-nothing-behind-it",
@@ -174,8 +199,33 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
     subjectColor: "white",
     expectation:
       "Re1+ skewers the king on e4 to the rook on e7. The king must step off the e-file and "
-      + "Rxe7 follows. Front target is the more valuable one, which is what separates this "
-      + "from a pin.",
+      + "Rxe7 follows. The rook cannot interpose: the only blocking squares are e2 and e3, and "
+      + "its own king on e4 stands in the way of reaching them. Front target is the more "
+      + "valuable one, which is what separates this from a pin.",
+  },
+  {
+    id: "skewer/bishop-checks-king-wins-rook",
+    family: "skewer",
+    shape: "positive",
+    fen: "7r/6k1/8/8/8/8/8/2B2K2 w - - 0 1",
+    move: "c1b2",
+    expectLegal: true,
+    subjectColor: "white",
+    expectation:
+      "Bb2+ checks the king on g7 along a1-h8 with the rook on h8 directly behind it. Nothing "
+      + "can interpose -- the rook cannot reach the diagonal in one move -- so the king moves and "
+      + "Bxh8 follows. Where the king steps to g8 or h7 it defends the rook, which the payoff "
+      + "accounts for.",
+  },
+  {
+    id: "skewer/bishop-checks-king-wins-rook-black",
+    family: "skewer",
+    shape: "positive",
+    fen: "2b1k3/8/8/8/8/8/6K1/7R b - - 0 1",
+    move: "c8b7",
+    expectLegal: true,
+    subjectColor: "black",
+    expectation: "The same skewer with the colours reversed: Bb7+ along a8-h1, winning the rook on h1.",
   },
   {
     id: "skewer/rear-target-is-defended",
@@ -198,37 +248,40 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
     id: "discovered_attack/knight-steps-off-the-diagonal",
     family: "discovered_attack",
     shape: "positive",
-    fen: "8/6k1/8/8/3N4/8/8/B6K w - - 0 1",
+    fen: "8/2r3k1/8/8/3N4/8/8/B6K w - - 0 1",
     move: "d4b5",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "Nb5 vacates the a1-h8 diagonal and the bishop on a1 checks the king on g7. "
-      + "The knight itself attacks nothing relevant, so this is a plain discovered check.",
+      "Nb5 vacates the a1-h8 diagonal and the bishop on a1 checks the king on g7, while the "
+      + "knight lands attacking the rook on c7. The check must be answered and the rook falls. "
+      + "Written first without the rook, where the discovery won nothing at all -- a check that "
+      + "wins nothing is not a chance the opponent missed.",
   },
   {
     id: "discovered_attack/double-check",
     family: "discovered_attack",
     shape: "positive",
-    fen: "8/6k1/8/8/3N4/8/8/B6K w - - 0 1",
+    fen: "8/4r1k1/8/8/3N4/8/8/B6K w - - 0 1",
     move: "d4f5",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "Nf5+ checks from the knight and uncovers the bishop's check at the same time. "
-      + "Subtype double_check, from the same family and the same event type.",
+      "Nf5+ checks from the knight and uncovers the bishop's check at the same time. Double "
+      + "check: no interposition and no capture answers it, the king has to move, and the rook "
+      + "on e7 falls. Subtype double_check, same family and same event type.",
   },
   {
     id: "discovered_attack/knight-steps-off-the-diagonal-black",
     family: "discovered_attack",
     shape: "positive",
-    fen: "b3k3/8/8/3n4/8/8/6K1/8 b - - 0 1",
+    fen: "b2k4/8/8/3n4/8/8/4R1K1/8 b - - 0 1",
     move: "d5c3",
     expectLegal: true,
     subjectColor: "black",
     expectation:
-      "The colour-reversed twin: Nc3 vacates the a8-h1 diagonal and the bishop on a8 checks "
-      + "the king on g2.",
+      "The colour-reversed twin: Nc3 vacates the a8-h1 diagonal, the bishop on a8 checks the "
+      + "king on g2, and the knight lands attacking the rook on e2.",
   },
   {
     id: "discovered_attack/line-was-never-blocked",
@@ -250,25 +303,37 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
     id: "removal_of_defender/capture-the-pawn-that-guards",
     family: "removal_of_defender",
     shape: "positive",
-    fen: "4k3/8/2p5/3n4/1N6/8/8/3RK3 w - - 0 1",
+    fen: "3k4/8/2p5/3n4/1N6/8/8/3RK3 w - - 0 1",
     move: "b4c6",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "Nxc6 takes the only defender of the knight on d5; Rxd5 then wins it. "
-      + "Event removal_of_defender, method capture, role execute.",
+      "Nxc6 takes the only defender of the knight on d5, which is pinned to the king on d8 by "
+      + "the rook and so cannot run. Rxd5 follows whatever Black does. Written first with the "
+      + "king on e8, where the knight simply moves away -- removing a guard wins nothing if what "
+      + "it was guarding can walk off.",
+  },
+  {
+    id: "removal_of_defender/capture-the-pawn-that-guards-black",
+    family: "removal_of_defender",
+    shape: "positive",
+    fen: "3kr3/8/8/6n1/4N3/5P2/8/4K3 b - - 0 1",
+    move: "g5f3",
+    expectLegal: true,
+    subjectColor: "black",
+    expectation: "The colour-reversed removal: Nxf3 removes the knight on e4's only guard.",
   },
   {
     id: "removal_of_defender/target-has-a-second-defender",
     family: "removal_of_defender",
     shape: "refuted_geometry",
-    fen: "4k3/4b3/2p5/3n4/1N6/8/8/3RK3 w - - 0 1",
+    fen: "3k4/8/2p1p3/3n4/1N6/8/8/3RK3 w - - 0 1",
     move: "b4c6",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "The bishop on e7 also guards d5, so removing the c6 pawn wins nothing. "
-      + "The duty was shared, and a shared duty is not removed by taking one holder of it.",
+      "The pawn on e6 also guards d5, so removing the c6 pawn wins nothing: Rxd5 is answered by "
+      + "exd5. The duty was shared, and a shared duty is not removed by taking one holder of it.",
   },
 
   // -------------------------------------------------------------------------
@@ -278,27 +343,102 @@ export const CONCEPT_FIXTURES: readonly ConceptFixture[] = Object.freeze([
     id: "trapped_piece/knight-in-the-corner",
     family: "trapped_piece",
     shape: "positive",
-    fen: "n3k3/8/8/1PP5/8/8/8/4K3 w - - 0 1",
+    fen: "n7/8/2B5/PP6/7k/8/8/4K3 w - - 0 1",
     move: "b5b6",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "b6 takes c7 away from the knight on a8 while the c5 pawn covers b6. "
-      + "Both squares the knight has are gone, so it is lost. Role execute for White; "
-      + "the same event gives Black a respond opportunity on the next ply.",
+      "b6 takes c7 away from the knight on a8 while the a5 pawn covers b6, and the bishop on c6 "
+      + "attacks a8 so staying loses it too. Nxb6 axb6, Nc7 bxc7, anything else Bxa8. Written "
+      + "first without the bishop, where the knight was merely restricted -- a piece nobody is "
+      + "attacking has not been lost yet, however few squares it has.",
   },
   {
     id: "trapped_piece/knight-still-has-a-square",
     family: "trapped_piece",
     shape: "near_miss",
-    fen: "n3k3/8/8/1P6/8/8/8/4K3 w - - 0 1",
+    fen: "n7/8/2B5/1P6/7k/8/8/4K3 w - - 0 1",
     move: "b5b6",
     expectLegal: true,
     subjectColor: "white",
     expectation:
-      "Without the c5 pawn, b6 is free and the knight escapes there. "
-      + "One escape square is enough — the piece is not trapped, and this is a negative.",
+      "Without the a5 pawn behind it, b6 is undefended and the knight takes it for free. "
+      + "One escape is enough — the piece is not trapped, and this is a negative.",
   },
+  {
+    id: "trapped_piece/knight-in-the-corner-black",
+    family: "trapped_piece",
+    shape: "positive",
+    fen: "3k4/8/8/K7/6pp/5b2/8/7N b - - 0 1",
+    move: "g4g3",
+    expectLegal: true,
+    subjectColor: "black",
+    expectation: "The colour-reversed trap: ...g3 removes the white knight's last safe square.",
+  },
+
+  // -------------------------------------------------------------------------
+  // Contract-matrix evidence variants. Alternative and incomplete cases reuse
+  // the positive board deliberately: the premise that changes is stored search
+  // evidence, not geometry. Illegal cases use a genuinely pinned focal mover.
+  // -------------------------------------------------------------------------
+  ...[
+    ["double_attack/stronger-follow-up", "double_attack", "alternative_better", "r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1", "b5c7", true,
+      "The fork exists, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["double_attack/truncated-line", "double_attack", "incomplete_evidence", "r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1", "b5c7", true,
+      "The fork exists, but a stored line shorter than its claim produces no row."],
+
+    ["pin/stronger-follow-up", "pin", "alternative_better", "3k4/8/8/3n4/8/8/8/R6K w - - 0 1", "a1d1", true,
+      "The pin exists, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["pin/pinner-is-pinned", "pin", "illegal_attacker", "r3k3/8/8/4n3/8/8/R7/K7 w - - 0 1", "a2e2", false,
+      "The rook would create a pin on the e-file, but it is pinned to its own king on a1."],
+    ["pin/truncated-line", "pin", "incomplete_evidence", "3k4/8/8/3n4/8/8/8/R6K w - - 0 1", "a1d1", true,
+      "The pin exists, but a stored line shorter than its claim produces no row."],
+
+    ["skewer/one-square-short", "skewer", "near_miss", "8/4r3/8/8/4k3/8/8/R6K w - - 0 1", "a1a2", true,
+      "Ra2 does not land on the king and rook's e-file, so no skewer is created."],
+    ["skewer/stronger-follow-up", "skewer", "alternative_better", "8/4r3/8/8/4k3/8/8/R6K w - - 0 1", "a1e1", true,
+      "The skewer exists, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["skewer/skewering-rook-is-pinned", "skewer", "illegal_attacker", "r3r3/8/8/4k3/8/8/R7/K7 w - - 0 1", "a2e2", false,
+      "The rook would skewer on the e-file, but moving it exposes its own king on a1."],
+    ["skewer/truncated-line", "skewer", "incomplete_evidence", "8/4r3/8/8/4k3/8/8/R6K w - - 0 1", "a1e1", true,
+      "The skewer exists, but a stored line shorter than its claim produces no row."],
+
+    ["discovered_attack/equal-payoff", "discovered_attack", "refuted_geometry", "8/2n3k1/8/8/3N4/8/8/B6K w - - 0 1", "d4b5", true,
+      "The line opens with check, but the mover attacks only an equal knight; no material is won."],
+    ["discovered_attack/stronger-follow-up", "discovered_attack", "alternative_better", "8/2r3k1/8/8/3N4/8/8/B6K w - - 0 1", "d4b5", true,
+      "The discovery exists, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["discovered_attack/mover-is-pinned", "discovered_attack", "illegal_attacker", "3r4/2r3k1/8/8/3N4/8/8/B2K4 w - - 0 1", "d4b5", false,
+      "The knight would uncover the bishop, but it is pinned to the king on d1."],
+    ["discovered_attack/truncated-line", "discovered_attack", "incomplete_evidence", "8/2r3k1/8/8/3N4/8/8/B6K w - - 0 1", "d4b5", true,
+      "The discovery exists, but a stored line shorter than its claim produces no row."],
+
+    ["removal_of_defender/guard-not-touched", "removal_of_defender", "near_miss", "3k4/8/2p5/3n4/1N6/8/8/3RK3 w - - 0 1", "b4a6", true,
+      "Na6 neither captures nor deflects the pawn on c6, so its duty remains."],
+    ["removal_of_defender/stronger-follow-up", "removal_of_defender", "alternative_better", "3k4/8/2p5/3n4/1N6/8/8/3RK3 w - - 0 1", "b4c6", true,
+      "The guard is removed, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["removal_of_defender/remover-is-pinned", "removal_of_defender", "illegal_attacker", "1r1k4/2p5/8/1N1n4/8/8/8/1K1R4 w - - 0 1", "b5c7", false,
+      "The knight would capture the guard on c7, but it is pinned to the king on b1."],
+    ["removal_of_defender/truncated-line", "removal_of_defender", "incomplete_evidence", "3k4/8/2p5/3n4/1N6/8/8/3RK3 w - - 0 1", "b4c6", true,
+      "The guard is removed, but a stored line shorter than its claim produces no row."],
+
+    ["trapped_piece/restriction-does-not-win", "trapped_piece", "refuted_geometry", "n7/8/2B5/1P6/7k/8/8/4K3 w - - 0 1", "b5b6", true,
+      "The knight is restricted but can capture b6 safely, so the geometry is refuted."],
+    ["trapped_piece/stronger-follow-up", "trapped_piece", "alternative_better", "n7/8/2B5/PP6/7k/8/8/4K3 w - - 0 1", "b5b6", true,
+      "The trap exists, but an acceptable stronger follow-up must abstain rather than fail."],
+    ["trapped_piece/restricting-pawn-is-pinned", "trapped_piece", "illegal_attacker", "n7/8/b1B5/PP6/7k/8/4K3/8 w - - 0 1", "b5b6", false,
+      "The pawn would remove the knight's last square, but moving exposes the king on e2."],
+    ["trapped_piece/truncated-line", "trapped_piece", "incomplete_evidence", "n7/8/2B5/PP6/7k/8/8/4K3 w - - 0 1", "b5b6", true,
+      "The trap exists, but a stored line shorter than its claim produces no row."],
+  ].map(([id, family, shape, fen, move, expectLegal, expectation]) => ({
+    id,
+    family,
+    shape,
+    fen,
+    move,
+    expectLegal,
+    subjectColor: "white" as const,
+    expectation,
+  } as ConceptFixture)),
 ]);
 
 export function fixturesFor(family: string): readonly ConceptFixture[] {
