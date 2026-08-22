@@ -14,7 +14,13 @@
  */
 
 import { describe, expect, test } from "vitest";
-import { conceptSectionState, conceptsAtPly, lichessIdFrom } from "./review";
+import {
+  conceptSectionState,
+  conceptsAtPly,
+  fetchReviewByLichessId,
+  lichessIdFrom,
+} from "./review";
+import { ProblemError } from "./problem";
 import type { GameReview } from "./types";
 
 function review(over: Partial<GameReview> = {}): GameReview {
@@ -71,12 +77,12 @@ describe("what the panel says when it has nothing", () => {
 });
 
 describe("which move a concept belongs to", () => {
-  test("an event covers every ply of its span", () => {
+  test("an event appears on its focal ply, not every position in its response window", () => {
     const found = review({ events: [event(4, 6)] } as Partial<GameReview>);
     expect(conceptsAtPly(found, 3)).toHaveLength(0);
     expect(conceptsAtPly(found, 4)).toHaveLength(1);
-    expect(conceptsAtPly(found, 5)).toHaveLength(1);
-    expect(conceptsAtPly(found, 6)).toHaveLength(1);
+    expect(conceptsAtPly(found, 5)).toHaveLength(0);
+    expect(conceptsAtPly(found, 6)).toHaveLength(0);
     expect(conceptsAtPly(found, 7)).toHaveLength(0);
   });
 
@@ -98,5 +104,47 @@ describe("bridging the two identifiers", () => {
   test("anything else is null rather than a guess", () => {
     expect(lichessIdFrom(null)).toBeNull();
     expect(lichessIdFrom("https://chess.com/game/123")).toBeNull();
+    expect(lichessIdFrom("https://example.test/lichess.org/abcd1234")).toBeNull();
+  });
+
+  test("the recent-games bridge stays within the route limit and preserves id case", async () => {
+    let askedFor = 0;
+    let reviewed = "";
+    const result = await fetchReviewByLichessId("AbCd1234", 200, {
+      recentGames: async (limit) => {
+        askedFor = limit;
+        return [
+          { id: "wrong", providerUrl: "https://lichess.org/abcd1234" },
+          { id: "right", providerUrl: "https://lichess.org/AbCd1234" },
+        ] as never;
+      },
+      review: async (gameId) => {
+        reviewed = gameId;
+        return review();
+      },
+    });
+    expect(askedFor).toBe(12);
+    expect(reviewed).toBe("right");
+    expect(result.status).toBe("found");
+  });
+
+  test("the review's 404 and a failed lookup are different absences", async () => {
+    const recentGames = async () => [
+      { id: "known", providerUrl: "https://lichess.org/AbCd1234" },
+    ] as never;
+    const notAnalysed = await fetchReviewByLichessId("AbCd1234", 12, {
+      recentGames,
+      review: async () => {
+        throw new ProblemError({
+          type: "about:blank", title: "Not found", status: 404, code: "NOT_FOUND",
+        });
+      },
+    });
+    const unreachable = await fetchReviewByLichessId("AbCd1234", 12, {
+      recentGames: async () => { throw new Error("offline"); },
+      review: async () => review(),
+    });
+    expect(notAnalysed).toEqual({ status: "absent", reason: "not_analyzed" });
+    expect(unreachable).toEqual({ status: "absent", reason: "unreachable" });
   });
 });

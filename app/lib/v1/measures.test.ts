@@ -129,14 +129,15 @@ describe("coverageItemText", () => {
     for (const sentence of [limitation, gap, measure]) expect(sentence).not.toContain("_");
   });
 
-  test("a dimension key is named readably, from the key alone", () => {
+  test("a dimension key without catalogue metadata falls back without printing the identifier", () => {
     // The coverage route sends a key and nothing else -- no estimate, so no
     // `copy` to read the catalogue's own words from. What has to hold is that
     // the sentence is readable and carries no identifier; the catalogue name
     // appears wherever an estimate is present to carry it.
     const sentence = coverageItemText("winning_conversion_convert");
     expect(sentence).not.toContain("_");
-    expect(sentence).toMatch(/winning conversion/i);
+    expect(sentence).not.toMatch(/winning conversion/i);
+    expect(sentence).toMatch(/measured area/i);
   });
 });
 

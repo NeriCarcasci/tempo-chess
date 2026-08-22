@@ -60,6 +60,8 @@ const estimateSchema = z.object({
   copy: z.object({
     conceptSlug: z.string().nullable(),
     role: z.string().nullable(),
+    category: z.string().nullable(),
+    roleLabel: z.string().nullable(),
     definition: z.string(),
     narrative: z.object({
       opportunity: z.string(),

@@ -17,7 +17,7 @@
  * page comes off the wire.
  */
 
-import { humaniseDimension, limitationText, LIMITATION_TEXT, sectionTitle, sortSections } from "../onboarding/copy";
+import { limitationText, LIMITATION_TEXT, sectionTitle, sortSections } from "../onboarding/copy";
 
 /**
  * The roles v1 actually measures.
@@ -55,7 +55,11 @@ export const CENSORING_NOTE =
  * dimension key and nothing else.
  */
 export function measureName(dimensionKey: string): string {
-  return humaniseDimension(dimensionKey);
+  // A dimension key is an identifier, even after replacing underscores with
+  // spaces. Callers with estimate metadata use the server-owned display name;
+  // callers without it get a deliberately generic reader-facing noun.
+  void dimensionKey;
+  return "A measured area";
 }
 
 // ---------------------------------------------------------------------------

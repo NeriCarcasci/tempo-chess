@@ -19,7 +19,7 @@ import type { Sql } from "postgres";
 import { withActor } from "../../db/actor.js";
 import { withActorContext } from "../auth/context.js";
 import { client } from "../../db/client.js";
-import { readGameReview } from "../../engine/review.js";
+import { readGameReview, REVIEW_FACT_SHAPE } from "../../engine/review.js";
 import { planGameAnalysis } from "../../engine/plan.js";
 import { EVALUATION_PURPOSES, evaluatePositionRequest } from "../../engine/interactive.js";
 import { ENGINE_PROFILES } from "../../engine/contract.js";
@@ -88,12 +88,17 @@ const reviewConceptSchema = z.object({
   detectorVersion: z.string(),
   observed: z.boolean(),
   success: z.boolean().nullable(),
+  score: z.number().nullable(),
   censoredReason: z.string().nullable(),
   opportunityPly: z.number().int(),
   responsePly: z.number().int().nullable(),
-  difficulty: z.record(z.string(), z.number()).nullable(),
+  difficulty: z.record(z.string().min(1).max(64), z.number().finite()).superRefine((value, context) => {
+    if (Object.keys(value).length > 32) {
+      context.addIssue({ code: "custom", message: "difficulty has too many fields" });
+    }
+  }).nullable(),
   confidence: z.number().nullable(),
-  evidenceSourceKind: z.string(),
+  evidenceSourceKind: z.enum(["engine", "deterministic", "human_model"]),
   evidenceItemId: z.string().nullable(),
 });
 
@@ -104,16 +109,31 @@ const reviewConceptSchema = z.object({
  * arrays of primitives out of the detector's jsonb and drops the rest, so the
  * response shape is not whatever the last detector happened to write.
  */
+function factSchema(kind: (typeof REVIEW_FACT_SHAPE)[keyof typeof REVIEW_FACT_SHAPE]) {
+  if (kind === "number") return z.number().finite();
+  if (kind === "nullableNumber") return z.number().finite().nullable();
+  if (kind === "boolean") return z.boolean();
+  if (kind === "nullableBoolean") return z.boolean().nullable();
+  if (kind === "string") return z.string().max(120);
+  if (kind === "nullableString") return z.string().max(120).nullable();
+  if (kind === "numberArray") return z.array(z.number().finite()).max(32);
+  return z.array(z.string().max(120)).max(32).nullable();
+}
+const reviewFactsSchema = z.object(
+  Object.fromEntries(Object.entries(REVIEW_FACT_SHAPE).map(([key, kind]) =>
+    [key, factSchema(kind).optional()])),
+).strict();
+
 const reviewEventSchema = z.object({
-  eventType: z.string(),
+  eventType: z.string().min(1).max(64),
   startPly: z.number().int(),
   focalPly: z.number().int(),
   endPly: z.number().int(),
-  actorColor: z.string().nullable(),
-  affectedColor: z.string().nullable(),
-  completeness: z.string(),
+  actorColor: z.enum(["white", "black"]).nullable(),
+  affectedColor: z.enum(["white", "black"]).nullable(),
+  completeness: z.enum(["complete", "incomplete", "censored"]),
   confidence: z.number().nullable(),
-  facts: z.record(z.string(), z.unknown()),
+  facts: reviewFactsSchema,
   concepts: z.array(reviewConceptSchema),
 });
 
@@ -129,6 +149,7 @@ const reviewSchema = z.object({
     concepts: sectionState,
     explanations: sectionState,
     trajectory: sectionState,
+    practicalContext: sectionState,
   }),
   moves: z.array(reviewMoveSchema),
   events: z.array(reviewEventSchema),

@@ -73,8 +73,9 @@ describe("CoveragePanel", () => {
       />,
     );
     expect(screen.getByText("only 2 chances observed")).toBeTruthy();
-    // And the key is humanised rather than printed as an identifier.
-    expect(screen.getByText("King safety")).toBeTruthy();
+    // This endpoint carries no catalogue copy, so the fallback stays generic
+    // rather than turning an internal key into a reader-facing claim.
+    expect(screen.getByText("A measured area")).toBeTruthy();
   });
 
   test("a sufficient dimension states no reason", () => {

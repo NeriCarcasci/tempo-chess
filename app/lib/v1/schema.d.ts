@@ -1951,6 +1951,7 @@ export interface operations {
                             coverageWarnings: string[];
                             estimates: {
                                 copy: {
+                                    category: string | null;
                                     conceptSlug: string | null;
                                     definition: string;
                                     narrative: {
@@ -1959,6 +1960,7 @@ export interface operations {
                                         succeeded: string;
                                     } | null;
                                     role: string | null;
+                                    roleLabel: string | null;
                                 };
                                 coverage: {
                                     censored: number;
@@ -2844,9 +2846,10 @@ export interface operations {
                                 reasons: string[];
                             }[];
                             events: {
-                                actorColor: string | null;
-                                affectedColor: string | null;
-                                completeness: string;
+                                actorColor: ("white" | "black") | null;
+                                affectedColor: ("white" | "black") | null;
+                                /** @enum {string} */
+                                completeness: "complete" | "incomplete" | "censored";
                                 concepts: {
                                     censoredReason: string | null;
                                     color: string;
@@ -2859,11 +2862,13 @@ export interface operations {
                                     } | null;
                                     displayName: string;
                                     evidenceItemId: string | null;
-                                    evidenceSourceKind: string;
+                                    /** @enum {string} */
+                                    evidenceSourceKind: "engine" | "deterministic" | "human_model";
                                     observed: boolean;
                                     opportunityPly: number;
                                     responsePly: number | null;
                                     role: string;
+                                    score: number | null;
                                     slug: string;
                                     success: boolean | null;
                                     versionNo: number;
@@ -2872,7 +2877,71 @@ export interface operations {
                                 endPly: number;
                                 eventType: string;
                                 facts: {
-                                    [key: string]: unknown;
+                                    acceptable?: boolean;
+                                    acceptableMoveCount?: number | null;
+                                    alternativeVerified?: boolean;
+                                    atRiskCp?: number;
+                                    attacker?: number;
+                                    attackers?: number[];
+                                    bestDefence?: string | null;
+                                    candidateCount?: number | null;
+                                    censored?: string | null;
+                                    converted?: boolean | null;
+                                    coverage?: string;
+                                    criticality?: number;
+                                    defender?: number;
+                                    defenderRole?: string;
+                                    defendersBefore?: number;
+                                    discoveredPiece?: number;
+                                    duty?: string;
+                                    escapesTried?: number[];
+                                    expectedGainCp?: number;
+                                    expectedLossCp?: number;
+                                    expectedScoreBefore?: number;
+                                    followUp?: number;
+                                    followUpCp?: number;
+                                    from?: number;
+                                    front?: number;
+                                    frontIsKing?: boolean;
+                                    frontValueCp?: number;
+                                    kingInvolved?: boolean;
+                                    legalMoveCount?: number | null;
+                                    mate?: boolean;
+                                    mover?: string;
+                                    moverChecks?: boolean;
+                                    moverTarget?: number | null;
+                                    moverTo?: number;
+                                    movesPlayed?: number;
+                                    onOfferCp?: number;
+                                    piece?: string;
+                                    pieceValueCp?: number;
+                                    pinned?: number;
+                                    pinnedValueCp?: number;
+                                    pinner?: number;
+                                    rank?: number | null;
+                                    ray?: number[];
+                                    rear?: number;
+                                    rearValueCp?: number;
+                                    remainingCp?: number;
+                                    removalMethod?: string;
+                                    repliesConsidered?: number;
+                                    resolution?: string;
+                                    resolved?: boolean;
+                                    square?: number;
+                                    squareAfter?: number | null;
+                                    subtype?: string;
+                                    taken?: boolean;
+                                    target?: number;
+                                    targetRole?: string;
+                                    targetValueCp?: number;
+                                    targetValues?: number[];
+                                    targets?: number[];
+                                    to?: number;
+                                    uncoveredTarget?: number;
+                                    uncoveredValueCp?: number;
+                                    verificationLine?: string[] | null;
+                                    verifiedBy?: string;
+                                    winnableCp?: number;
                                 };
                                 focalPly: number;
                                 startPly: number;
@@ -2924,6 +2993,8 @@ export interface operations {
                                 events: "published" | "unavailable";
                                 /** @enum {string} */
                                 explanations: "published" | "unavailable";
+                                /** @enum {string} */
+                                practicalContext: "published" | "unavailable";
                                 /** @enum {string} */
                                 trajectory: "published" | "unavailable";
                                 /** @enum {string} */

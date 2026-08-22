@@ -110,12 +110,13 @@ export interface ReviewConcept {
   detectorVersion: string;
   observed: boolean;
   success: boolean | null;
+  score: number | null;
   censoredReason: string | null;
   opportunityPly: number;
   responsePly: number | null;
   difficulty: Record<string, number> | null;
   confidence: number | null;
-  evidenceSourceKind: string;
+  evidenceSourceKind: "engine" | "deterministic" | "human_model";
   /** For tracing a claim in a report back to the moment it came from. */
   evidenceItemId: string | null;
 }
@@ -126,12 +127,12 @@ export interface ReviewEvent {
   startPly: number;
   focalPly: number;
   endPly: number;
-  actorColor: string | null;
-  affectedColor: string | null;
-  completeness: string;
+  actorColor: "white" | "black" | null;
+  affectedColor: "white" | "black" | null;
+  completeness: "complete" | "incomplete" | "censored";
   confidence: number | null;
   /** Board-derived facts only; see `safeFacts`. */
-  facts: Record<string, unknown>;
+  facts: Record<string, ReviewFactValue>;
   concepts: ReviewConcept[];
 }
 
@@ -164,6 +165,7 @@ interface PublicationRow {
   recipe_version_id: string;
   published_revision_id: string;
   latest_revision_id: string;
+  subject_color: "white" | "black";
 }
 
 /**
@@ -181,7 +183,7 @@ export async function readGameReview(
   const [publication] = await sql<PublicationRow[]>`
     select pub.run_id, pub.publication_id, pub.published_at, pub.recipe_version_id,
            pub.replay_revision_id as published_revision_id,
-           sg.latest_replay_revision_id as latest_revision_id
+           sg.latest_replay_revision_id as latest_revision_id, sg.subject_color
     from analysis.subject_game_publications pub
     join chess.subject_games sg on sg.id = pub.subject_game_id
     join app.analysis_subjects s on s.id = sg.subject_id
@@ -268,19 +270,39 @@ export async function readGameReview(
   // `analysis.run_artifacts` records a family with a count of zero for a quiet
   // game; an absent row is a run that never got there. Publications written
   // before the detector existed have neither, and must keep saying unavailable.
-  const detectorFamilies = new Set(
-    (await sql<{ family: string }[]>`
-      select family from analysis.run_artifacts
+  const detectorArtifacts = new Map(
+    (await sql<{ family: string; row_count: number }[]>`
+      select family, row_count from analysis.run_artifacts
       where run_id = ${publication.run_id}
         and family in ('chess_events', 'concept_opportunities')
-    `).map((row) => row.family),
+    `).map((row) => [row.family, Number(row.row_count)] as const),
   );
   const materializationRunId = await publishedMaterializationRun(
     sql,
     String(publication.published_revision_id),
   );
-  const events = detectorFamilies.has("chess_events") && materializationRunId !== null
-    ? await readEvents(sql, materializationRunId, input.subjectGameId)
+  const [mapped] = materializationRunId === null
+    ? []
+    : await sql<{ event_count: number; opportunity_count: number }[]>`
+        select count(distinct o.event_id)::int as event_count,
+               count(*)::int as opportunity_count
+        from analysis.run_concept_opportunities ro
+        join analysis.concept_opportunities o on o.id = ro.opportunity_id
+        where ro.analysis_run_id = ${publication.run_id}
+          and o.run_id = ${materializationRunId}
+          and o.subject_game_id = ${input.subjectGameId}
+      `;
+  const detectionPublished = mapped !== undefined
+    && detectorArtifacts.get("chess_events") === Number(mapped.event_count)
+    && detectorArtifacts.get("concept_opportunities") === Number(mapped.opportunity_count);
+  const events = detectionPublished && materializationRunId !== null
+    ? await readEvents(
+        sql,
+        publication.run_id,
+        materializationRunId,
+        input.subjectGameId,
+        publication.subject_color,
+      )
     : [];
 
   return {
@@ -305,8 +327,8 @@ export async function readGameReview(
       // game nobody has measured. A publication written before the detector
       // existed has no manifest entry and keeps saying unavailable, so a client
       // cannot read "not analysed yet" as "nothing found".
-      events: detectorFamilies.has("chess_events") ? "published" : "unavailable",
-      concepts: detectorFamilies.has("concept_opportunities") ? "published" : "unavailable",
+      events: detectionPublished ? "published" : "unavailable",
+      concepts: detectionPublished ? "published" : "unavailable",
       // E15, still to come. Named rather than omitted.
       explanations: "unavailable",
       trajectory: "unavailable",
@@ -343,31 +365,64 @@ export async function readGameReview(
  * response shape is decided by a detector is one no client can be written
  * against.
  */
-function safeFacts(raw: unknown): Record<string, unknown> {
+export const REVIEW_FACT_SHAPE = {
+  square: "number", piece: "string", atRiskCp: "number", squareAfter: "nullableNumber",
+  remainingCp: "number", resolved: "boolean", resolution: "string", onOfferCp: "number",
+  taken: "boolean", alternativeVerified: "boolean", criticality: "number", rank: "nullableNumber",
+  acceptable: "boolean", acceptableMoveCount: "nullableNumber", coverage: "string",
+  candidateCount: "nullableNumber", legalMoveCount: "nullableNumber", expectedScoreBefore: "number",
+  converted: "nullableBoolean", censored: "nullableString", movesPlayed: "number", mover: "string",
+  from: "number", to: "number", targets: "numberArray", targetValues: "numberArray",
+  kingInvolved: "boolean", subtype: "string", expectedGainCp: "number",
+  bestDefence: "nullableString", mate: "boolean", verificationLine: "nullableStringArray",
+  verifiedBy: "string", pinner: "number", pinned: "number", target: "number", ray: "numberArray",
+  pinnedValueCp: "number", targetValueCp: "number", winnableCp: "number", attacker: "number",
+  front: "number", rear: "number", frontValueCp: "number", rearValueCp: "number",
+  frontIsKing: "boolean", discoveredPiece: "number", moverTo: "number", uncoveredTarget: "number",
+  uncoveredValueCp: "number", moverChecks: "boolean", moverTarget: "nullableNumber",
+  defender: "number", defenderRole: "string", targetRole: "string", duty: "string",
+  removalMethod: "string", defendersBefore: "number", followUpCp: "number", followUp: "number",
+  pieceValueCp: "number", attackers: "numberArray", escapesTried: "numberArray",
+  repliesConsidered: "number", expectedLossCp: "number",
+} as const;
+
+export const REVIEW_FACT_KEYS = Object.keys(REVIEW_FACT_SHAPE) as (keyof typeof REVIEW_FACT_SHAPE)[];
+
+export type ReviewFactValue = string | number | boolean | null
+  | string[] | number[];
+
+function safeFactValue(
+  kind: (typeof REVIEW_FACT_SHAPE)[keyof typeof REVIEW_FACT_SHAPE],
+  value: unknown,
+): ReviewFactValue | undefined {
+  if (kind.startsWith("nullable") && value === null) return null;
+  if ((kind === "number" || kind === "nullableNumber")
+    && typeof value === "number" && Number.isFinite(value)) return value;
+  if ((kind === "boolean" || kind === "nullableBoolean") && typeof value === "boolean") return value;
+  if ((kind === "string" || kind === "nullableString") && typeof value === "string") {
+    return value.slice(0, 120);
+  }
+  if ((kind === "numberArray" || kind === "nullableStringArray") && Array.isArray(value)) {
+    if (value.length > 32) return undefined;
+    if (kind === "numberArray" && value.every((item) =>
+      typeof item === "number" && Number.isFinite(item))) return value;
+    if (kind === "nullableStringArray" && value.every((item) => typeof item === "string")) {
+      return value.map((item) => item.slice(0, 120));
+    }
+  }
+  return undefined;
+}
+
+export function safeFacts(raw: unknown): Record<string, ReviewFactValue> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  const safe: Record<string, unknown> = {};
+  const safe: Record<string, ReviewFactValue> = {};
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (value === null || typeof value === "number" || typeof value === "boolean") {
-      safe[key] = value;
-      continue;
-    }
-    if (typeof value === "string") {
-      safe[key] = value.slice(0, 120);
-      continue;
-    }
-    if (Array.isArray(value)) {
-      const items = value
-        .filter((item) => item === null
-          || typeof item === "number"
-          || typeof item === "boolean"
-          || typeof item === "string")
-        .slice(0, 32)
-        .map((item) => (typeof item === "string" ? item.slice(0, 120) : item));
-      if (items.length === value.length) safe[key] = items;
-      continue;
-    }
-    // Anything else -- a nested object, a function, whatever a future detector
-    // invents -- is dropped rather than passed through.
+    if (!(key in REVIEW_FACT_SHAPE)) continue;
+    const checked = safeFactValue(
+      REVIEW_FACT_SHAPE[key as keyof typeof REVIEW_FACT_SHAPE],
+      value,
+    );
+    if (checked !== undefined) safe[key] = checked;
   }
   return safe;
 }
@@ -378,9 +433,9 @@ interface EventRow {
   start_ply: number;
   focal_ply: number;
   end_ply: number;
-  actor_color: string | null;
-  affected_color: string | null;
-  completeness: string;
+  actor_color: "white" | "black" | null;
+  affected_color: "white" | "black" | null;
+  completeness: "complete" | "incomplete" | "censored";
   detection_confidence: string | null;
   detection_key: string | null;
   facts: unknown;
@@ -398,13 +453,30 @@ interface ConceptRow {
   detector_version: string;
   response_observed: boolean;
   success: boolean | null;
+  score: string | null;
   censored_reason: string | null;
   opportunity_ply: number;
   response_ply: number | null;
-  difficulty: Record<string, number> | null;
+  difficulty: unknown;
   confidence: string | null;
-  evidence_source_kind: string;
+  evidence_source_kind: "engine" | "deterministic" | "human_model";
   evidence_item_id: string | null;
+}
+
+function safeDifficulty(raw: unknown): Record<string, number> | null {
+  if (raw === null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) return null;
+  const entries = Object.entries(raw as Record<string, unknown>).sort(([left], [right]) =>
+    left.localeCompare(right));
+  if (entries.length > 32) return null;
+  const safe: Record<string, number> = {};
+  for (const [key, value] of entries) {
+    if (key.length === 0 || key.length > 64 || typeof value !== "number" || !Number.isFinite(value)) {
+      return null;
+    }
+    safe[key] = value;
+  }
+  return safe;
 }
 
 /**
@@ -420,36 +492,47 @@ interface ConceptRow {
  */
 async function readEvents(
   sql: Queryable,
+  analysisRunId: string,
   materializationRunId: string,
   subjectGameId: string,
+  subjectColor: "white" | "black",
 ): Promise<ReviewEvent[]> {
   const events = await sql<EventRow[]>`
     select id, event_type, start_ply, focal_ply, end_ply, actor_color, affected_color,
            completeness, detection_confidence, detection_key, facts
-    from analysis.chess_events
-    where run_id = ${materializationRunId} and subject_game_id = ${subjectGameId}
-    order by focal_ply, detection_key nulls last, id
+    from analysis.chess_events e
+    where e.run_id = ${materializationRunId} and e.subject_game_id = ${subjectGameId}
+      and exists (
+        select 1
+        from analysis.run_concept_opportunities ro
+        join analysis.concept_opportunities o on o.id = ro.opportunity_id
+        where ro.analysis_run_id = ${analysisRunId} and o.event_id = e.id
+      )
+    order by e.focal_ply, e.detection_key nulls last, e.id
   `;
   if (events.length === 0) return [];
 
   const labels = await sql<ConceptRow[]>`
     select o.event_id, c.slug, c.display_name, cv.human_definition,
            cv.id as concept_version_id, cv.version_no, o.role, ec.color, ec.detector_version,
-           o.response_observed, o.success, o.censored_reason, o.opportunity_ply, o.response_ply,
+           o.response_observed, o.success, o.score, o.censored_reason, o.opportunity_ply, o.response_ply,
            o.difficulty, o.confidence, o.evidence_source_kind,
            coalesce(o.evidence_item_id, (o.context->>'evidenceItemId')::bigint) as evidence_item_id
-    from analysis.concept_opportunities o
+    from analysis.run_concept_opportunities ro
+    join analysis.concept_opportunities o on o.id = ro.opportunity_id
     join analysis.concept_versions cv on cv.id = o.concept_version_id
     join analysis.concepts c on c.id = cv.concept_id
     -- The label carries the detector version and the colour it was recorded
     -- for. Joining on the role as well keeps recognize and execute apart, which
     -- is the distinction §17.4 exists to preserve.
-    left join analysis.event_concepts ec
+    join analysis.event_concepts ec
       on ec.event_id = o.event_id
      and ec.concept_version_id = o.concept_version_id
      and ec.role = o.role
-    where o.run_id = ${materializationRunId} and o.subject_game_id = ${subjectGameId}
-    order by o.event_id, c.slug, o.role
+     and ec.color = ${subjectColor}
+    where ro.analysis_run_id = ${analysisRunId}
+      and o.run_id = ${materializationRunId} and o.subject_game_id = ${subjectGameId}
+    order by o.event_id, c.slug, cv.version_no, o.role, o.id
   `;
 
   const byEvent = new Map<string, ReviewConcept[]>();
@@ -468,10 +551,11 @@ async function readEvents(
       // Censored rows keep a null success and say why. A client that renders
       // null as a failure would undo §17.5, so both fields always travel.
       success: row.response_observed ? row.success : null,
+      score: row.response_observed && row.score !== null ? Number(row.score) : null,
       censoredReason: row.censored_reason,
       opportunityPly: row.opportunity_ply,
       responsePly: row.response_ply,
-      difficulty: row.difficulty,
+      difficulty: safeDifficulty(row.difficulty),
       confidence: row.confidence == null ? null : Number(row.confidence),
       evidenceSourceKind: row.evidence_source_kind,
       evidenceItemId: row.evidence_item_id === null ? null : String(row.evidence_item_id),

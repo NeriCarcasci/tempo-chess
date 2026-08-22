@@ -20,7 +20,7 @@ import {
   type PositionFact,
   type TransitionFact,
 } from "./detect.js";
-import { detectionChecksum } from "./worker.js";
+import { detectionChecksum, eventChecksum } from "./worker.js";
 
 function play(moves: readonly string[], initial = INITIAL_FEN): PositionFact[] {
   const board = Chess.fromSetup(parseFen(initial).unwrap()).unwrap();
@@ -222,6 +222,22 @@ test("a different conclusion is a different checksum", () => {
     detectionChecksum(flipped),
     "a changed success value must change what Forma says it believes",
   );
+});
+
+test("checksums cover the evidence, not only the identity and outcome", () => {
+  const detected = detectGame(game());
+  const [first, ...rest] = detected;
+  assert.ok(first);
+  const changedFact = [{
+    ...first,
+    event: { ...first.event, facts: { ...first.event.facts, changed: true } },
+  }, ...rest];
+  const changedDifficulty = [{
+    ...first,
+    draft: { ...first.draft, difficulty: { ...(first.draft.difficulty ?? {}), legalReplies: 99 } },
+  }, ...rest];
+  assert.notEqual(eventChecksum(detected), eventChecksum(changedFact));
+  assert.notEqual(detectionChecksum(detected), detectionChecksum(changedDifficulty));
 });
 
 test("a game with nothing in it still has a checksum", () => {

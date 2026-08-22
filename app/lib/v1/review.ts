@@ -18,8 +18,9 @@
  * fetched costs the reader one panel, not the page.
  */
 
-import { v1Maybe } from "./client";
-import { fetchRecentGames } from "./games";
+import { v1Data } from "./client";
+import { fetchRecentGamesStrict } from "./games";
+import { ProblemError } from "./problem";
 import type { GameReview } from "./types";
 
 /** Why the concept panel has nothing to show. Each reads differently to a person. */
@@ -38,8 +39,14 @@ export type ReviewLookup =
 /** The Lichess id inside a provider URL, or null if it is not one. */
 export function lichessIdFrom(providerUrl: string | null): string | null {
   if (!providerUrl) return null;
-  const match = /lichess\.org\/([A-Za-z0-9]{8,12})/.exec(providerUrl);
-  return match?.[1] ?? null;
+  try {
+    const parsed = new URL(providerUrl);
+    if (parsed.protocol !== "https:" || parsed.hostname !== "lichess.org") return null;
+    const segment = parsed.pathname.split("/").filter(Boolean)[0] ?? "";
+    return /^[A-Za-z0-9]{8}(?:[A-Za-z0-9]{4})?$/.test(segment) ? segment : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -50,12 +57,28 @@ export function lichessIdFrom(providerUrl: string | null): string | null {
  * particular position. Those share a prefix, and comparing the whole string
  * would fail to match a game that is plainly there.
  */
-async function resolveGameId(lichessId: string, window: number): Promise<string | null> {
-  const games = await fetchRecentGames(window);
-  const wanted = lichessId.slice(0, 8).toLowerCase();
+interface ReviewDependencies {
+  recentGames(limit: number): ReturnType<typeof fetchRecentGamesStrict>;
+  review(gameId: string): Promise<GameReview>;
+}
+
+const REVIEW_DEPENDENCIES: ReviewDependencies = {
+  recentGames: fetchRecentGamesStrict,
+  review: (gameId) => v1Data<GameReview>(`/v1/games/${encodeURIComponent(gameId)}/review`),
+};
+
+async function resolveGameId(
+  lichessId: string,
+  window: number,
+  dependencies: ReviewDependencies,
+): Promise<string | null> {
+  const games = await dependencies.recentGames(Math.min(12, Math.max(1, window)));
+  const wanted = lichessId.slice(0, 8);
   for (const game of games) {
     const id = lichessIdFrom(game.providerUrl);
-    if (id && id.slice(0, 8).toLowerCase() === wanted) return game.id;
+    // Lichess ids are case-sensitive. Folding case can resolve a different game
+    // whose token differs only by letter case.
+    if (id && id.slice(0, 8) === wanted) return game.id;
   }
   return null;
 }
@@ -70,23 +93,25 @@ async function resolveGameId(lichessId: string, window: number): Promise<string 
  */
 export async function fetchReviewByLichessId(
   lichessId: string,
-  window = 200,
+  window = 12,
+  dependencies: ReviewDependencies = REVIEW_DEPENDENCIES,
 ): Promise<ReviewLookup> {
   if (!lichessId) return { status: "absent", reason: "not_synced" };
   try {
-    const gameId = await resolveGameId(lichessId, window);
+    const gameId = await resolveGameId(lichessId, window, dependencies);
     if (!gameId) return { status: "absent", reason: "not_synced" };
 
-    const review = await v1Maybe<GameReview>(
-      `/v1/games/${encodeURIComponent(gameId)}/review`,
-    );
+    const review = await dependencies.review(gameId);
     // A 404 here is the same answer the API gives for a game belonging to
     // someone else, on purpose -- distinguishing them is how an identifier
     // becomes probeable. From this side it means the same thing either way:
     // there is no published review to show.
-    if (!review) return { status: "absent", reason: "not_analyzed" };
     return { status: "found", gameId, review };
-  } catch {
+  } catch (error) {
+    if (error instanceof Response) throw error;
+    if (error instanceof ProblemError && error.status === 404) {
+      return { status: "absent", reason: "not_analyzed" };
+    }
     return { status: "absent", reason: "unreachable" };
   }
 }
@@ -95,7 +120,7 @@ export async function fetchReviewByLichessId(
 export function conceptsAtPly(review: GameReview | null, ply: number) {
   if (!review) return [];
   return (review.events ?? []).filter((event) =>
-    ply >= event.startPly && ply <= event.endPly);
+    event.focalPly === ply);
 }
 
 /**
@@ -120,7 +145,7 @@ export function conceptSectionState(
   if (review.sections?.events !== "published") {
     return {
       kind: "absent",
-      text: "This game was analysed before Forma detected concepts, so there is nothing to show.",
+      text: "This game was analysed before Forma detected concepts, so that part of the review is unavailable.",
     };
   }
   return { kind: "ready" };

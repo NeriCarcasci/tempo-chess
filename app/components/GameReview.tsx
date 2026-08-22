@@ -270,7 +270,7 @@ function squareName(value: unknown): string | null {
  * happened to fall under 64.
  */
 const SQUARE_FACTS: readonly (readonly [string, string])[] = [
-  ["mover", "from"],
+  ["from", "from"],
   ["to", "to"],
   ["moverTo", "to"],
   ["square", "on"],
@@ -310,8 +310,30 @@ function evidenceOf(facts: Record<string, unknown>): { label: string; square: st
  */
 function outcomeOf(concept: { observed: boolean; success: boolean | null }) {
   if (!concept.observed) return { word: "not asked", color: "var(--color-ink-faint)" };
+  if (concept.success === null) return { word: "not judged", color: "var(--color-ink-faint)" };
   if (concept.success) return { word: "done", color: "var(--color-win)" };
   return { word: "missed", color: "var(--color-loss)" };
+}
+
+const ROLE_TEXT: Record<string, string> = {
+  recognize: "recognising the chance",
+  execute: "following it through",
+  respond: "responding to it",
+  convert: "converting it",
+};
+
+function censorText(reason: string | null): string {
+  if (reason === "opponent_resigned") return "Your opponent resigned before you had to answer.";
+  if (reason === "clock_expired") return "The clock ended the game before you had to answer.";
+  return "The game ended before you had to answer.";
+}
+
+function consequenceOf(facts: Record<string, unknown>, completeness: string): string | null {
+  if (completeness === "incomplete") return "The evidence for this occurrence is incomplete.";
+  if (facts.mate === true) return "The verified consequence was mate.";
+  if (facts.verifiedBy === "stored_line") return "The stored analysis line verified the consequence.";
+  if (facts.verifiedBy === "static_exchange") return "The position itself verified the consequence.";
+  return null;
 }
 
 /**
@@ -326,7 +348,7 @@ function outcomeOf(concept: { observed: boolean; success: boolean | null }) {
  * both are different again from a game Forma has never synced -- so each says
  * its own sentence instead of all three showing an empty panel.
  */
-function ConceptsAtMove({
+export function ConceptsAtMove({
   events,
   absence,
 }: {
@@ -353,36 +375,53 @@ function ConceptsAtMove({
     <div className="mt-4">
       <div className="cap mb-2">What Forma saw</div>
       <ul className="flex flex-col gap-2">
-        {events.map((event) =>
-          event.concepts.map((concept) => {
-            const outcome = outcomeOf(concept);
-            const evidence = evidenceOf(event.facts ?? {});
-            return (
-              <li
-                key={`${event.eventType}:${event.focalPly}:${concept.slug}:${concept.role}`}
-                className="rounded-control bg-surface-2 px-3 py-2"
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-sm font-semibold text-ink">{concept.displayName}</span>
-                  <span className="metric text-xs" style={{ color: outcome.color }}>
-                    {outcome.word}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs leading-snug text-ink-muted">{concept.definition}</p>
-                {evidence.length > 0 && (
-                  <p className="metric mt-1.5 text-xs text-ink-faint">
-                    {evidence.map((item) => `${item.label} ${item.square}`).join(" · ")}
-                  </p>
-                )}
-                {!concept.observed && concept.censoredReason && (
-                  <p className="mt-1 text-xs text-ink-faint">
-                    The game ended before you answered it.
-                  </p>
-                )}
-              </li>
-            );
-          }),
-        )}
+        {events.map((event, eventIndex) => {
+          const facts = event.facts ?? {};
+          const evidence = evidenceOf(facts);
+          const consequence = consequenceOf(facts, event.completeness);
+          return (
+            <li
+              key={`${event.eventType}:${event.focalPly}:${eventIndex}`}
+              className="rounded-panel bg-surface-2 px-3 py-3 shadow-flat"
+            >
+              <div className="flex flex-col gap-3">
+                {event.concepts.map((concept) => {
+                  const outcome = outcomeOf(concept);
+                  return (
+                    <div key={`${concept.slug}:${concept.role}`}>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-semibold text-ink">{concept.displayName}</span>
+                        <span className="metric text-xs" style={{ color: outcome.color }}>
+                          {outcome.word}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-ink-faint">
+                        {ROLE_TEXT[concept.role] ?? "measuring this occurrence"}
+                      </p>
+                      <p className="mt-1 text-xs leading-snug text-ink-muted">{concept.definition}</p>
+                      {!concept.observed && (
+                        <p className="mt-1 text-xs text-ink-faint">
+                          {censorText(concept.censoredReason)}
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-ink-faint">
+                        Definition v{concept.versionNo} · {concept.evidenceSourceKind === "engine"
+                          ? "engine evidence"
+                          : "board evidence"}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              {evidence.length > 0 && (
+                <p className="metric mt-2 text-xs text-ink-faint">
+                  {evidence.map((item) => `${item.label} ${item.square}`).join(" · ")}
+                </p>
+              )}
+              {consequence ? <p className="mt-1 text-xs text-ink-muted">{consequence}</p> : null}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -516,8 +555,7 @@ export function GameReview({
             <div className="w-full">
               {current?.judgment ? (
                 <div
-                  className="rounded-panel border p-5"
-                  style={{ borderColor: `color-mix(in oklch, ${JUDGMENT[current.judgment.name].color} 40%, var(--color-line))` }}
+                  className="rounded-panel bg-surface p-5 shadow-soft"
                 >
                   <div className="metric text-sm font-semibold" style={{ color: JUDGMENT[current.judgment.name].color }}>
                     {current.judgment.name} {JUDGMENT[current.judgment.name].glyph}

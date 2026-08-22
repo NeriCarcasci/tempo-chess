@@ -56,6 +56,7 @@ import { ENGINE_COMPONENT_KEYS, TRANSITION_ASSESSMENT_FAMILY } from "../engine/c
 import { registerEngineVersions } from "../engine/profiles.js";
 import { registerRecipeVersion } from "./versions.js";
 import { registerCatalogue, summarizeRegistration } from "./concepts/register.js";
+import { CONCEPT_ARTIFACT_FAMILIES } from "./concepts/worker.js";
 import { SUBJECT_REPORT_FAMILIES } from "../estimates/worker.js";
 import { promoteRecipe, recordValidationRun, registerValidationDataset } from "./validation.js";
 import { createHash } from "node:crypto";
@@ -75,7 +76,7 @@ if (!url) {
 }
 const client = postgres(url, { max: 1, prepare: false });
 
-const RECIPE_VERSION = "2";
+const RECIPE_VERSION = "3";
 const DATASET_VERSION = "1";
 
 function sha256(value: string): string {
@@ -120,7 +121,7 @@ async function main(): Promise<void> {
     runType: "game_analysis",
     inputSchemaVersion: "replay.v1",
     outputSchemaVersion: "game_review.v1",
-    requiredArtifacts: [TRANSITION_ASSESSMENT_FAMILY],
+    requiredArtifacts: [TRANSITION_ASSESSMENT_FAMILY, ...CONCEPT_ARTIFACT_FAMILIES],
     roles,
   });
   const examinationRecipe = await registerRecipeVersion(client, {

@@ -32,6 +32,7 @@ import { classifyHeader, issuerFor, jwksUrlFor } from "./auth/jwt.js";
 import { bearerToken } from "./auth/verifier.js";
 import { LEGACY_SUCCESSORS, legacyRouteTemplate } from "./legacy.js";
 import { V1_ROUTES } from "./routes/index.js";
+import { safeFacts } from "../engine/review.js";
 
 /**
  * Unit gate for the `/v1` kernel.
@@ -801,6 +802,20 @@ check("the admin surface is gated like everything else", () => {
     // the gate: `operator` falls through to the approval check in the kernel.
     assert.equal(route.access, "operator", `${route.path} declares its audience`);
   }
+});
+
+check("review facts are a bounded allowlist rather than detector-owned JSON", () => {
+  const longLine = Array.from({ length: 33 }, (_, index) => `e2e${index}`);
+  const facts = safeFacts({
+    square: 28,
+    subtype: "fork",
+    privateSubjectId: "must not escape",
+    enginePath: "C:/private/stockfish.exe",
+    nested: { anything: true },
+    verificationLine: longLine,
+    note: "x".repeat(500),
+  });
+  assert.deepEqual(facts, { square: 28, subtype: "fork" });
 });
 
 console.log(failures === 0 ? "\nv1 kernel unit gate: pass" : `\nv1 kernel unit gate: ${failures} failing`);

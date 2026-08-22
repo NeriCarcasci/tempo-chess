@@ -2499,6 +2499,16 @@
                               "copy": {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "category": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
                                   "conceptSlug": {
                                     "anyOf": [
                                       {
@@ -2548,11 +2558,23 @@
                                         "type": "null"
                                       }
                                     ]
+                                  },
+                                  "roleLabel": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
                                   }
                                 },
                                 "required": [
                                   "conceptSlug",
                                   "role",
+                                  "category",
+                                  "roleLabel",
                                   "definition",
                                   "narrative"
                                 ],
@@ -5298,6 +5320,10 @@
                               "actorColor": {
                                 "anyOf": [
                                   {
+                                    "enum": [
+                                      "white",
+                                      "black"
+                                    ],
                                     "type": "string"
                                   },
                                   {
@@ -5308,6 +5334,10 @@
                               "affectedColor": {
                                 "anyOf": [
                                   {
+                                    "enum": [
+                                      "white",
+                                      "black"
+                                    ],
                                     "type": "string"
                                   },
                                   {
@@ -5316,6 +5346,11 @@
                                 ]
                               },
                               "completeness": {
+                                "enum": [
+                                  "complete",
+                                  "incomplete",
+                                  "censored"
+                                ],
                                 "type": "string"
                               },
                               "concepts": {
@@ -5361,6 +5396,8 @@
                                             "type": "number"
                                           },
                                           "propertyNames": {
+                                            "maxLength": 64,
+                                            "minLength": 1,
                                             "type": "string"
                                           },
                                           "type": "object"
@@ -5384,6 +5421,11 @@
                                       ]
                                     },
                                     "evidenceSourceKind": {
+                                      "enum": [
+                                        "engine",
+                                        "deterministic",
+                                        "human_model"
+                                      ],
                                       "type": "string"
                                     },
                                     "observed": {
@@ -5408,6 +5450,16 @@
                                     },
                                     "role": {
                                       "type": "string"
+                                    },
+                                    "score": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
                                     },
                                     "slug": {
                                       "type": "string"
@@ -5439,6 +5491,7 @@
                                     "detectorVersion",
                                     "observed",
                                     "success",
+                                    "score",
                                     "censoredReason",
                                     "opportunityPly",
                                     "responsePly",
@@ -5467,12 +5520,315 @@
                                 "type": "integer"
                               },
                               "eventType": {
+                                "maxLength": 64,
+                                "minLength": 1,
                                 "type": "string"
                               },
                               "facts": {
-                                "additionalProperties": {},
-                                "propertyNames": {
-                                  "type": "string"
+                                "additionalProperties": false,
+                                "properties": {
+                                  "acceptable": {
+                                    "type": "boolean"
+                                  },
+                                  "acceptableMoveCount": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "alternativeVerified": {
+                                    "type": "boolean"
+                                  },
+                                  "atRiskCp": {
+                                    "type": "number"
+                                  },
+                                  "attacker": {
+                                    "type": "number"
+                                  },
+                                  "attackers": {
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "maxItems": 32,
+                                    "type": "array"
+                                  },
+                                  "bestDefence": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 120,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "candidateCount": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "censored": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 120,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "converted": {
+                                    "anyOf": [
+                                      {
+                                        "type": "boolean"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "coverage": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  },
+                                  "criticality": {
+                                    "type": "number"
+                                  },
+                                  "defender": {
+                                    "type": "number"
+                                  },
+                                  "defenderRole": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  },
+                                  "defendersBefore": {
+                                    "type": "number"
+                                  },
+                                  "discoveredPiece": {
+                                    "type": "number"
+                                  },
+                                  "duty": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  },
+                                  "escapesTried": {
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "maxItems": 32,
+                                    "type": "array"
+                                  },
+                                  "expectedGainCp": {
+                                    "type": "number"
+                                  },
+                                  "expectedLossCp": {
+                                    "type": "number"
+                                  },
+                                  "expectedScoreBefore": {
+                                    "type": "number"
+                                  },
+                                  "followUp": {
+                                    "type": "number"
+                                  },
+                                  "followUpCp": {
+                                    "type": "number"
+                                  },
+                                  "from": {
+                                    "type": "number"
+                                  },
+                                  "front": {
+                                    "type": "number"
+                                  },
+                                  "frontIsKing": {
+                                    "type": "boolean"
+                                  },
+                                  "frontValueCp": {
+                                    "type": "number"
+                                  },
+                                  "kingInvolved": {
+                                    "type": "boolean"
+                                  },
+                                  "legalMoveCount": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "mate": {
+                                    "type": "boolean"
+                                  },
+                                  "mover": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  },
+                                  "moverChecks": {
+                                    "type": "boolean"
+                                  },
+                                  "moverTarget": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "moverTo": {
+                                    "type": "number"
+                                  },
+                                  "movesPlayed": {
+                                    "type": "number"
+                                  },
+                                  "onOfferCp": {
+                                    "type": "number"
+                                  },
+                                  "piece": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  },
+                                  "pieceValueCp": {
+                                    "type": "number"
+                                  },
+                                  "pinned": {
+                                    "type": "number"
+                                  },
+                                  "pinnedValueCp": {
+                                    "type": "number"
+                                  },
+                                  "pinner": {
+                                    "type": "number"
+                                  },
+                                  "rank": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "ray": {
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "maxItems": 32,
+                                    "type": "array"
+                                  },
+                                  "rear": {
+                                    "type": "number"
+                                  },
+                                  "rearValueCp": {
+                                    "type": "number"
+                                  },
+                                  "remainingCp": {
+                                    "type": "number"
+                                  },
+                                  "removalMethod": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  },
+                                  "repliesConsidered": {
+                                    "type": "number"
+                                  },
+                                  "resolution": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  },
+                                  "resolved": {
+                                    "type": "boolean"
+                                  },
+                                  "square": {
+                                    "type": "number"
+                                  },
+                                  "squareAfter": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "subtype": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  },
+                                  "taken": {
+                                    "type": "boolean"
+                                  },
+                                  "target": {
+                                    "type": "number"
+                                  },
+                                  "targetRole": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  },
+                                  "targetValueCp": {
+                                    "type": "number"
+                                  },
+                                  "targetValues": {
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "maxItems": 32,
+                                    "type": "array"
+                                  },
+                                  "targets": {
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "maxItems": 32,
+                                    "type": "array"
+                                  },
+                                  "to": {
+                                    "type": "number"
+                                  },
+                                  "uncoveredTarget": {
+                                    "type": "number"
+                                  },
+                                  "uncoveredValueCp": {
+                                    "type": "number"
+                                  },
+                                  "verificationLine": {
+                                    "anyOf": [
+                                      {
+                                        "items": {
+                                          "maxLength": 120,
+                                          "type": "string"
+                                        },
+                                        "maxItems": 32,
+                                        "type": "array"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "verifiedBy": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  },
+                                  "winnableCp": {
+                                    "type": "number"
+                                  }
                                 },
                                 "type": "object"
                               },
@@ -5765,6 +6121,13 @@
                               ],
                               "type": "string"
                             },
+                            "practicalContext": {
+                              "enum": [
+                                "published",
+                                "unavailable"
+                              ],
+                              "type": "string"
+                            },
                             "trajectory": {
                               "enum": [
                                 "published",
@@ -5786,7 +6149,8 @@
                             "events",
                             "concepts",
                             "explanations",
-                            "trajectory"
+                            "trajectory",
+                            "practicalContext"
                           ],
                           "type": "object"
                         },

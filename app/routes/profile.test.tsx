@@ -132,6 +132,8 @@ function wireCopy(dimensionKey: string) {
     copy: {
       conceptSlug: match?.[1] ?? null,
       role: match?.[2] ?? null,
+      category: "tactical",
+      roleLabel: "A measured role",
       definition: known?.definition ?? "",
       narrative: null,
     },
