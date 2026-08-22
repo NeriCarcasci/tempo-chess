@@ -367,6 +367,18 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       + "This measures whether you collected what it won -- or, when your opponent "
       + "did it to you, whether you gave up less than it threatened.",
     supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "attack two things at once and take one of them",
+        succeeded: "took what the double attack won",
+        missed: "attacked two things and did not collect either",
+      },
+      respond: {
+        opportunity: "answer a double attack against you",
+        succeeded: "saved more than the double attack threatened",
+        missed: "lost what the double attack threatened",
+      },
+    },
     evidenceSourceKind: "deterministic",
     detectorContract: {
       method: "attack_map_and_static_exchange",
@@ -402,6 +414,18 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       + "and that was worth material. This measures whether you won it -- or, when "
       + "it was done to you, whether you got out of it.",
     supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "pin a piece and win it",
+        succeeded: "won the pinned piece",
+        missed: "pinned a piece and let it go",
+      },
+      respond: {
+        opportunity: "get out of a pin",
+        succeeded: "got out of the pin for less than it threatened",
+        missed: "lost the pinned piece",
+      },
+    },
     evidenceSourceKind: "deterministic",
     detectorContract: {
       method: "ray_geometry_and_static_exchange",
@@ -437,6 +461,18 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       + "behind it was taken. This measures whether you collected it -- or, when it "
       + "was done to you, whether you saved more than it threatened.",
     supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "attack through a piece and take what is behind it",
+        succeeded: "took what was behind",
+        missed: "attacked through a piece and did not take what was behind",
+      },
+      respond: {
+        opportunity: "answer an attack that goes through one of your pieces",
+        succeeded: "saved more than the attack threatened",
+        missed: "lost the piece behind",
+      },
+    },
     evidenceSourceKind: "deterministic",
     detectorContract: {
       method: "ray_geometry_and_static_exchange",
@@ -471,6 +507,18 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       + "measures whether you collected what that won -- or, when it was done to "
       + "you, whether you gave up less than it threatened.",
     supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "move one piece to uncover an attack from another",
+        succeeded: "took what the uncovered attack won",
+        missed: "uncovered an attack and did not collect it",
+      },
+      respond: {
+        opportunity: "answer an attack uncovered against you",
+        succeeded: "conceded less than the uncovered attack threatened",
+        missed: "lost what the uncovered attack threatened",
+      },
+    },
     evidenceSourceKind: "deterministic",
     detectorContract: {
       method: "attack_map_difference_and_static_exchange",
@@ -504,6 +552,18 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       + "was guarding could then be won. This measures whether you won it -- or, "
       + "when it was done to you, whether you saved it.",
     supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "remove a defender and take what it was guarding",
+        succeeded: "took what the defender was guarding",
+        missed: "removed the defender and left what it guarded",
+      },
+      respond: {
+        opportunity: "hold something whose defender was removed",
+        succeeded: "held it for less than it threatened",
+        missed: "lost what the removed defender was guarding",
+      },
+    },
     evidenceSourceKind: "deterministic",
     detectorContract: {
       method: "defender_map_and_static_exchange",
@@ -540,6 +600,18 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       + "did staying. This measures whether you collected it -- or, when it was "
       + "your piece, whether you got it out.",
     supportedRoles: ["execute", "respond"],
+    roleNarratives: {
+      execute: {
+        opportunity: "trap a piece and take it",
+        succeeded: "took the trapped piece",
+        missed: "trapped a piece and let it go",
+      },
+      respond: {
+        opportunity: "rescue a piece with nowhere to go",
+        succeeded: "got it out for less than it was worth",
+        missed: "lost the trapped piece",
+      },
+    },
     evidenceSourceKind: "deterministic",
     detectorContract: {
       method: "exhaustive_reply_walk_and_static_exchange",
