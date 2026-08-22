@@ -256,6 +256,58 @@ needing a v2, for a cosmetic gain.
 
 ---
 
+## How a tactical consequence is verified (FOR-126 to FOR-131)
+
+All six families share one proof, and it is worth stating once rather than six
+times.
+
+**One-ply minimax over static exchange.** Play every legal reply the defender
+has, ask what static exchange still wins for the attacker afterwards, and keep
+the worst case. A motif that any single reply defuses is not recorded. This is
+what makes a fork on two defended pieces a negative, a counterattack that takes
+the forking piece a refutation, and a check a verification -- check leaves few
+replies and none of them save the second target.
+
+Promotions are expanded into their four choices, because a defender who can
+promote has four replies and underpromotion is sometimes the only one that
+answers a check.
+
+**Attribution, separately from size.** The minimax says the attacker wins
+material somewhere; it does not say the motif won it. Each family additionally
+proves the gain belongs to the thing being recorded — the pinned square must be
+winnable, the skewer's rear target must fall once the front one is removed from
+the board, the removed guard's charge must be winnable once the guard is gone.
+Without this, a move that creates a meaningless alignment while leaving a queen
+hanging elsewhere would have the alignment credited with the queen.
+
+**The horizon is one ply, and is stated in every event.** Where the deep search
+stored a line for the resulting position, it is replayed and must agree; a line
+that contradicts the static answer abstains rather than being overruled, because
+two pieces of evidence disagreeing is not a fact about the game. `confidence`
+records which answered: PV-proven or static-exchange-only.
+
+**A forced mate outranks every material outcome** so that a mating motif is
+never rejected for winning too little material. It is a sort order, not a claim
+that mate is worth ten queens.
+
+**Neither role is scored on the motif existing.** `execute` is judged on the
+follow-up actually collecting what the motif won; `respond` on conceding less
+than it threatened. A player who finds a fork and then plays something else has
+done something that a rate of "100% of forks played" could never show.
+
+### What this excludes, on purpose
+
+A consequence that takes two moves to appear is beyond the horizon and is not
+recorded. That is a real limit and it is the reason these families report fewer
+events than a human annotator would: a pin that wins material only after three
+moves of piling on is invisible here. Recording it would mean adding a search,
+and this project adds none.
+
+Sound sacrifices are not distinguishable from blunders by static exchange alone.
+Where a piece is genuinely saved by compensation the tactical families record
+nothing rather than guessing, which is the same abstention `material_safety`
+makes for the same reason.
+
 ## New tactical families
 
 All six share a shape: a legal focal move creates geometry, stored evidence
@@ -291,7 +343,7 @@ abstain rather than guess.
 | Focal ply | The ply of the move that creates or exploits the pin |
 | Response window | `execute`: focal ply. `respond`: the subject's next move. |
 | Trigger | A legal sliding attack where a pinner, a pinned piece, and a king or higher-value target lie on one ray with no other blocker. |
-| Verification | An exploitable consequence: stored PV or SEE shows the pinned piece is won, or the pinned piece's immobility is what makes a further threat work. Static alignment alone is not an opportunity. |
+| Verification | The pin must not have existed before the focal move, and the pinned square must be winnable by static exchange in its own right, and the shared one-ply proof must hold. Immobilising a piece and winning one are different claims; only the second is recorded. |
 | Success (`execute`) | The subject created or exploited the pin and the verified consequence follows. |
 | Success (`respond`) | The subject broke the pin, defended adequately, or counter-attacked for equivalent value. |
 | Subtypes | `absolute` (target is the king), `relative` (target is higher-value). |
@@ -311,7 +363,7 @@ abstain rather than guess.
 | Focal ply | The ply of the move that creates the skewer |
 | Response window | `execute`: focal ply. `respond`: the subject's next move. |
 | Trigger | A legal sliding attack on a ray where the **front** target is the higher-priority one and a rear target stands behind it. |
-| Verification | Stored PV or SEE shows the front target must move or concede an equivalent outcome, and the rear target is then won or decisively attacked. |
+| Verification | With the front target removed from the board, static exchange on the rear one must still win material, and the shared one-ply proof must hold. Front strictly more valuable than rear; equal is neither idea. |
 | Success (`execute`) | The subject created it and the verified gain follows. |
 | Success (`respond`) | The subject saved both, or conceded less than the verified amount. |
 | Abstain | Front target need not move, rear target is defended adequately, or evidence incomplete. |
@@ -334,7 +386,7 @@ comparing values along the ray and emits exactly one of the two.
 | Focal ply | The ply of the move that vacates the line |
 | Response window | `execute`: focal ply. `respond`: the subject's next move. |
 | Trigger | Comparing the legal attack maps before and after the focal move, a moved blocker uncovers a rook, bishop or queen line onto a relevant target. |
-| Verification | Stored PV or SEE shows the uncovered threat, or the combination of it with the moving piece's own threat, wins material or forces a decisive outcome. |
+| Verification | A discovery onto a piece must win that piece by static exchange. A discovered check wins nothing by itself, so it is worth whatever the position yields once the check has been answered. Plus the shared one-ply proof. |
 | Success (`execute`) | The subject played it and the verified consequence follows. |
 | Success (`respond`) | The subject's reply meets the uncovered threat and the moving piece's threat, or concedes less. |
 | Subtypes | `discovered_attack`, `discovered_check`, `double_check` — facts under one family. |
@@ -354,7 +406,7 @@ comparing values along the ray and emits exactly one of the two.
 | Focal ply | The ply of the move that removes or deflects the defender |
 | Response window | `execute`: focal ply. `respond`: the subject's next move. |
 | Trigger | In the pre-move position a target is protected by an identified defender with a specific duty; the focal move captures that defender or forces it onto a square where the duty is lost. |
-| Verification | A legal stored line or SEE shows the protected target, or a decisive square, is then won. |
+| Verification | The target must survive the focal move, and with the guard removed from the board it must be winnable by static exchange. Plus the shared one-ply proof — a target that can simply run away has not been won, however cleanly its guard went. |
 | Success (`execute`) | The subject removed the defender and the verified follow-up is available. |
 | Success (`respond`) | The subject restored the defence, moved the target, or conceded less than the verified amount. |
 | Abstain | The target has another adequate defender, the duty was not actually lost, or evidence incomplete. |
@@ -373,7 +425,7 @@ comparing values along the ray and emits exactly one of the two.
 | Focal ply | The ply at which the piece becomes trapped |
 | Response window | `execute`: focal ply. `respond`: the subject's next move. |
 | Trigger | A non-king piece is under attack or newly restricted. |
-| Verification | Enumerate legal retreats, captures, blocks, counter-attacks and defended exchanges. The piece is trapped only when every adequate resource loses it or concedes an equivalent amount, proven by SEE or a stored PV. |
+| Verification | Every legal reply is played and the piece is followed to wherever it ends up. Trapped only when static exchange wins it in all of them. Following the piece rather than the square is what makes a retreat to a covered square read as the loss it is. |
 | Success (`execute`) | The subject created the trap and the piece cannot escape. |
 | Success (`respond`) | The subject saved the piece or conceded less than the verified amount. |
 | Abstain | Any adequate escape exists, the piece is a king, or evidence incomplete. |
