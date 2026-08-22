@@ -10,3 +10,6 @@
 
 # Claude Code (machine-local)
 .claude/settings.local.json
+
+# Overnight build runner: machine-local, reads from ~/forma-automation
+/automation/
