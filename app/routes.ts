@@ -30,6 +30,10 @@ const SURFACE = process.env.VITE_SURFACE ?? "product";
  */
 const adminSurface = [
   route("login", "routes/login.tsx"),
+  // `sendPasswordReset` builds its callback as `location.origin/reset-password`,
+  // so an operator resetting from the admin host gets a link back to the admin
+  // host. Without this route that link lands on the console's 404.
+  route("reset-password", "routes/reset-password.tsx"),
   route("access", "routes/access.tsx"),
   layout("routes/admin/layout.tsx", [
     index("routes/admin/requests.tsx"),

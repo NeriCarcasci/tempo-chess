@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Form, Link, redirect, useNavigation, useSearchParams } from "react-router";
 import type { Route } from "./+types/login";
-import { SIGNED_IN_PATH } from "../lib/admin";
+import { ADMIN_BUILD, SIGNED_IN_PATH } from "../lib/admin";
 import {
   awaitingApproval,
   getSession,
@@ -106,8 +106,15 @@ export default function Login({ actionData }: Route.ComponentProps) {
         <Link to="/" className="auth-brand" aria-label="Forma home">
           <BrandLock size={24} />
         </Link>
-        <h1>Welcome back</h1>
-        <p className="auth-sub">Sign in to pick up your study where you left off.</p>
+        {/* The admin artifact has no product behind it, so the product's
+            invitation would be a lie and its sign-up link a dead end: /signup
+            is not in that build at all. */}
+        <h1>{ADMIN_BUILD ? "Forma admin" : "Welcome back"}</h1>
+        <p className="auth-sub">
+          {ADMIN_BUILD
+            ? "Sign in with the account that runs Forma."
+            : "Sign in to pick up your study where you left off."}
+        </p>
 
         {justSignedUp ? (
           <p className="auth-ok">Email confirmed. Sign in to continue.</p>
@@ -139,9 +146,11 @@ export default function Login({ actionData }: Route.ComponentProps) {
 
         <ResetPassword />
 
-        <p className="auth-alt">
-          New here? <Link to="/signup">Create an account</Link>
-        </p>
+        {ADMIN_BUILD ? null : (
+          <p className="auth-alt">
+            New here? <Link to="/signup">Create an account</Link>
+          </p>
+        )}
       </div>
     </main>
   );
