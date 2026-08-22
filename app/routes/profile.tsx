@@ -163,7 +163,7 @@ function ProfileHead({ me, dashboard }: { me: Me; dashboard: Dashboard | null })
         <p className="profile-standing">
           Measured from <span className="figure">{games.toLocaleString()}</span>{" "}
           {games === 1 ? "game" : "games"}, published{" "}
-          {new Date(dashboard.publishedAt).toLocaleDateString(undefined, {
+          {new Date(dashboard.publishedAt).toLocaleDateString("en-GB", {
             day: "numeric",
             month: "long",
             year: "numeric",

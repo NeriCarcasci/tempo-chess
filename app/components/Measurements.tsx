@@ -405,7 +405,7 @@ export function PublicationNote({
   dashboard: Dashboard;
   children?: ReactNode;
 }) {
-  const published = new Date(dashboard.publishedAt).toLocaleDateString(undefined, {
+  const published = new Date(dashboard.publishedAt).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
     year: "numeric",

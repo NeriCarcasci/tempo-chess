@@ -134,7 +134,11 @@ export default function Report() {
 
   const published = new Date(
     dashboard?.publishedAt ?? report?.publishedAt ?? Date.now(),
-  ).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  // A publication carries one date, not the reader's own rendering of it. The
+  // runtime locale put "August 1, 2026" on a US reader's screen and "1 August
+  // 2026" on everyone else's, for a document whose whole claim is that it was
+  // produced once and does not change under you.
+  ).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
   const cone = dashboard ? coneFrom(dashboard.trajectory) : null;
   const groups = dashboard ? groupMeasures(dashboard.estimates) : [];
