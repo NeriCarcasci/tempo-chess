@@ -1,6 +1,44 @@
-import { type RouteConfig, index, route } from "@react-router/dev/routes";
+import { type RouteConfig, index, layout, route } from "@react-router/dev/routes";
 
-export default [
+/**
+ * Which surface this build is.
+ *
+ * Read from the build environment rather than from the hostname, because the
+ * two answer different questions. A hostname check runs in the browser and can
+ * only hide a screen that has already been shipped; this decides what gets
+ * built at all. The admin deployment is a separate Cloudflare Pages project
+ * with its own artifact, and it should contain the operator console and the two
+ * screens needed to sign into it -- not the marketing site with the console
+ * tucked behind a redirect.
+ *
+ * The first attempt did it the other way round and deployed the landing page to
+ * the admin subdomain, which is the whole reason this exists.
+ */
+const SURFACE = process.env.VITE_SURFACE ?? "product";
+
+/**
+ * The admin build.
+ *
+ * The console sits at `/`, so the deployment is the dashboard rather than a
+ * site containing one. `login` is here because an operator has to sign in, and
+ * `access` because an operator is an approved account first: somebody whose own
+ * request is still pending gets sent there by the API's refusal, and without
+ * this route that redirect would land on nothing.
+ *
+ * Nothing else is built. There is no marketing page, no product screen and no
+ * chess board in this artifact.
+ */
+const adminSurface = [
+  route("login", "routes/login.tsx"),
+  route("access", "routes/access.tsx"),
+  layout("routes/admin/layout.tsx", [
+    index("routes/admin/requests.tsx"),
+    route("accounts", "routes/admin/accounts.tsx"),
+    route("operations", "routes/admin/operations.tsx"),
+  ]),
+] satisfies RouteConfig;
+
+const productSurface = [
   // --- public: the marketing site --------------------------------------
   index("routes/home.tsx"),
   route("features", "routes/features.tsx"),
@@ -48,12 +86,15 @@ export default [
   route("dev/foundation", "routes/__foundation.tsx"),
   route("game/:id", "routes/game.tsx"),
 
-  // --- admin: admin.formachess.com -------------------------------------
-  // One deployment serves both hosts; see routes/admin/layout.tsx for why, and
-  // for why the hostname check there is presentation rather than a boundary.
+  // --- admin ------------------------------------------------------------
+  // Also mounted in the product build, under /admin, so the console can be
+  // reached in development without a second dev server. The deployed admin
+  // surface is the separate artifact above, not this.
   route("admin", "routes/admin/layout.tsx", [
     index("routes/admin/requests.tsx"),
     route("accounts", "routes/admin/accounts.tsx"),
     route("operations", "routes/admin/operations.tsx"),
   ]),
 ] satisfies RouteConfig;
+
+export default (SURFACE === "admin" ? adminSurface : productSurface) satisfies RouteConfig;

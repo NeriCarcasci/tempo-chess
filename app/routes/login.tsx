@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Form, Link, redirect, useNavigation, useSearchParams } from "react-router";
 import type { Route } from "./+types/login";
+import { SIGNED_IN_PATH } from "../lib/admin";
 import {
   awaitingApproval,
   getSession,
@@ -16,7 +17,7 @@ export function meta() {
 }
 
 export async function clientLoader() {
-  if (await getSession()) throw redirect("/today");
+  if (await getSession()) throw redirect(SIGNED_IN_PATH);
   // Signed in and not yet let into the closed beta. Showing the sign-in form
   // instead would invite them to authenticate again, which succeeds and lands
   // them back here.
@@ -38,7 +39,10 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
   // loader reads /me, or a fast re-login would show the old account's data.
   invalidateSession();
   const next = new URL(request.url).searchParams.get("next");
-  throw redirect(next && next.startsWith("/") ? next : "/today");
+  // `next` is honoured when it is a same-site path, and the fallback differs by
+  // surface: the admin build has no `/today`, so signing in there would land on
+  // a route that is not in the bundle.
+  throw redirect(next && next.startsWith("/") ? next : SIGNED_IN_PATH);
 }
 
 function ResetPassword() {

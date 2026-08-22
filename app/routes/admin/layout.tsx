@@ -1,36 +1,35 @@
 import { NavLink, Outlet, redirect, isRouteErrorResponse, useRouteError } from "react-router";
 import { RookMark } from "../../components/Logo";
-import { isAdminHost } from "../../lib/admin";
+import { ADMIN_BASE, ADMIN_BUILD, isAdminHost } from "../../lib/admin";
 import { getAccessToken } from "../../lib/session";
 
 /**
  * The shell for `admin.formachess.com`.
  *
- * ## Why this is a route tree in the product app rather than a second app
+ * ## Two builds, one source
  *
- * Three options were on the table: a route tree here gated by hostname, a
- * second Cloudflare Pages deployment sharing this API, and a separate app.
+ * The admin surface ships as its own Cloudflare Pages project, built from this
+ * repository with `VITE_SURFACE=admin`. `app/routes.ts` then builds a different
+ * route tree: this console at `/`, plus sign-in and the closed-beta screen, and
+ * nothing else. No marketing page, no product screen.
  *
- * The deciding fact is that nothing secret can live in a browser bundle either
- * way. `VITE_`-prefixed values are compiled in, so a separate deployment would
- * hold exactly the same secrets as this one, which is none. Separation would
- * therefore buy no security at all, and would cost a second build, a second
- * copy of the API client, the session layer and the design tokens, and a second
- * thing to remember to deploy. The two would drift, and the half that drifted
- * would be the one nobody looks at.
+ * The first attempt shared one artifact between both hostnames and used the
+ * hostname check below as the only thing separating them. That put the landing
+ * page at the root of the admin deployment, which is not an admin dashboard, it
+ * is the website with a console hidden inside it.
  *
- * So: one build, one deployment, and `admin.formachess.com` is a second custom
- * domain on the same Pages project. The route chunk is lazily loaded, so the
- * marketing site does not ship the admin screens to a visitor who never asks
- * for them, but that is a size argument and not a security one.
+ * Sharing the source is still right: one API client, one session layer, one set
+ * of design tokens. It is the *artifact* that has to differ, not the code.
  *
- * ## What the hostname gate is and is not
+ * ## What the hostname check is and is not
  *
- * It is presentation. Anybody can request `/admin` on any host that serves this
- * bundle, and the 404 below is a convenience, not a boundary. Every screen
- * under here is empty without the API, and the API refuses a caller that does
- * not hold an operator grant in `app.operators` -- a check made by the database
- * inside a security-definer function, not by anything in this file.
+ * In the product build this console is also mounted at `/admin`, so it can be
+ * reached in development without a second dev server, and the hostname check
+ * keeps it off the marketing domain. That check is presentation, not a
+ * boundary: anybody can request the path on any host that serves the bundle.
+ * Every screen here is empty without the API, and the API refuses a caller that
+ * does not hold an operator grant in `app.operators` -- a check made by the
+ * database inside a security-definer function, not by anything in this file.
  */
 
 export function meta() {
@@ -38,7 +37,9 @@ export function meta() {
 }
 
 export async function clientLoader() {
-  if (!isAdminHost(window.location.hostname)) {
+  // In the admin build the whole deployment is the console, so there is no
+  // marketing surface to keep it away from and no hostname to check against.
+  if (!ADMIN_BUILD && !isAdminHost(window.location.hostname)) {
     // Not "forbidden": on the product domain this path is simply not a page.
     // A 403 here would confirm that an admin surface exists at this path, to
     // somebody who guessed the path.
@@ -50,10 +51,11 @@ export async function clientLoader() {
   return null;
 }
 
+// A hardcoded `/admin` would give the admin deployment three links to nowhere.
 const TABS = [
-  { to: "/admin", label: "Requests", end: true },
-  { to: "/admin/accounts", label: "Accounts", end: false },
-  { to: "/admin/operations", label: "Operations", end: false },
+  { to: `${ADMIN_BASE}/`, label: "Requests", end: true },
+  { to: `${ADMIN_BASE}/accounts`, label: "Accounts", end: false },
+  { to: `${ADMIN_BASE}/operations`, label: "Operations", end: false },
 ];
 
 export default function AdminLayout() {

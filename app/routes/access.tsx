@@ -2,6 +2,7 @@ import { Form, Link, redirect, useNavigation } from "react-router";
 import type { Route } from "./+types/access";
 import { MAX_NOTE_LENGTH, getAccessRequest, setAccessNote } from "../lib/access";
 import { getAccessToken, invalidateSession, signOut } from "../lib/session";
+import { SIGNED_IN_PATH } from "../lib/admin";
 import { BrandLock } from "../components/PublicShell";
 import type { AccessRequest } from "../lib/v1/types";
 
@@ -36,7 +37,7 @@ export async function clientLoader(): Promise<LoaderData> {
     // they were refused, so it has to go before the redirect or the next loader
     // reads the stale answer and sends them straight back here.
     invalidateSession();
-    throw redirect("/today");
+    throw redirect(SIGNED_IN_PATH);
   }
   return { request };
 }

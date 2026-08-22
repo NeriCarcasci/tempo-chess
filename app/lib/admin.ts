@@ -19,6 +19,28 @@ import type {
 export const ADMIN_HOST = "admin.formachess.com";
 
 /**
+ * True in the artifact built for the admin subdomain (`VITE_SURFACE=admin`).
+ *
+ * The admin deployment is its own Cloudflare Pages project with its own route
+ * tree, so paths that are correct in the product build are wrong in it: there
+ * is no `/today` to send a signed-in operator to, and the console lives at `/`
+ * rather than `/admin`. Anything that names such a path reads these two
+ * constants instead of hardcoding one.
+ */
+export const ADMIN_BUILD = import.meta.env.VITE_SURFACE === "admin";
+
+/** Where the console is mounted: the root in the admin build, `/admin` otherwise. */
+export const ADMIN_BASE = ADMIN_BUILD ? "" : "/admin";
+
+/**
+ * Where a signed-in person belongs.
+ *
+ * `/today` does not exist in the admin build, so redirecting there would sign
+ * an operator in and then drop them on a route that is not in the bundle.
+ */
+export const SIGNED_IN_PATH = ADMIN_BUILD ? "/" : "/today";
+
+/**
  * Whether this browser is on the admin host.
  *
  * A presentation gate, not a security one, and the difference matters: the app

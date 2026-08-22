@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Form, Link, useNavigation, useRevalidator } from "react-router";
 import type { Route } from "./+types/requests";
-import { decide, listAccessRequests } from "../../lib/admin";
+import { ADMIN_BASE, decide, listAccessRequests } from "../../lib/admin";
 import type { AccessState, AdminAccessRequest } from "../../lib/v1/types";
 
 /**
@@ -158,7 +158,7 @@ export default function AdminRequests({ loaderData, actionData }: Route.Componen
         {FILTERS.map((filter) => (
           <Link
             key={filter.key}
-            to={`/admin?state=${filter.key}`}
+            to={`${ADMIN_BASE}/?state=${filter.key}`}
             className={`admin-filter ${state === filter.key ? "is-active" : ""}`}
           >
             {filter.label}
