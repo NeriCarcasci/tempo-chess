@@ -1,5 +1,6 @@
 import { CoverageBadge } from "../v1/Honesty";
-import { humaniseDimension, limitationText } from "../../lib/onboarding/copy";
+import { limitationText } from "../../lib/onboarding/copy";
+import { measureName } from "../../lib/v1/measures";
 import type { OnboardingCoverage } from "../../lib/v1/types";
 
 /**
@@ -59,7 +60,11 @@ export function CoveragePanel({ coverage }: { coverage: OnboardingCoverage }) {
           {coverage.dimensions.map((dimension) => (
             <li key={dimension.dimensionKey} className="line-row">
               <div className="coverage-dimension">
-                <strong>{humaniseDimension(dimension.dimensionKey)}</strong>
+                {/* The catalogue's name, not the humanised key. "Only move
+                    recognize" is a slug with the underscores taken out, and
+                    `measureName` falls back to that only for a concept this
+                    build has never met. */}
+                <strong>{measureName(dimension.dimensionKey)}</strong>
                 <CoverageBadge state={dimension.state as never} />
                 {/* Non-null exactly when the state is not sufficient, and
                     already a sentence — rendered verbatim rather than

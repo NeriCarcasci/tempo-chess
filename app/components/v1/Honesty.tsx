@@ -35,6 +35,13 @@ const COVERAGE_COPY: Record<CoverageState, { label: string; blurb: string; tone:
     blurb: "Enough for a first read, not enough to be sure.",
     tone: "tag-mistake",
   },
+  // Not an absence. The evidence may be ample; the estimator will not place it
+  // on a scale it was never calibrated for, which is a refusal and reads as one.
+  out_of_range: {
+    label: "Outside the calibrated band",
+    blurb: "Your rating sits outside the range Forma has calibrated, so it will not put a figure here.",
+    tone: "tag-sub",
+  },
   sufficient: {
     label: "Sufficient",
     blurb: "Enough games behind this to stand on.",

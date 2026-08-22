@@ -55,9 +55,6 @@ export type BaselineReport = Data<"getBaselineReport">;
  * bins, the rating profile. The baseline report names these by id; this is what
  * the ids point at.
  */
-export type Dashboard = Data<"getDashboard">;
-export type SkillEstimate = Dashboard["estimates"][number];
-export type TrajectoryBin = Dashboard["trajectory"]["bins"][number];
 export type DiagnosticSession = Data<"getDiagnosticSession">;
 
 // --- goals ------------------------------------------------------------------
@@ -108,6 +105,25 @@ export type OpponentFamily = OpponentFamilyEntry["family"];
 export type OpponentMove = Data<"requestOpponentMove">;
 export type OpponentMoveBody = Body<"requestOpponentMove">;
 export type PlayLevelKey = OpponentFamilyLevel["key"];
+// --- the published dashboard -------------------------------------------------
+
+/**
+ * Everything Forma has measured about the caller, as one published answer.
+ *
+ * This is the read behind `/profile` and `/report`. It is a *publication*, not
+ * a query: the same subject read twice on the same day gives the same claims,
+ * because the route reads through the live-publication pointer rather than
+ * recomputing. That is what lets `/report` promise to be immutable.
+ */
+export type Dashboard = Data<"getDashboard">;
+export type DashboardSections = Dashboard["sections"];
+export type SkillEstimate = Dashboard["estimates"][number];
+export type Finding = Dashboard["findings"][number];
+export type Trajectory = Dashboard["trajectory"];
+export type TrajectoryBin = Trajectory["bins"][number];
+export type RatingProfile = Dashboard["ratingProfile"];
+export type RatingPool = RatingProfile["pools"][number];
+export type DashboardVersion = Dashboard["version"];
 
 // --- work -------------------------------------------------------------------
 
@@ -151,7 +167,15 @@ export type PublicFigure =
   | { disclosure: "exact"; value: number }
   | { disclosure: "suppressed"; below: number };
 
-export const COVERAGE_STATES = ["insufficient", "limited", "sufficient"] as const;
+/**
+ * How much evidence stands behind a claim.
+ *
+ * `out_of_range` is not thin evidence. It says the player's rating sits outside
+ * the band the estimator was calibrated on, which is a definite refusal rather
+ * than an absence, and it arrives from `/v1/dashboard` where the onboarding
+ * coverage route only ever sends the other three.
+ */
+export const COVERAGE_STATES = ["insufficient", "limited", "out_of_range", "sufficient"] as const;
 export type CoverageState = (typeof COVERAGE_STATES)[number];
 
 export const CLAIM_STATES = [

@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, test, vi } from "vitest";
 import type { OpeningShape } from "../lib/todayShape";
 import type { RecentGame } from "../lib/v1/games";
+import type { TodayReport } from "../lib/v1/dashboard";
 import type { Destination } from "../lib/onboarding/nextScreen";
 
 /**
@@ -54,16 +55,64 @@ function draw(props: Partial<Parameters<typeof Today>[0]> = {}) {
         unanalysed={0}
         lastGame={null}
         run={null}
+        report={null}
         {...props}
       />
     </MemoryRouter>,
   );
 }
 
+const report = (over: Partial<TodayReport> = {}): TodayReport => ({
+  headline: "Your games are decided in the middlegame.",
+  detail: "At the start of the opening the middle half of your games sit between 51% and 52%.",
+  finding: null,
+  cone: null,
+  measured: 5,
+  conclusions: 3,
+  games: 200,
+  rating: null,
+  ...over,
+});
+
 describe("Today", () => {
-  test("the standing line is a stated absence, not a figure", () => {
+  test("with nothing published the opening shape takes the heading back", () => {
+    // A page still has to open on something it means, and the shape's own
+    // empty states are the right thing to say to somebody whose games have not
+    // been read yet.
     draw();
-    expect(screen.getByText(/No rating or record here yet/i)).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1 }).id).toBe("today-shape-head");
+  });
+
+  test("a published report takes the heading, and the mistake bars step down", () => {
+    // The owner asked twice for the opening-mistake bar chart not to be the
+    // hero. With a report it is not rendered here at all; /openings owns it.
+    draw({
+      report: report(),
+      shape: shape({ total: 12, peak: { from: 5, to: 7, mistakes: 4 }, bars: [{ moveNo: 5, mistakes: 4, moves: 9 }] }),
+    });
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toMatch(/decided in the middlegame/i);
+    expect(screen.queryByText(/of your opening mistakes land between moves/i)).toBeNull();
+  });
+
+  test("the link to the report says what is inside it", () => {
+    // "Report" as a bare nav item gave nobody a reason to press it.
+    draw({ report: report({ measured: 5, conclusions: 3, games: 200 }) });
+    expect(screen.getByText(/5 measured areas, 3 conclusions, your trajectory across 200 games/i)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /printable report/i }).getAttribute("href")).toBe("/report");
+  });
+
+  test("a rating is quoted with the pool it came from, never on its own", () => {
+    draw({ report: report({ rating: { provider: "lichess", speed: "blitz", rating: 1842 } }) });
+    expect(screen.getByText(/1,842/)).toBeTruthy();
+    expect(screen.getByText(/blitz on lichess/i)).toBeTruthy();
+  });
+
+  test("a conclusion with no readable text leaves the slot empty", () => {
+    // There is no endpoint that turns a finding id into prose, so nothing is
+    // written here to fill the gap.
+    const { container } = draw({ report: report({ finding: null }) });
+    expect(container.querySelector(".today-verdict-finding")).toBeNull();
   });
 
   test("a graph that has not been built yet does not read as a clean sheet", () => {

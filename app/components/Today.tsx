@@ -1,13 +1,14 @@
 import { Link } from "react-router";
 import { Board } from "./Board";
 import { TopNav } from "./TopNav";
-import { EmptyState } from "./v1/Honesty";
+import { Trajectory } from "./Trajectory";
 import { relTimeIso } from "../lib/format";
 import type { OpeningShape } from "../lib/todayShape";
 import type { SheetCell, SheetRow, TearSheet } from "../lib/tearSheet";
 import type { RecentGame } from "../lib/v1/games";
 import type { ExplorerEmptyReason } from "../lib/v1/openings";
 import { explorerEmptyCopy } from "../lib/v1/openings";
+import type { TodayReport } from "../lib/v1/dashboard";
 import type { Destination } from "../lib/onboarding/nextScreen";
 
 /**
@@ -20,18 +21,33 @@ import type { Destination } from "../lib/onboarding/nextScreen";
  * hero type. Restraint and emptiness are not the same thing.
  *
  * PRODUCT.md's second principle asks the top of the screen to answer **both**
- * halves: how am I doing, and what should I fix. So the page opens on the
- * shape of the player's mistakes, which is the product's own idea drawn as a
- * picture and the only thing here that rewards a glance, and narrows from
- * there into a single square and a single action.
+ * halves: how am I doing, and what should I fix. The page answers the first
+ * with the report's own conclusion and narrows from there into a single square
+ * and a single action.
  *
- * ## What the standing line used to say
+ * ## What opens the page, and why it changed
  *
- * It carried a rating, a lifetime game count and a W/L/D record, all from the
- * prototype API, all counted over tables the analysis pipeline no longer
- * writes. `/v1` publishes none of the three. The line is now a stated absence
- * rather than a figure nobody can vouch for, and it sits under the heading so
- * the page still opens on its conclusion rather than on an apology.
+ * It used to open on the shape of the player's opening mistakes — a bar chart
+ * of which move numbers they fall on — above a stated absence where a rating
+ * and a record belonged. Both of those were forced by the same gap: `/v1` had
+ * no endpoint that returned a measurement, so the strongest thing the page
+ * could say was a count of one kind of mistake, and the honest thing it had to
+ * say about everything else was "we do not publish that".
+ *
+ * `/v1/dashboard` closed the gap. The page now opens on what the published
+ * report concludes — where the games are actually decided, in the trajectory's
+ * own words — with the graph itself under the heading, Forma's top finding
+ * beside it, and a link that states what the report holds.
+ *
+ * The mistake shape is not drawn here any more. "34% of your opening mistakes
+ * land between moves 5 and 7" is a real measurement and a small one: it is a
+ * detail of one phase of the game, not an answer to how somebody's chess is
+ * going, and it spent too long wearing the largest type on the product.
+ * `/openings` is where a detail of the opening belongs, and it is still there.
+ *
+ * With nothing published the shape takes the page back, because its empty
+ * states are the right thing to say to somebody whose games have not been read
+ * yet, and a page still has to open on something it means.
  */
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -91,16 +107,17 @@ export interface TodayProps {
   lastGame: RecentGame | null;
   /** Where the examination stands, or null when the run could not be read. */
   run: Destination | null;
+  /** What the published report says, or null when nothing is published. */
+  report: TodayReport | null;
 }
 
-export function Today({ shape, lead, empty, games, unanalysed, lastGame, run }: TodayProps) {
+export function Today({ shape, lead, empty, games, unanalysed, lastGame, run, report }: TodayProps) {
   return (
     <div className="relative z-10 min-h-dvh">
       <a className="skip-link" href="#today-main">Skip to content</a>
       <TopNav current="home" />
       <main id="today-main" className="today">
-        <Shape shape={shape} empty={empty} games={games} />
-        <Standing />
+        {report ? <Verdict report={report} /> : <Shape shape={shape} empty={empty} games={games} />}
         {lead ? <Lead task={lead} /> : <NoLead games={games} unanalysed={unanalysed} />}
         <Next lastGame={lastGame} run={run} />
       </main>
@@ -109,21 +126,58 @@ export function Today({ shape, lead, empty, games, unanalysed, lastGame, run }: 
 }
 
 /**
- * Orientation: how am I doing. Forma cannot answer it yet, and says so.
+ * What the report says, and a reason to go and read the rest of it.
  *
- * The three facts that stood here — a rating with its direction, a lifetime
- * game count and a W/L/D record — all came from one prototype endpoint reading
- * tables that stopped being written. There is no rating anywhere on `/v1`, no
- * lifetime record, and no analysed-game or blunder count. Filling the line
- * from the old source would be the most-read lie on the site, and leaving the
- * line out entirely would make the absence look like a design choice.
+ * This is the page's answer to "how am I doing". The three facts that stood
+ * here before — a rating, a lifetime record, an analysed-game count — came from
+ * a prototype endpoint reading tables the pipeline stopped writing, so the line
+ * became a stated absence. `/v1/dashboard` publishes all three from the
+ * publication itself, and the absence is over.
+ *
+ * The link is not a nav item called "Report". It says what is inside, counted
+ * from what came back, because a reader who has already seen the conclusion
+ * needs to know what the second page adds before they will press it.
  */
-function Standing() {
+function Verdict({ report }: { report: TodayReport }) {
+  const { measured, conclusions, games, rating } = report;
+  const inside = [
+    `${measured} measured ${plural(measured, "area", "areas")}`,
+    conclusions > 0 ? `${conclusions} ${plural(conclusions, "conclusion", "conclusions")}` : null,
+    `your trajectory across ${games.toLocaleString()} ${plural(games, "game", "games")}`,
+  ].filter((entry): entry is string => entry !== null);
+
   return (
-    <EmptyState
-      title="No rating or record here yet"
-      detail="Forma does not publish your rating, your lifetime win, loss and draw record, or how many of your games it has analysed. The figures that used to stand here were counted somewhere nothing can vouch for, so the line is empty until there is something true to put in it."
-    />
+    <section className="today-verdict" aria-labelledby="today-verdict-head">
+      <h1 id="today-verdict-head">{report.headline}</h1>
+      <p className="today-verdict-standing">
+        {rating ? (
+          <>
+            <span className="figure">{rating.rating.toLocaleString()}</span> {rating.speed} on{" "}
+            {rating.provider}
+            {" · "}
+          </>
+        ) : null}
+        <span className="figure">{games.toLocaleString()}</span>{" "}
+        {plural(games, "game", "games")} read
+      </p>
+
+      {report.cone ? <Trajectory cone={report.cone} /> : null}
+
+      {/* Forma's own sentence, printed verbatim or not at all. There is no
+          endpoint that turns a finding id into prose, so a slot with nothing in
+          it stays empty rather than being filled from here. */}
+      {report.finding ? <p className="today-verdict-finding">{report.finding}</p> : null}
+      {report.cone === null && report.detail ? (
+        <p className="today-verdict-detail">{report.detail}</p>
+      ) : null}
+
+      <Link to="/profile" className="primary-button btn-lg today-go">
+        See everything Forma measured
+      </Link>
+      <p className="today-verdict-inside">
+        {inside.join(", ")}. <Link to="/report">The same thing as a printable report</Link>.
+      </p>
+    </section>
   );
 }
 
