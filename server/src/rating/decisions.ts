@@ -102,9 +102,9 @@ export type Practical = PracticalReading | PracticalWithheld;
 export function readPractical(decision: Decision): Practical {
   const reply: ReplyEvidence | null = decision.reply;
   if (reply === null) return { status: "withheld", reason: "no_reply_evidence" };
-  if (reply.policy.moves.length === 0 || reply.policy.retainedMass <= 0) {
-    return { status: "withheld", reason: "empty_policy" };
-  }
+
+  const retainedMass = 1 - reply.unretainedProbabilityMass;
+  if (!(retainedMass > 0)) return { status: "withheld", reason: "empty_policy" };
   if (reply.expectedScoreIfMissed === null) {
     return { status: "withheld", reason: "no_inadequate_reply_retained" };
   }
@@ -113,16 +113,11 @@ export function readPractical(decision: Decision): Practical {
   const misses = reply.expectedScoreIfMissed;
   if (misses < holds) return { status: "withheld", reason: "evidence_inconsistent" };
 
-  const adequate = new Set(reply.adequateReplies);
-  let retainedSaveMass = 0;
-  for (const move of reply.policy.moves) {
-    if (adequate.has(move.uci)) retainedSaveMass += move.probability;
-  }
-  retainedSaveMass = Math.min(reply.policy.retainedMass, Math.max(0, retainedSaveMass));
+  const retainedSaveMass = Math.min(retainedMass, Math.max(0, reply.adequateReplyProbability));
 
-  const saveProbability = Math.min(1, retainedSaveMass / reply.policy.retainedMass);
-  const saveProbabilityLow = Math.min(1, Math.max(0, retainedSaveMass));
-  const saveProbabilityHigh = Math.min(1, retainedSaveMass + reply.policy.unretainedMass);
+  const saveProbability = Math.min(1, retainedSaveMass / retainedMass);
+  const saveProbabilityLow = retainedSaveMass;
+  const saveProbabilityHigh = Math.min(1, retainedSaveMass + reply.unretainedProbabilityMass);
 
   // Decreasing in the save probability, because a save is the worst case for
   // the side that created the problem. So the low bound on saves gives the high

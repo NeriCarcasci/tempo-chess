@@ -14,7 +14,6 @@
 
 import { strict as assert } from "node:assert";
 
-import { normalizePolicy } from "../models/policy.js";
 import { CONTINUATION_RATINGS } from "../models/continuation-rating.js";
 import {
   COMBINATION_POLICY,
@@ -27,6 +26,8 @@ import { liveness, readPractical, scoreDecision } from "./decisions.js";
 import { readDemand } from "./demand.js";
 import { estimateStrength } from "./strength.js";
 import { findMoments, normalizeStrength, rateGame, readCleanliness, softMin } from "./rating.js";
+import { decisionsFromReview, missingEvidence } from "./evidence.js";
+import type { ReviewMove } from "../engine/review.js";
 
 const failures: string[] = [];
 let passed = 0;
@@ -87,13 +88,9 @@ function decision(overrides: Partial<Decision> = {}): Decision {
 
 function replyEvidence(overrides: Partial<ReplyEvidence> = {}): ReplyEvidence {
   return {
-    adequateReplies: ["g8f6"],
+    adequateReplyProbability: 0.1,
+    unretainedProbabilityMass: 0,
     expectedScoreIfMissed: 0.9,
-    policy: normalizePolicy([
-      { uci: "g8f6", probability: 0.1 },
-      { uci: "b8c6", probability: 0.6 },
-      { uci: "d7d6", probability: 0.3 },
-    ]),
     outOfDomain: false,
     ...overrides,
   };
@@ -174,14 +171,7 @@ test("a sacrifice whose refutation is the natural move stands as the error it wa
     decision({
       expectedScoreBefore: 0.5,
       expectedScoreAfter: 0.4,
-      reply: replyEvidence({
-        adequateReplies: ["b8c6", "d7d6"],
-        policy: normalizePolicy([
-          { uci: "b8c6", probability: 0.7 },
-          { uci: "d7d6", probability: 0.25 },
-          { uci: "g8f6", probability: 0.05 },
-        ]),
-      }),
+      reply: replyEvidence({ adequateReplyProbability: 0.95 }),
     }),
   );
   assert.equal(scored.practical.status, "available");
@@ -197,7 +187,7 @@ test("pressure is never negative, whatever the policy says", () => {
   const scored = scoreDecision(
     decision({
       expectedScoreAfter: 0.4,
-      reply: replyEvidence({ adequateReplies: ["g8f6", "b8c6", "d7d6"], expectedScoreIfMissed: 0.4 }),
+      reply: replyEvidence({ adequateReplyProbability: 1, expectedScoreIfMissed: 0.4 }),
     }),
   );
   if (scored.practical.status === "available") {
@@ -208,18 +198,10 @@ test("pressure is never negative, whatever the policy says", () => {
 test("the unretained policy mass is bracketed rather than ignored", () => {
   // The save is retained but a tenth of the mass is not, so the truth about
   // how often the opponent holds sits inside a band rather than on a point.
-  const truncated = normalizePolicy(
-    [
-      { uci: "b8c6", probability: 0.6 },
-      { uci: "d7d6", probability: 0.3 },
-      { uci: "g8f6", probability: 0.1 },
-    ],
-    2,
-  );
   const result = readPractical(
     decision({
       expectedScoreAfter: 0.4,
-      reply: replyEvidence({ adequateReplies: ["b8c6"], policy: truncated }),
+      reply: replyEvidence({ adequateReplyProbability: 0.6, unretainedProbabilityMass: 0.1 }),
     }),
   );
   assert.equal(result.status, "available");
@@ -551,6 +533,101 @@ test("a rating always arrives with its decomposition", () => {
   assert.equal(result.black.cleanliness.status, "available");
   assert.equal(result.demand.status, "available");
   assert.ok(result.coverage.decisions > 0);
+});
+
+// ---------------------------------------------------------------------------
+// The seam to the published review
+// ---------------------------------------------------------------------------
+
+function reviewMove(overrides: Partial<ReviewMove> = {}): ReviewMove {
+  return {
+    fromPly: 1,
+    uci: "e2e4",
+    san: "e4",
+    actorColor: "white",
+    phase: "middlegame",
+    expectedScoreBefore: 0.5,
+    expectedScoreAfter: 0.45,
+    decisionLoss: 0.05,
+    acceptable: false,
+    bestMoveUci: "d2d4",
+    playedMoveRank: 2,
+    acceptableMoveCount: 2,
+    onlyMove: false,
+    criticality: 0.2,
+    evidence: { beforeScope: "rule50", afterScope: "rule50" },
+    deep: { status: "completed", reasons: [], candidates: [] },
+    practicalContext: {
+      status: "available",
+      adequateReplyCount: 1,
+      adequateReplyProbability: 0.2,
+      unretainedProbabilityMass: 0.05,
+      practicalPressureLower: 0.75,
+      practicalPressureUpper: 0.8,
+      policyEntropyBits: 1.2,
+      entropyIsLowerBound: true,
+      bestRefutationUci: "g8f6",
+      bestRefutationProbability: 0.2,
+      bestRefutationRank: 3,
+      humanExpectedScore: null,
+      outOfDomain: false,
+      opponentConceded: null,
+      subjectCapitalized: null,
+    },
+    ...overrides,
+  } as ReviewMove;
+}
+
+test("stored practical context alone is not reply evidence", () => {
+  // The review says how likely the opponent is to hold. Nothing says what it
+  // costs them when they do not, and half the calculation is not a reading.
+  const input = decisionsFromReview([reviewMove()], {
+    canonicalGameId: null,
+    deepPassRan: true,
+  });
+  assert.equal(input.decisions[0]!.reply, null);
+});
+
+test("both halves together make a reply evidence", () => {
+  const input = decisionsFromReview([reviewMove()], {
+    canonicalGameId: null,
+    deepPassRan: true,
+    supplements: new Map([[1, { expectedScoreIfMissed: 0.9 }]]),
+  });
+  const reply = input.decisions[0]!.reply;
+  assert.ok(reply !== null);
+  close(reply!.adequateReplyProbability, 0.2);
+  close(reply!.unretainedProbabilityMass, 0.05);
+});
+
+test("a completed deep search on a dead position is still a deep search", () => {
+  // Criticality zero means the selector looked and found nothing at stake.
+  // Reading `deepSearched` off criticality would turn that into "unknown".
+  const input = decisionsFromReview(
+    [reviewMove({ criticality: 0, deep: { status: "completed", reasons: [], candidates: [] } })],
+    { canonicalGameId: null, deepPassRan: true },
+  );
+  assert.equal(input.decisions[0]!.deepSearched, true);
+});
+
+test("an unsupplied ply counts as a real decision rather than vanishing", () => {
+  const input = decisionsFromReview([reviewMove()], {
+    canonicalGameId: null,
+    deepPassRan: true,
+  });
+  assert.equal(input.decisions[0]!.book, false);
+  assert.equal(input.decisions[0]!.legalMoveCount, null);
+});
+
+test("the missing evidence is reportable in words", () => {
+  const input = decisionsFromReview([reviewMove()], {
+    canonicalGameId: null,
+    deepPassRan: false,
+  });
+  const missing = missingEvidence(input);
+  assert.ok(missing.some((line) => line.includes("no policy inference")));
+  assert.ok(missing.some((line) => line.includes("deep pass")));
+  assert.ok(missing.some((line) => line.includes("no reply evidence")));
 });
 
 // ---------------------------------------------------------------------------

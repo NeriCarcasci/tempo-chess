@@ -26,7 +26,6 @@ import { createHash } from "node:crypto";
 
 import { canonicalJson } from "../v1/canonical-json.js";
 import { CONTINUATION_RATINGS } from "../models/continuation-rating.js";
-import type { PolicyDistribution } from "../models/policy.js";
 import type { GamePhase } from "../analysis/phase.js";
 
 /** Lowercase hex SHA-256, as everywhere else. */
@@ -228,23 +227,31 @@ export type Color = "white" | "black";
  */
 export interface ReplyEvidence {
   /**
-   * Replies within `TOLERANCE_RULE` of the best reply, in UCI.
+   * Policy mass on replies inside `TOLERANCE_RULE` of the best one: how likely
+   * the opponent is to find something that holds.
    *
-   * The opponent's saves. Empty means the search found no adequate reply, which
-   * is a real and dramatic finding: the move left nothing that holds.
+   * This is `adequate_reply_probability` from
+   * `analysis.practical_context_assessments`, which E14 already computes and
+   * stores per transition. It is taken as a number rather than re-derived from
+   * a policy distribution so that the rating reads the same figure the review
+   * screen shows, instead of a second opinion about the same inference.
    */
-  adequateReplies: readonly string[];
+  adequateReplyProbability: number;
   /**
-   * Actor-perspective expected score after the best retained reply that is
-   * *outside* tolerance: what the actor gets when the opponent goes wrong.
+   * Mass the model did not retain, which is what turns the estimate into a
+   * bracket. Also already stored.
+   */
+  unretainedProbabilityMass: number;
+  /**
+   * Actor-perspective expected score when the opponent does *not* hold.
    *
-   * Null when every retained reply was adequate. That is not zero pressure to
-   * be filled in with a default, it is a search that never saw a mistake, and
+   * The one quantity the stored vector is missing, and the reason wiring this
+   * needs a MultiPV search at the position the move created rather than only a
+   * read. Null when every retained reply was adequate: that is not zero
+   * pressure to be defaulted in, it is a search that never saw a mistake, and
    * the practical claim is withheld for that decision.
    */
   expectedScoreIfMissed: number | null;
-  /** The opponent's policy over replies, conditioned on the opponent. */
-  policy: PolicyDistribution;
   /**
    * True when the policy answered outside its calibrated slice.
    *

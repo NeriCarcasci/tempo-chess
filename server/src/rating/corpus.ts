@@ -23,7 +23,6 @@
  * fine.
  */
 
-import { normalizePolicy } from "../models/policy.js";
 import { CONTINUATION_RATINGS } from "../models/continuation-rating.js";
 import type { Color, Decision, GameRatingInput } from "./contract.js";
 
@@ -115,12 +114,9 @@ export function buildGame(spec: GameSpec): GameRatingInput {
       bandLogLikelihoods: bands(side.plays),
       reply: sacrifice
         ? {
-            adequateReplies: ["g8f6"],
+            adequateReplyProbability: sacrifice.opponentFindsIt,
+            unretainedProbabilityMass: 0,
             expectedScoreIfMissed: sacrifice.ifMissed,
-            policy: normalizePolicy([
-              { uci: "g8f6", probability: sacrifice.opponentFindsIt },
-              { uci: "b8c6", probability: 1 - sacrifice.opponentFindsIt },
-            ]),
             outOfDomain: false,
           }
         : null,
