@@ -184,6 +184,11 @@ export async function detectForRun(
         game.result === "white" || game.result === "black" || game.result === "draw"
           ? game.result
           : null,
+      // Empty until FOR-132, which is the ticket that loads stored engine
+      // lines. A detector that needs a line it was never given abstains, which
+      // is its contracted behaviour rather than a gap -- so the tactical
+      // families degrade to "not verified here" instead of guessing.
+      candidatesByPly: new Map(),
       positions: positions.map((row): PositionFact => ({ ply: row.ply, fen: row.fen })),
       transitions: transitions.map((row): TransitionFact => ({
         fromPly: row.from_ply,
@@ -319,7 +324,8 @@ export async function detectForRun(
             ${group.event.eventType}, ${group.event.startPly},
             ${group.event.focalPly}, ${group.event.endPly},
             ${resolveColor(group.event.actor)}, ${resolveColor(group.event.affected)},
-            ${jsonParam(group.event.facts)}::jsonb, null, ${group.event.completeness},
+            ${jsonParam(group.event.facts)}::jsonb, ${group.event.confidence},
+            ${group.event.completeness},
             ${detectionKey}
           )
           returning id

@@ -3,7 +3,14 @@ import { test } from "node:test";
 import { Chess } from "chessops/chess";
 import { parseFen, makeFen, INITIAL_FEN } from "chessops/fen";
 import { parseUci } from "chessops/util";
-import { detectGame, type GameFacts, type PositionFact, type TransitionFact } from "./detect.js";
+import {
+  DETECTORS,
+  PositionIndex,
+  detectGame,
+  type GameFacts,
+  type PositionFact,
+  type TransitionFact,
+} from "./detect.js";
 import { CONCEPT_CATALOGUE, CRITICALITY_THRESHOLD, conceptVersionHash } from "./catalogue.js";
 import { difficultyIsUncontaminated, isRecordableOpportunity } from "../observations.js";
 
@@ -693,4 +700,86 @@ test("a piece defended well enough is not hanging", () => {
     0,
     `a knight defended by a pawn is not hanging to a rook (${rookAttacks})`,
   );
+});
+
+// ---------------------------------------------------------------------------
+// FOR-125: the registry, and one board per game
+// ---------------------------------------------------------------------------
+
+test("the detector order is a written list, and it is the order of the output", () => {
+  assert.deepEqual(
+    DETECTORS.map((detector) => detector.name),
+    ["material", "decision", "conversion"],
+    "the order is part of the output contract: two runs must emit the same rows "
+    + "in the same sequence, or a diff between them means nothing",
+  );
+});
+
+test("every detector reads the same board, parsed once per ply", () => {
+  // The point of the shared layer. Three detectors ask about the same plies,
+  // and the expensive thing each of them could have done independently is
+  // parsing the FEN.
+  const facts = game({
+    positions: play(["e2e4", "e7e5", "g1f3", "b8c6"]),
+    transitions: [0, 1, 2, 3].map((ply) => transition({
+      fromPly: ply,
+      actorColor: ply % 2 === 0 ? "white" : "black",
+      playedMoveUci: ["e2e4", "e7e5", "g1f3", "b8c6"][ply]!,
+    })),
+  });
+  const index = new PositionIndex(facts.positions);
+  const context = { game: facts, index };
+  for (const detector of DETECTORS) detector.detect(context);
+
+  // Five positions exist for four moves. Anything at or below that has reused
+  // the cache for every ordinary lookup; the surplus is `asIfToMove`, which
+  // rebuilds deliberately to ask a question out of turn.
+  assert.ok(
+    index.parseCount >= facts.positions.length,
+    "every position the detectors touched was parsed at least once",
+  );
+  assert.ok(
+    index.parseCount <= facts.positions.length * 3,
+    `three detectors over ${facts.positions.length} positions parsed ${index.parseCount} times, `
+    + "which is more than out-of-turn questions can explain",
+  );
+});
+
+test("detecting the same game twice produces the same rows in the same order", () => {
+  const facts = game({
+    positions: play(["e2e4", "e7e5", "g1f3", "b8c6"]),
+    transitions: [0, 1, 2, 3].map((ply) => transition({
+      fromPly: ply,
+      actorColor: ply % 2 === 0 ? "white" : "black",
+      playedMoveUci: ["e2e4", "e7e5", "g1f3", "b8c6"][ply]!,
+    })),
+  });
+  const first = detectGame(facts);
+  const second = detectGame(facts);
+  assert.deepEqual(
+    first.map((o) => `${o.event.detectionKey}|${o.conceptSlug}|${o.role}|${o.draft.success}`),
+    second.map((o) => `${o.event.detectionKey}|${o.conceptSlug}|${o.role}|${o.draft.success}`),
+  );
+});
+
+test("every event draft says how sure it is, even when the answer is nothing", () => {
+  // `detection_confidence` is nullable and the column existed unused. A
+  // deterministic board fact has no meaningful confidence and says null; the
+  // tactical families will use it to separate a consequence proven by a stored
+  // line from one inferred from static exchange alone.
+  const facts = game({
+    positions: play(["e2e4", "e7e5"]),
+    transitions: [0, 1].map((ply) => transition({
+      fromPly: ply,
+      actorColor: ply % 2 === 0 ? "white" : "black",
+      playedMoveUci: ["e2e4", "e7e5"][ply]!,
+    })),
+  });
+  for (const found of detectGame(facts)) {
+    assert.ok(
+      found.event.confidence === null
+      || (found.event.confidence >= 0 && found.event.confidence <= 1),
+      `${found.event.eventType} has a confidence the column's check would reject`,
+    );
+  }
 });
