@@ -3183,16 +3183,23 @@
      spikes where a quarter of the archive swings hard are where a mitre is
      ugliest — a needle point instead of the turn the data makes. Opaque stroke,
      so the overlap with the fill does not darken its edge. */
+  /* The distribution takes the accent, the datum stays ink.
+     DESIGN.md lets two things carry colour: the accent, and a semantic result.
+     The band is the spread of an expected score, which is the product's own
+     measure rather than a win or a loss, so it takes the accent — one hue,
+     the same one the cost ramp and the spread row already use. The median and
+     its interval stay ink, because a line a reader is asked to check against
+     level should not be competing with the field it sits in. */
   .cone-band {
-    fill: color-mix(in srgb, var(--color-ink) 9%, var(--color-surface));
-    stroke: color-mix(in srgb, var(--color-ink) 9%, var(--color-surface));
+    fill: color-mix(in srgb, var(--color-accent) 13%, var(--color-surface));
+    stroke: color-mix(in srgb, var(--color-accent) 13%, var(--color-surface));
     stroke-width: 2; stroke-linejoin: round;
   }
   /* The median's interval: the same ink as the line, kept light enough that
      the line stays the figure and the ribbon qualifies it. */
   .cone-median-interval {
-    fill: color-mix(in srgb, var(--color-ink) 20%, transparent);
-    stroke: color-mix(in srgb, var(--color-ink) 20%, transparent);
+    fill: color-mix(in srgb, var(--color-accent) 34%, var(--color-surface));
+    stroke: color-mix(in srgb, var(--color-accent) 34%, var(--color-surface));
     stroke-width: 1.5; stroke-linejoin: round;
   }
   /* The spread register, on the openings sheet's own three-step ramp so a
@@ -3222,9 +3229,9 @@
     stroke: var(--color-ink); stroke-width: 1.5;
     stroke-linejoin: round; stroke-linecap: round;
   }
-  .cone-rail-area { fill: color-mix(in srgb, var(--color-ink) 8%, transparent); }
+  .cone-rail-area { fill: color-mix(in srgb, var(--color-accent) 9%, transparent); }
   .cone-rail-edge {
-    fill: none; stroke: color-mix(in srgb, var(--color-ink) 30%, transparent);
+    fill: none; stroke: color-mix(in srgb, var(--color-accent) 34%, transparent);
     stroke-width: 1.25; stroke-linejoin: round; stroke-linecap: round;
   }
 
@@ -3250,6 +3257,42 @@
     grid-column: 2; display: grid; gap: 8px;
     grid-template-columns: var(--phase-columns, repeat(3, 1fr));
   }
+  /* The phase bar: one row under the axis, each phase as wide as the share of
+     the axis it holds. `--phase-columns` is set by the component from the same
+     spans the dividers are drawn at, so the bar and the picture cannot drift.
+     It sits in the content column, like the plot, not in the gutter. */
+  .cone-phases {
+    grid-column: 2; display: grid; gap: 2px;
+    grid-template-columns: var(--phase-columns, repeat(3, 1fr));
+    margin-top: 0.7rem;
+  }
+  .cone-phase {
+    display: grid; gap: 0.3rem; align-content: start;
+    padding: 0.75rem 0.85rem; border-radius: var(--radius-control);
+    background: var(--color-surface-2); min-width: 0;
+  }
+  .cone-phase-head { display: flex; align-items: center; gap: 0.45rem; }
+  .cone-phase-head b { color: var(--color-ink-muted); }
+  .cone-phase-figure { display: flex; align-items: baseline; gap: 0.35rem; min-width: 0; }
+  .cone-phase-figure b {
+    font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700;
+    color: var(--color-ink); font-variant-numeric: tabular-nums;
+  }
+  .cone-phase-figure small { font-size: 0.68rem; color: var(--color-ink-faint); }
+  .cone-phase-reading {
+    font-size: 0.8rem; line-height: 1.45; color: var(--color-ink);
+  }
+  .cone-phase-evidence {
+    font-family: var(--font-mono); font-size: 0.66rem; color: var(--color-ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  /* One absence, stated once. It was three copies of this paragraph, one per
+     card, which took more of the page than every figure on it put together. */
+  .cone-phases-absent {
+    grid-column: 2; margin-top: 0.6rem; max-width: 68ch;
+    font-size: 0.75rem; line-height: 1.6; color: var(--color-ink-faint);
+  }
+
   .phase-card {
     display: grid; gap: 0.5rem; align-content: start;
     border-radius: var(--radius-control); padding: 0.9rem 1rem;
@@ -3283,7 +3326,7 @@
     .cone-plot { aspect-ratio: 1.35; }
     /* Structural, as DESIGN.md requires: three narrow columns of prose is not
        a layout, so the cards stack and give up their alignment to the graph. */
-    .phase-cards { grid-template-columns: minmax(0, 1fr); }
+    .phase-cards, .cone-phases { grid-template-columns: minmax(0, 1fr); }
   }
 
   @media (prefers-reduced-motion: reduce) {

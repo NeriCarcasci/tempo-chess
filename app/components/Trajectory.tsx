@@ -285,75 +285,48 @@ export function Trajectory({
           </div>
         </div>
 
-        <ol className="phase-cards">
+        {/*
+          The phases, as one bar under the axis rather than three boxed cards.
+
+          Each phase is sized to the share of the axis it actually occupies, so
+          the bar is a legend for the picture above it and not a second layout
+          competing with it. The three cards this replaces were the same width
+          whatever the phase was worth, and every one of them carried its own
+          copy of the same paragraph saying a figure is not published yet — the
+          same absence stated three times, taking more of the page than any
+          number on it.
+        */}
+        <ol className="cone-phases">
           {cards.map((card) => (
-            <li key={card.phase} className="phase-card">
-              <p className="phase-card-head">
-                <strong>{card.name}</strong>
+            <li key={card.phase} className="cone-phase" style={{ gridColumn: "auto" }}>
+              <p className="cone-phase-head">
+                <b className="cap">{card.name}</b>
                 {card.standing ? <span className="tag tag-sub">{card.standing}</span> : null}
               </p>
-
-              {/* How well you play here. A rate, and today an absence: the
-                  evidence is phase-tagged in the database and no route returns
-                  it, so the card says that rather than splitting the estimates
-                  itself and putting Forma's name on the result. */}
-              {card.accuracy ? (
-                <div className="phase-rate">
-                  <p className="phase-figure">
-                    <b>{pct(card.accuracy.rate)}</b>
-                    <small>of your chances taken here</small>
-                  </p>
-                  <span className="rate-track" aria-hidden="true">
-                    <i
-                      className="rate-interval"
-                      style={{
-                        left: `${(card.accuracy.intervalLow ?? card.accuracy.rate) * 100}%`,
-                        width: `${((card.accuracy.intervalHigh ?? card.accuracy.rate) - (card.accuracy.intervalLow ?? card.accuracy.rate)) * 100}%`,
-                      }}
-                    />
-                    <i className="rate-point" style={{ left: `${card.accuracy.rate * 100}%` }} />
-                  </span>
-                  <p className="phase-evidence">
-                    {card.accuracy.intervalLow !== null && card.accuracy.intervalHigh !== null
-                      ? `${pct(card.accuracy.intervalLow)} to ${pct(card.accuracy.intervalHigh)} · `
-                      : ""}
-                    {card.accuracy.took.toLocaleString()} of{" "}
-                    {card.accuracy.chances.toLocaleString()} chances across{" "}
-                    {card.accuracy.gamesReaching.toLocaleString()} games
-                    {card.accuracy.setAside > 0
-                      ? ` · ${card.accuracy.setAside.toLocaleString()} set aside`
-                      : ""}
-                  </p>
-                </div>
-              ) : (
-                <p className="phase-missing">
-                  How often you take a chance in the {card.name} is recorded against every
-                  observation and is not published to this screen yet. Forma will not split the
-                  figures it does publish to fill the gap.
-                </p>
-              )}
-
-              {/* How much your games move here. A different statement from the
-                  rate above, and deliberately not merged with it: where the
-                  mistakes are and where they start costing whole games are
-                  frequently different phases. */}
-              <div className="phase-band">
-                <p className="phase-figure is-secondary">
-                  <b>{signed(card.growth)}</b>
-                  <small>points wider by the end</small>
-                </p>
-                <p className="phase-reading">{card.reading}</p>
-                <p className="phase-evidence">
-                  {card.exit} {card.games.toLocaleString()}{" "}
-                  {card.games === 1 ? "game" : "games"} · {pct(card.reachRate)} of your games reach
-                  it.
-                </p>
-                {card.scopeNote ? <p className="phase-evidence">{card.scopeNote}</p> : null}
-                {card.caution ? <p className="phase-caution">{card.caution}</p> : null}
-              </div>
+              <p className="cone-phase-figure">
+                <b>{signed(card.growth)}</b>
+                <small>points wider by the end</small>
+              </p>
+              <p className="cone-phase-reading">{card.reading}</p>
+              <p className="cone-phase-evidence">
+                {card.exit} {card.games.toLocaleString()}{" "}
+                {card.games === 1 ? "game" : "games"} · {pct(card.reachRate)} of your games reach
+                it.
+              </p>
+              {card.scopeNote ? <p className="cone-phase-evidence">{card.scopeNote}</p> : null}
+              {card.caution ? <p className="phase-caution">{card.caution}</p> : null}
             </li>
           ))}
         </ol>
+
+        {/* Stated once, not once per phase. */}
+        {cards.some((card) => !card.accuracy) ? (
+          <p className="cone-phases-absent">
+            How often you take a chance in each phase is recorded against every observation and is
+            not published to this screen yet. Forma will not split the figures it does publish to
+            fill the gap.
+          </p>
+        ) : null}
       </div>
 
       <figcaption>

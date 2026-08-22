@@ -365,9 +365,9 @@ describe("the measures", () => {
 });
 
 describe("the trajectory", () => {
-  test("the graph carries a card per phase, each with its own game count", () => {
+  test("the phase bar carries one phase per phase, each with its own game count", () => {
     const { container } = draw();
-    const cards = [...container.querySelectorAll(".phase-card")];
+    const cards = [...container.querySelectorAll(".cone-phase")];
     expect(cards).toHaveLength(3);
     expect(cards[2]!.textContent).toContain("48 games");
     expect(cards[2]!.textContent).toContain("24% of your games reach it");

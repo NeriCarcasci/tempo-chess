@@ -194,7 +194,7 @@ describe("the document", () => {
   test("it says the same things the profile says, from the same components", () => {
     const { container } = draw();
     expect(container.querySelector(".cone")).toBeTruthy();
-    expect(container.querySelectorAll(".phase-card")).toHaveLength(2);
+    expect(container.querySelectorAll(".cone-phase")).toHaveLength(2);
     expect(container.querySelectorAll(".rate-row")).toHaveLength(1);
     // The same honesty rule: a rate carries its interval and its sample size.
     expect(container.querySelector(".rate-figure")!.textContent).toContain("82% to 86%");
