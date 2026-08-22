@@ -95,16 +95,30 @@ export async function detectForRun(
       );
     }
 
+    // Detection is idempotent at observation granularity, but deciding what is
+    // missing and writing it spans several statements. Serialize attempts for
+    // one immutable position graph so a worker retry and a backfill cannot both
+    // pass the reads and then race into the event/opportunity unique indexes.
+    // The lock is transaction-scoped and releases on both commit and rollback.
+    await tx`
+      select pg_advisory_xact_lock(hashtextextended(${materializationRunId}, 0))
+    `;
+
     const [game] = await tx<{
       subject_color: string;
       replay_revision_id: string;
       speed: string | null;
       termination: string | null;
+      result: string;
       played_at: RawTimestamp;
     }[]>`
-      select g.subject_color, r.id as replay_revision_id, r.speed, r.termination, r.played_at
+      select g.subject_color, r.id as replay_revision_id, r.speed, r.termination, r.result, r.played_at
       from chess.subject_games g
-      join chess.game_replay_revisions r on r.id = g.latest_replay_revision_id
+      -- Metadata and positions must describe the same immutable replay. The
+      -- subject game's latest pointer can advance after this analysis run was
+      -- created, so joining through it would mix a corrected replay's result
+      -- and termination with the run-pinned transition evidence.
+      join chess.game_replay_revisions r on r.id = ${run.replay_revision_id}
       where g.id = ${run.subject_game_id}
     `;
     if (!game) throw new WorkFailure("invalid_input", "unknown_game", "no such subject game");
@@ -166,6 +180,10 @@ export async function detectForRun(
       speed: game.speed,
       playedAt: requiredDate(game.played_at, "game_replay_revisions.played_at"),
       termination: game.termination,
+      result:
+        game.result === "white" || game.result === "black" || game.result === "draw"
+          ? game.result
+          : null,
       positions: positions.map((row): PositionFact => ({ ply: row.ply, fen: row.fen })),
       transitions: transitions.map((row): TransitionFact => ({
         fromPly: row.from_ply,

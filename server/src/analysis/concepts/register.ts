@@ -77,24 +77,11 @@ async function registerOne(sql: Sql, definition: ConceptDefinition): Promise<Reg
   if (!concept) throw new Error(`the concept ${definition.slug} did not register`);
 
   const hash = conceptVersionHash(definition);
-  const [existing] = await sql<{ id: string; version_hash: string }[]>`
-    select id, version_hash from analysis.concept_versions
-    where concept_id = ${concept.id} and version_no = ${definition.versionNo}
-  `;
-  if (existing) {
-    const mismatch = existing.version_hash !== hash;
-    return {
-      slug: definition.slug,
-      versionNo: definition.versionNo,
-      conceptId: concept.id,
-      conceptVersionId: existing.id,
-      outcome: mismatch ? "conflicting" : "existing",
-      created: false,
-      hashMismatch: mismatch,
-    };
-  }
-
-  const [version] = await sql<{ id: string }[]>`
+  // Let the unique constraint arbitrate creation. A select followed by a bare
+  // insert races when two deploy jobs register the same catalogue together:
+  // both observe no row and one aborts on the unique constraint. `do nothing`
+  // makes the loser continue to the comparison below instead.
+  const [created] = await sql<{ id: string }[]>`
     insert into analysis.concept_versions (
       concept_id, version_no, human_definition, detector_contract, supported_roles,
       rubric_contract, version_hash, promoted_at
@@ -103,17 +90,37 @@ async function registerOne(sql: Sql, definition: ConceptDefinition): Promise<Reg
       ${jsonParam(definition.detectorContract)}::jsonb, ${definition.supportedRoles as string[]},
       null, ${hash}, now()
     )
+    on conflict (concept_id, version_no) do nothing
     returning id
   `;
-  if (!version) throw new Error(`the concept version for ${definition.slug} did not register`);
+  if (created) {
+    return {
+      slug: definition.slug,
+      versionNo: definition.versionNo,
+      conceptId: concept.id,
+      conceptVersionId: created.id,
+      outcome: "created",
+      created: true,
+      hashMismatch: false,
+    };
+  }
+
+  // Under READ COMMITTED this statement sees the row whose conflicting insert
+  // committed while ours waited. It also handles the ordinary repeat case.
+  const [existing] = await sql<{ id: string; version_hash: string }[]>`
+    select id, version_hash from analysis.concept_versions
+    where concept_id = ${concept.id} and version_no = ${definition.versionNo}
+  `;
+  if (!existing) throw new Error(`the concept version for ${definition.slug} did not register`);
+  const mismatch = existing.version_hash !== hash;
   return {
     slug: definition.slug,
     versionNo: definition.versionNo,
     conceptId: concept.id,
-    conceptVersionId: version.id,
-    outcome: "created",
-    created: true,
-    hashMismatch: false,
+    conceptVersionId: existing.id,
+    outcome: mismatch ? "conflicting" : "existing",
+    created: false,
+    hashMismatch: mismatch,
   };
 }
 

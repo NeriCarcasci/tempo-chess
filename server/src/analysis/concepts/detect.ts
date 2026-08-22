@@ -25,8 +25,8 @@
 import { Chess } from "chessops/chess";
 import { parseFen } from "chessops/fen";
 import { parseUci } from "chessops/util";
-import type { Square } from "chessops/types";
-import { see } from "../../engine/attacks.js";
+import type { Role, Square } from "chessops/types";
+import { attackersTo, see } from "../../engine/attacks.js";
 import type { CensorReason, ConceptRole, OpportunityDraft } from "../observations.js";
 import {
   CRITICALITY_THRESHOLD,
@@ -76,6 +76,8 @@ export interface GameFacts {
   readonly positions: readonly PositionFact[];
   /** Why the game stopped, from the provider. Decides how a missing move is censored. */
   readonly termination: string | null;
+  /** The winner in board colours, or draw. Needed before naming who resigned. */
+  readonly result: "white" | "black" | "draw" | null;
 }
 
 /** An observation, plus everything the row around it needs. */
@@ -195,6 +197,10 @@ interface BoardCapture {
   readonly from: Square;
   readonly to: Square;
   readonly gain: number;
+  readonly targetRole: Role;
+  readonly attackerCount: number;
+  readonly defenderCount: number;
+  readonly captureCount: number;
 }
 
 /**
@@ -234,7 +240,8 @@ function bestCapture(fen: string, mover: "white" | "black"): BoardCapture | null
   if (position.isErr) return null;
   const board = position.unwrap();
 
-  let best: BoardCapture | null = null;
+  let bestMove: { from: Square; to: Square; gain: number; targetRole: Role } | null = null;
+  let captureCount = 0;
   for (const [from, dests] of board.allDests()) {
     for (const to of dests) {
       const target = board.board.get(to);
@@ -242,10 +249,24 @@ function bestCapture(fen: string, mover: "white" | "black"): BoardCapture | null
       if (!target || target.color === mover) continue;
       const gain = see(board.board, to, from);
       if (gain < MATERIAL_THRESHOLD_CP) continue;
-      if (!best || gain > best.gain) best = { from, to, gain };
+      captureCount += 1;
+      if (!bestMove || gain > bestMove.gain) {
+        bestMove = { from, to, gain, targetRole: target.role };
+      }
     }
   }
-  return best;
+  if (!bestMove) return null;
+
+  let attackerCount = 0;
+  for (const [, dests] of board.allDests()) {
+    if (dests.has(bestMove.to)) attackerCount += 1;
+  }
+  const target = board.board.get(bestMove.to)!;
+  const defenders = target.color === "white" ? board.board.white : board.board.black;
+  const defenderCount = attackersTo(board.board, bestMove.to, board.board.occupied)
+    .intersect(defenders)
+    .size();
+  return { ...bestMove, attackerCount, defenderCount, captureCount };
 }
 
 /** Whether the opponent could win material if it were their move. */
@@ -313,8 +334,20 @@ function legalMoveCount(fen: string): number | null {
   if (parsed.isErr) return null;
   const position = Chess.fromSetup(parsed.unwrap());
   if (position.isErr) return null;
+  const chess = position.unwrap();
   let total = 0;
-  for (const [, dests] of position.unwrap().allDests()) total += dests.size();
+  for (const [from, dests] of chess.allDests()) {
+    total += dests.size();
+    if (!chess.board.pawn.has(from)) continue;
+    // `allDests` is a square set, so it collapses Q/R/B/N promotions onto one
+    // destination. MultiPV counts their UCI moves separately. Add the other
+    // three choices or a promotion position can look fully searched when it is
+    // not.
+    for (const to of dests) {
+      const rank = Math.floor(to / 8);
+      if (rank === 0 || rank === 7) total += 3;
+    }
+  }
   return total;
 }
 
@@ -332,7 +365,9 @@ function capturedMaterial(fen: string, uci: string, mover: "white" | "black"): b
   if (parsed.isErr) return false;
   const position = Chess.fromSetup(parsed.unwrap());
   if (position.isErr) return false;
-  const board = position.unwrap().board;
+  const chess = position.unwrap();
+  if (!chess.isLegal(move)) return false;
+  const board = chess.board;
   const target = board.get(move.to);
   if (!target || target.color === mover) return false;
   return see(board, move.to, move.from) >= MATERIAL_THRESHOLD_CP;
@@ -345,13 +380,18 @@ function positionAt(positions: readonly PositionFact[], ply: number): string | n
 /**
  * Why the subject never answered.
  *
- * Read from the provider's own termination rather than guessed. "The game
- * ended" is the honest fallback when the provider said something this does not
- * recognise -- inventing `opponent_resigned` from silence would attribute a
- * decision to a person who may not have made it.
+ * Read from the provider's termination and result rather than guessed. "The
+ * game ended" is the honest fallback when they do not establish who stopped --
+ * a resignation says how the game ended, while the winner says who resigned.
  */
-function censorFor(termination: string | null): CensorReason {
-  if (termination === "resign") return "opponent_resigned";
+function censorFor(
+  termination: string | null,
+  result: GameFacts["result"],
+  subjectColor: GameFacts["subjectColor"],
+): CensorReason {
+  // `termination = resign` says how the game ended, not who resigned. Only the
+  // winner lets us attribute that decision to the opponent.
+  if (termination === "resign" && result === subjectColor) return "opponent_resigned";
   if (termination === "outoftime" || termination === "timeout") return "clock_expired";
   return "game_ended";
 }
@@ -385,6 +425,18 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
         // abstains instead of guessing which one it is looking at.
         const soundSacrifice = !resolved && transition.playedMoveAcceptable;
         if (!soundSacrifice) {
+          const move = parseUci(transition.playedMoveUci);
+          const movedFocalPiece = Boolean(move && "from" in move && move.from === exposed.to);
+          const removedPrimaryAttacker = Boolean(
+            move && "from" in move && move.to === exposed.from,
+          );
+          const resolution = !resolved
+            ? "unresolved"
+            : movedFocalPiece
+              ? "moved_to_safety"
+              : removedPrimaryAttacker
+                ? "attacker_removed"
+                : "defended_or_blocked";
           found.push({
             conceptSlug: "material_safety",
             role: "respond",
@@ -402,6 +454,8 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
               // how many replies there were to choose between.
               difficulty: {
                 materialAtRiskCp: exposed.gain,
+                attackerCount: exposed.attackerCount,
+                defenderCount: exposed.defenderCount,
                 legalReplies: legalMoveCount(before) ?? 0,
               },
             },
@@ -415,10 +469,12 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
               endPly: transition.fromPly + 1,
               facts: {
                 square: exposed.to,
+                piece: exposed.targetRole,
                 atRiskCp: exposed.gain,
                 squareAfter: landedOn,
                 remainingCp: remaining,
                 resolved,
+                resolution,
               },
               completeness: "complete",
             },
@@ -435,7 +491,14 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
       // tolerance is another: a mate in one, a zwischenzug that wins more, a
       // stronger recapture. v1 called all of those failures to see free
       // material, which is the opposite of what happened.
-      const playedSomethingBetter = !tookIt && transition.playedMoveAcceptable;
+      const alternativeVerified = !tookIt && transition.playedMoveAcceptable;
+      // Being outside tolerance does not prove this offer was the missed
+      // alternative. The engine may have found a much stronger quiet move. A
+      // failure is defensible when its own best move is a material-winning
+      // capture; otherwise this detector abstains.
+      const captureWasEngineBest = transition.bestMoveUci !== null
+        && capturedMaterial(before, transition.bestMoveUci, game.subjectColor);
+      if (!tookIt && !alternativeVerified && !captureWasEngineBest) continue;
       found.push({
         conceptSlug: "free_material",
         role: "recognize",
@@ -446,11 +509,13 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
           responsePly: transition.fromPly,
           responseObserved: true,
           censoredReason: null,
-          success: tookIt || playedSomethingBetter,
+          success: tookIt || alternativeVerified,
           score: null,
           rubricComponentVersionId: null,
           difficulty: {
             materialOnOfferCp: offered.gain,
+            captureCount: offered.captureCount,
+            targetIsDefended: offered.defenderCount > 0 ? 1 : 0,
             legalReplies: legalMoveCount(before) ?? 0,
           },
         },
@@ -464,9 +529,10 @@ function detectMaterial(game: GameFacts): DetectedOpportunity[] {
           endPly: transition.fromPly + 1,
           facts: {
             square: offered.to,
+            piece: offered.targetRole,
             onOfferCp: offered.gain,
             taken: tookIt,
-            playedSomethingBetter,
+            alternativeVerified,
           },
           completeness: "complete",
         },
@@ -559,7 +625,7 @@ function decisionConcepts(game: GameFacts): DetectedOpportunity[] {
       const coverage =
         transition.candidateCount !== null
         && legalReplies !== null
-        && transition.candidateCount >= legalReplies
+        && transition.candidateCount === legalReplies
           ? "absolute"
           : "searched";
       const difficulty: Record<string, number> = { expectedScoreBefore: subjectBefore };
@@ -663,7 +729,7 @@ function conversionConcept(game: GameFacts): DetectedOpportunity[] {
         opportunityPly: winningPly,
         responsePly: null,
         responseObserved: false,
-        censoredReason: censorFor(game.termination),
+        censoredReason: censorFor(game.termination, game.result, game.subjectColor),
         success: null,
         score: null,
         rubricComponentVersionId: null,
@@ -677,7 +743,10 @@ function conversionConcept(game: GameFacts): DetectedOpportunity[] {
         actor: null,
         affected: "subject",
         endPly: winningPly,
-        facts: { converted: null, censored: censorFor(game.termination) },
+        facts: {
+          converted: null,
+          censored: censorFor(game.termination, game.result, game.subjectColor),
+        },
         completeness: "censored",
       },
     }];

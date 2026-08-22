@@ -42,6 +42,7 @@ function game(over: Partial<GameFacts>): GameFacts {
     transitions: [],
     positions: [],
     termination: "resign",
+    result: "white",
     ...over,
   };
 }
@@ -176,6 +177,16 @@ test("the censor reason follows the provider, and never guesses", () => {
   assert.equal(reasonFor(null), "game_ended", "silence is not a resignation");
 });
 
+test("a resignation is attributed to the opponent only when the subject won", () => {
+  const positions = play(["e2e4"]);
+  const transitions = [
+    transition({ fromPly: 0, actorColor: "white", playedMoveUci: "e2e4", expectedScoreAfter: 0.95 }),
+  ];
+  const reason = detectGame(game({ positions, transitions, termination: "resign", result: "black" }))
+    .find((o) => o.conceptSlug === "winning_conversion")?.draft.censoredReason;
+  assert.equal(reason, "game_ended", "termination alone does not identify who resigned");
+});
+
 test("a win that was played out is observed, not censored", () => {
   const moves = ["e2e4", "e7e5", "g1f3", "b8c6"];
   const positions = play(moves);
@@ -249,6 +260,7 @@ test("a free piece taken counts, and the same piece left alone does not", () => 
       // is one the engine rated fine, which v2 treats as playing something at
       // least as good -- see the zwischenzug case below.
       playedMoveAcceptable: false,
+      bestMoveUci: "d4e5",
     })],
   })).find((o) => o.conceptSlug === "free_material");
   assert.equal(ignored?.draft.success, false, "walking past a free knight should not count");
@@ -271,7 +283,34 @@ test("a stronger move is not a missed offer", () => {
   })).find((o) => o.conceptSlug === "free_material");
   assert.equal(found?.draft.success, true, "a move the engine rated within tolerance is not a miss");
   assert.equal(found?.event.facts.taken, false);
-  assert.equal(found?.event.facts.playedSomethingBetter, true, "the facts must say which it was");
+  assert.equal(found?.event.facts.alternativeVerified, true, "the facts must say which it was");
+});
+
+test("a bad quiet move is not blamed on an offer the engine did not prefer", () => {
+  const fen = "4k3/8/8/4n3/3P4/8/8/4K3 w - - 0 1";
+  const found = detectGame(game({
+    positions: play(["e1e2"], fen),
+    transitions: [transition({
+      fromPly: 0,
+      actorColor: "white",
+      playedMoveUci: "e1e2",
+      bestMoveUci: "e1f2",
+      playedMoveAcceptable: false,
+    })],
+  })).filter((o) => o.conceptSlug === "free_material");
+  assert.equal(found.length, 0, "a bad move does not prove which opportunity was missed");
+});
+
+test("material observations carry the facts their contracts require", () => {
+  const fen = "4k3/8/8/4n3/3P4/8/8/4K3 w - - 0 1";
+  const found = detectGame(game({
+    positions: play(["d4e5"], fen),
+    transitions: [transition({ fromPly: 0, actorColor: "white", playedMoveUci: "d4e5" })],
+  })).find((o) => o.conceptSlug === "free_material");
+  assert.equal(found?.event.facts.piece, "knight");
+  assert.equal(typeof found?.event.facts.alternativeVerified, "boolean");
+  assert.equal(typeof found?.draft.difficulty?.captureCount, "number");
+  assert.equal(typeof found?.draft.difficulty?.targetIsDefended, "number");
 });
 
 test("material is not called free when taking it loses the exchange", () => {
@@ -297,6 +336,10 @@ test("saving a hanging piece succeeds and abandoning it fails", () => {
     transitions: [transition({ fromPly: 0, actorColor: "black", playedMoveUci: "e5c6" })],
   })).find((o) => o.conceptSlug === "material_safety");
   assert.equal(saved?.draft.success, true);
+  assert.equal(saved?.event.facts.piece, "knight");
+  assert.equal(saved?.event.facts.resolution, "moved_to_safety");
+  assert.equal(typeof saved?.draft.difficulty?.attackerCount, "number");
+  assert.equal(typeof saved?.draft.difficulty?.defenderCount, "number");
 
   const abandoned = detectGame(game({
     subjectColor: "black",
@@ -454,6 +497,23 @@ test("an unknown candidate count is the weaker claim, not the stronger one", () 
   const unknown = detectGame(oneMove({ onlyMove: true, candidateCount: null, acceptableMoveCount: 1 }))
     .find((o) => o.conceptSlug === "only_move");
   assert.equal(unknown?.event.facts.coverage, "searched");
+});
+
+test("promotion choices are separate legal moves for only-move coverage", () => {
+  const fen = "7k/P7/8/8/8/8/8/7K w - - 0 1";
+  const found = detectGame(game({
+    positions: play(["a7a8q"], fen),
+    transitions: [transition({
+      fromPly: 0,
+      actorColor: "white",
+      playedMoveUci: "a7a8q",
+      onlyMove: true,
+      candidateCount: 4,
+      acceptableMoveCount: 1,
+    })],
+  })).find((o) => o.conceptSlug === "only_move");
+  assert.equal(found?.event.facts.legalMoveCount, 7);
+  assert.equal(found?.event.facts.coverage, "searched");
 });
 
 test("a search that retained one line has no only-move to report", () => {

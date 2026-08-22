@@ -103,8 +103,8 @@ piece across the move and abstains rather than blaming a sacrifice.
 | Response window | Same ply |
 | Trigger | In the position before *p*, an opponent piece is capturable by the subject with SEE ≥ 100. |
 | Success | The move played was a capture with SEE ≥ 100, **or** stored engine evidence shows the played move's expected score is within tolerance of the best available capture. |
-| Failure | The move was not such a capture **and** stored engine evidence shows the played move lost more than tolerance against the best candidate. |
-| Abstain | The move was not a capture and no engine assessment is stored for *p* — a stronger move may have existed and this detector cannot rule it out. |
+| Failure | The move was not such a capture, was outside tolerance, **and** the stored best move was itself a capture with SEE ≥ 100. This ties the failure to verified material on offer rather than merely to a bad move. |
+| Abstain | The move was not a capture and was outside tolerance, but the stored best move was not a material-winning capture (or was unavailable). That proves the move was suboptimal, not that this offer was why. |
 | Censor | Not reachable. |
 | Difficulty | `materialOnOfferCp`, `captureCount`, `targetIsDefended` |
 | Required facts | `square`, `onOfferCp`, `taken`, `alternativeVerified` |
@@ -113,7 +113,9 @@ piece across the move and abstains rather than blaming a sacrifice.
 
 **v1 overclaim corrected.** v1 scored any non-capture as a failure, so a mate in
 one, a winning zwischenzug, or a stronger recapture all counted as "missed free
-material". v2 clears the stronger move from stored evidence or abstains.
+material". v2 clears a move within tolerance, records a failure only when the
+stored best line specifically verifies a material-winning capture, and abstains
+when the evidence only says the played move was bad for some unspecified reason.
 
 ### 3. `critical_moment` — v2 — *Positions that decide the game*
 
@@ -180,7 +182,7 @@ read as full coverage, or the overclaim returns invisibly.
 | Response window | From the focal ply to the subject's last move in the game |
 | Trigger | The subject's expected score after some transition first reaches 0.75. |
 | Success | The subject's expected score after their final move is at least 0.75. |
-| Censor | The subject made no move after the winning position existed. Reason follows the provider's termination: `opponent_resigned`, `clock_expired`, else `game_ended`. |
+| Censor | The subject made no move after the winning position existed. `opponent_resigned` requires both a resignation termination and the subject recorded as winner; termination alone does not identify who resigned. A timeout is `clock_expired`; everything else is `game_ended`. |
 | Abstain | No transition ever crossed the threshold, or the subject made no move in the game at all. |
 | Difficulty | `expectedScoreAtWin`, `movesRemaining` |
 | Required facts | `converted`, `movesPlayed`, `censored` |

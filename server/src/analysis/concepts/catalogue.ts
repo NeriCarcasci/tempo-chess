@@ -163,11 +163,17 @@ export const CONCEPT_CATALOGUE: readonly ConceptDefinition[] = Object.freeze([
       success:
         "the move played was a capture with SEE >= threshold, or the engine judged the move played "
         + "within tolerance -- a stronger move is not a missed offer",
-      failure: "neither: the offer was left standing and nothing at least as good was played",
+      failure:
+        "the move was not a material-winning capture, was outside tolerance, and the engine's best "
+        + "move was itself a material-winning capture",
+      abstain:
+        "the move was outside tolerance but the engine's best move was not a material-winning "
+        + "capture. That proves the played move was suboptimal, not that this offer was why",
       thresholdCp: MATERIAL_THRESHOLD_CP,
       note:
         "v1 scored any non-capture as a failure, so a mate in one, a winning zwischenzug and a "
-        + "stronger recapture all counted as missing free material.",
+        + "stronger recapture all counted as missing free material. v2 only records a miss when "
+        + "the engine evidence specifically verifies a material-winning capture as best.",
     },
   },
   {

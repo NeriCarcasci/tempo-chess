@@ -56,6 +56,7 @@ function game(over: Partial<GameFacts> = {}): GameFacts {
     speed: "blitz",
     playedAt: new Date("2026-07-01T00:00:00Z"),
     termination: "resign",
+    result: "white",
     positions,
     transitions,
     ...over,
