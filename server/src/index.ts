@@ -49,9 +49,12 @@ import {
   handleWebhook,
 } from "./billing/service.js";
 import { getDailyDrillUsage, getUsageSummary, recordUsage } from "./usage.js";
-import { assertRuntimeIdentity } from "./db/client.js";
+import { assertRuntimeIdentity, client as dbClient } from "./db/client.js";
 import { assertDeploymentIdentity } from "./platform/deployment.js";
 import { betaSignupSchema, rateLimit, recordBetaSignup } from "./beta.js";
+import { parsePgn } from "./ingest/pgn.js";
+import { gameKey } from "./rating/identity.js";
+import { ratingProgress, startRating } from "./rating/workflow.js";
 import { logSafeError, safeClientMessage } from "./security/redaction.js";
 import { isDeployed } from "./security/config.js";
 import { mountInternal, mountV1 } from "./v1/kernel.js";
@@ -199,6 +202,96 @@ app.post("/billing/webhook", async (c) => {
   return result.handled ? c.json(result) : c.json(result, 400);
 });
 
+/**
+ * The public game rating: look one up for free, pay for one with an account.
+ *
+ * The split is deliberate and it is the whole shape of the honeypot. Reading a
+ * rating somebody has already paid for costs a database row, so it is public
+ * and anonymous: a famous game, once rated, is rated for everybody forever.
+ * *Computing* one is a few hundred human-policy inferences on a service with a
+ * single rating worker, so it needs an account behind it.
+ *
+ * That also makes the abuse story simple. There is no anonymous handle on the
+ * platform's scarcest resource, and the thing a stranger can do without signing
+ * in is exactly the thing that costs nothing.
+ */
+const ratingBody = z.object({
+  pgn: z.string().min(8).max(60_000),
+  whiteRating: z.number().int().min(100).max(4000).nullish(),
+  blackRating: z.number().int().min(100).max(4000).nullish(),
+});
+
+function ratingRequestFrom(raw: unknown):
+  | { ok: true; gameKey: string; pgn: string; whiteRating: number | null; blackRating: number | null }
+  | { ok: false; error: string } {
+  const parsed = ratingBody.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: "expected { pgn: string }" };
+
+  const game = parsePgn(parsed.data.pgn);
+  if (game.moves.length === 0) {
+    return { ok: false, error: game.warning ?? "That did not parse as a game." };
+  }
+
+  // A rating declared in the PGN is a fact about the player. Absent, the
+  // assembler conditions on how the game was actually played instead.
+  const headerRating = (key: string): number | null => {
+    const raw = Number(game.headers[key]);
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  };
+  const whiteRating = parsed.data.whiteRating ?? headerRating("WhiteElo");
+  const blackRating = parsed.data.blackRating ?? headerRating("BlackElo");
+
+  return {
+    ok: true,
+    pgn: parsed.data.pgn,
+    whiteRating,
+    blackRating,
+    gameKey: gameKey({
+      startingFen: game.moves[0]!.fenBefore,
+      moves: game.moves.map((move) => move.uci),
+      whiteRating,
+      blackRating,
+    }),
+  };
+}
+
+function ratingLimited(c: Context): boolean {
+  const from =
+    c.req.header("cf-connecting-ip") ??
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown";
+  return !rateLimit(from);
+}
+
+/** Is this game already rated, or already being rated? Never starts anything. */
+app.post("/rating/lookup", async (c) => {
+  if (ratingLimited(c)) {
+    return c.json({ error: "Too many lookups from here. Try again in a few minutes." }, 429);
+  }
+  const request = ratingRequestFrom(await c.req.json().catch(() => null));
+  if (!request.ok) return c.json({ error: request.error }, 400);
+  try {
+    const progress = await ratingProgress(dbClient, request.gameKey);
+    return c.json({ gameKey: request.gameKey, ...progress });
+  } catch (error) {
+    logSafeError("rating lookup failed", error);
+    return c.json({ error: "Could not check that game. Try again in a moment." }, 500);
+  }
+});
+
+/** Poll one game by its key. Public for the same reason the lookup is. */
+app.get("/rating/:gameKey", async (c) => {
+  const key = c.req.param("gameKey");
+  if (!key || key.length > 200) return c.json({ error: "not a game key" }, 400);
+  try {
+    const progress = await ratingProgress(dbClient, key);
+    return c.json({ gameKey: key, ...progress });
+  } catch (error) {
+    logSafeError("rating poll failed", error);
+    return c.json({ error: "Could not check that game. Try again in a moment." }, 500);
+  }
+});
+
 // --- everything below needs a signed-in user ------------------------------
 
 app.use("/me/*", requireAuth);
@@ -216,6 +309,7 @@ app.use("/training/*", requireAuth);
 app.use("/lessons/*", requireAuth);
 app.use("/analyze", requireAuth);
 app.use("/engine/*", requireAuth);
+app.use("/rating", requireAuth);
 
 // --- me: identity, linked accounts, hub data ------------------------------
 
@@ -573,6 +667,49 @@ app.post("/lessons/progress", async (c) => {
     return c.json(await saveLessonProgress(currentUser(c).id, parsed.data));
   } catch (error) {
     return fail(c, error);
+  }
+});
+
+/**
+ * Rate a game that nobody has rated yet.
+ *
+ * Behind auth because this is the expensive door: one call is a few dozen
+ * engine searches and up to a few hundred human-policy inferences, on a service
+ * with one rating worker. The owner profile is recorded on the workflow so the
+ * compute has somebody attached to it.
+ *
+ * It answers 202 rather than a rating. A first-time game is minutes of queued
+ * work, so the reply is a game key and a progress count, and the page polls the
+ * public endpoint from there. A game already rated answers 200 immediately,
+ * because there is nothing to schedule.
+ */
+app.post("/rating", async (c) => {
+  if (ratingLimited(c)) {
+    return c.json({ error: "Too many games from here. Try again in a few minutes." }, 429);
+  }
+  const request = ratingRequestFrom(await c.req.json().catch(() => null));
+  if (!request.ok) return c.json({ error: request.error }, 400);
+
+  try {
+    const sql = dbClient;
+    const existing = await ratingProgress(sql, request.gameKey);
+    if (existing.state === "ready") return c.json({ gameKey: request.gameKey, ...existing });
+    if (existing.state === "working") {
+      return c.json({ gameKey: request.gameKey, ...existing }, 202);
+    }
+
+    await startRating(sql, {
+      gameKey: request.gameKey,
+      pgn: request.pgn,
+      whiteRating: request.whiteRating,
+      blackRating: request.blackRating,
+      ownerProfileId: currentUser(c).id,
+    });
+    const started = await ratingProgress(sql, request.gameKey);
+    return c.json({ gameKey: request.gameKey, ...started }, 202);
+  } catch (error) {
+    logSafeError("rating failed", error);
+    return c.json({ error: "Could not rate that game. Try again in a moment." }, 500);
   }
 });
 
