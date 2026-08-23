@@ -1,0 +1,289 @@
+/* ------------------------------------------------------------------ */
+/* The public game rating.                                             */
+/*                                                                     */
+/* One rule shapes this sheet: the number is never alone on the page.  */
+/* The score and its decomposition sit in one panel, so there is no    */
+/* layout in which a designer can crop the headline away from the      */
+/* evidence and still have something that looks finished.              */
+/*                                                                     */
+/* Separation is space and surface, never a drawn rule (DESIGN.md,     */
+/* "Depth"). Figures are mono and tabular so two ratings stacked on    */
+/* top of each other line up at the decimal.                           */
+/* ------------------------------------------------------------------ */
+@layer components {
+  /* The public shell's own container (DESIGN.md, "Layout"). The result panel
+     inside is capped narrower: 74rem is right for a marketing grid and far too
+     wide for a column of figures somebody actually has to read. */
+  .rate-hero {
+    margin: 0 auto;
+    max-width: 74rem;
+    padding: clamp(3.5rem, 8vw, 6rem) 1.5rem var(--section-y);
+    display: grid;
+    gap: 2.4rem;
+    justify-items: start;
+  }
+
+  .rate-hero h1 {
+    font-size: clamp(2.4rem, 5.4vw, 3.9rem);
+    font-weight: 640;
+    letter-spacing: -0.028em;
+    line-height: 1.03;
+    max-width: 16ch;
+  }
+
+  .rate-hero > p {
+    max-width: 54ch;
+    color: var(--color-ink-muted);
+    font-size: 1.02rem;
+    line-height: 1.62;
+  }
+
+  /* --- the form -------------------------------------------------- */
+
+  .rate-form { display: grid; gap: 0.9rem; max-width: 46rem; width: 100%; }
+
+  .rate-form label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  .rate-form textarea {
+    width: 100%;
+    min-height: 9.5rem;
+    resize: vertical;
+    padding: 0.9rem 1rem;
+    border: none;
+    border-radius: var(--radius-control);
+    background: var(--color-surface-2);
+    box-shadow: var(--shadow-flat);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: var(--color-ink);
+  }
+
+  .rate-form textarea::placeholder { color: var(--color-ink-faint); }
+  .rate-form textarea:hover { background: var(--color-surface-3); }
+  .rate-form textarea:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    background: var(--color-surface);
+  }
+  .rate-form textarea:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .rate-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; }
+
+  .rate-note { font-size: 0.82rem; color: var(--color-ink-faint); max-width: 40ch; }
+
+  .rate-error {
+    font-size: 0.86rem;
+    color: var(--color-loss);
+    font-weight: 560;
+  }
+
+  /* --- the result ------------------------------------------------ */
+
+  .rate-result {
+    margin-top: 3.2rem;
+    width: 100%;
+    max-width: 56rem;
+    background: var(--color-surface);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-float);
+    padding: clamp(1.6rem, 4vw, 2.8rem);
+    display: grid;
+    gap: 2.4rem;
+  }
+
+  .rate-headline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.6rem 1.6rem;
+  }
+
+  .rate-score {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(3.6rem, 10vw, 5.6rem);
+    font-weight: 620;
+    line-height: 0.92;
+    letter-spacing: -0.045em;
+    color: var(--color-ink);
+  }
+
+  .rate-score span { color: var(--color-ink-faint); font-size: 0.36em; letter-spacing: 0; }
+
+  .rate-interval {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.86rem;
+    color: var(--color-ink-muted);
+  }
+
+  .rate-players {
+    margin-left: auto;
+    text-align: right;
+    font-size: 0.88rem;
+    color: var(--color-ink-muted);
+    line-height: 1.5;
+  }
+
+  .rate-players b { font-weight: 620; color: var(--color-ink); }
+
+  /* --- the two sides --------------------------------------------- */
+
+  .rate-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+  .rate-side {
+    background: var(--color-surface-2);
+    border-radius: var(--radius-panel);
+    padding: 1.15rem 1.25rem;
+    display: grid;
+    gap: 0.85rem;
+    align-content: start;
+  }
+
+  .rate-side h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 620;
+  }
+
+  /* Colour is never the only carrier: the disc is paired with the word. */
+  .rate-disc {
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: var(--radius-pill);
+    flex: 0 0 auto;
+    box-shadow: var(--shadow-flat);
+  }
+  .rate-disc-white { background: var(--color-board-light); }
+  .rate-disc-black { background: var(--color-board-dark); }
+
+  .rate-figure { display: grid; gap: 0.15rem; }
+
+  .rate-figure dt {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  .rate-figure dd {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 1.02rem;
+    font-weight: 560;
+    color: var(--color-ink);
+  }
+
+  .rate-figure dd small {
+    font-size: 0.74rem;
+    font-weight: 460;
+    color: var(--color-ink-muted);
+    margin-left: 0.35rem;
+  }
+
+  .rate-caveat { font-size: 0.78rem; color: var(--color-ink-faint); line-height: 1.5; }
+
+  /* --- demand ----------------------------------------------------- */
+
+  .rate-demand { display: grid; gap: 0.9rem; }
+
+  .rate-demand h2,
+  .rate-moments h2,
+  .rate-coverage h2 {
+    font-size: 1.05rem;
+    font-weight: 620;
+    letter-spacing: -0.012em;
+  }
+
+  .rate-bars { display: grid; gap: 0.7rem; max-width: 34rem; }
+
+  .rate-bar { display: grid; grid-template-columns: 7.5rem 1fr 3rem; align-items: center; gap: 0.75rem; }
+
+  .rate-bar-label { font-size: 0.85rem; color: var(--color-ink-muted); }
+
+  .rate-bar-track {
+    height: 0.4rem;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-3);
+    overflow: hidden;
+  }
+
+  .rate-bar-fill { height: 100%; border-radius: var(--radius-pill); background: var(--color-accent); }
+
+  .rate-bar-value {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.82rem;
+    text-align: right;
+    color: var(--color-ink);
+  }
+
+  /* --- moments ---------------------------------------------------- */
+
+  .rate-moments { display: grid; gap: 0.9rem; }
+
+  .rate-moment-list { display: grid; gap: 0.55rem; }
+
+  .rate-moment {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.2rem 0.75rem;
+    background: var(--color-surface-2);
+    border-radius: var(--radius-control);
+    padding: 0.7rem 0.9rem;
+  }
+
+  .rate-moment-move {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.82rem;
+    font-weight: 620;
+    color: var(--color-accent);
+    min-width: 5.5rem;
+  }
+
+  .rate-moment-text { font-size: 0.9rem; color: var(--color-ink); }
+
+  .rate-moment-side { font-size: 0.8rem; color: var(--color-ink-faint); margin-left: auto; }
+
+  /* --- coverage and refusals -------------------------------------- */
+
+  .rate-coverage { display: grid; gap: 0.5rem; }
+
+  .rate-coverage p { font-size: 0.85rem; color: var(--color-ink-muted); line-height: 1.6; max-width: 62ch; }
+
+  .rate-method {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--color-ink-faint);
+    letter-spacing: 0.03em;
+  }
+
+  .rate-refusal {
+    background: var(--color-surface-2);
+    border-radius: var(--radius-panel);
+    padding: 1.3rem 1.4rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .rate-refusal h2 { font-size: 1rem; font-weight: 620; }
+  .rate-refusal p { font-size: 0.9rem; color: var(--color-ink-muted); line-height: 1.6; max-width: 60ch; }
+
+  @media (max-width: 768px) {
+    .rate-sides { grid-template-columns: 1fr; }
+    .rate-players { margin-left: 0; text-align: left; width: 100%; }
+    .rate-bar { grid-template-columns: 6rem 1fr 2.6rem; }
+  }
+}

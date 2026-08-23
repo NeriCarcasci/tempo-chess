@@ -47,6 +47,9 @@ const productSurface = [
   index("routes/home.tsx"),
   route("features", "routes/features.tsx"),
   route("pricing", "routes/pricing.tsx"),
+  // The one marketing surface that runs the product rather than describing it:
+  // paste a game, get it rated. Public, and deliberately account-free.
+  route("rating", "routes/rating.tsx"),
   route("terms", "routes/terms.tsx"),
   route("privacy", "routes/privacy.tsx"),
   route("brand", "routes/brand.tsx"),
@@ -89,6 +92,7 @@ const productSurface = [
   route("dev/preview-rook", "routes/__preview-rook.tsx"),
   route("dev/graph", "routes/__preview-graph.tsx"),
   route("dev/foundation", "routes/__foundation.tsx"),
+  route("dev/rating", "routes/__preview-rating.tsx"),
   route("game/:id", "routes/game.tsx"),
 
   // --- admin ------------------------------------------------------------

@@ -52,6 +52,11 @@ import { getDailyDrillUsage, getUsageSummary, recordUsage } from "./usage.js";
 import { assertRuntimeIdentity } from "./db/client.js";
 import { assertDeploymentIdentity } from "./platform/deployment.js";
 import { betaSignupSchema, rateLimit, recordBetaSignup } from "./beta.js";
+import { parsePgn } from "./ingest/pgn.js";
+import { analyseGame } from "./rating/analyse.js";
+import { humanPolicy, stockfishEngine } from "./rating/ports.js";
+import { rateGame } from "./rating/rating.js";
+import { toRatingView } from "./rating/view.js";
 import { logSafeError, safeClientMessage } from "./security/redaction.js";
 import { isDeployed } from "./security/config.js";
 import { mountInternal, mountV1 } from "./v1/kernel.js";
@@ -197,6 +202,89 @@ app.post("/billing/webhook", async (c) => {
   const raw = await c.req.text();
   const result = await handleWebhook(raw, c.req.header("stripe-signature") ?? null);
   return result.handled ? c.json(result) : c.json(result, 400);
+});
+
+/**
+ * Rate one pasted game, for anybody, without an account.
+ *
+ * Public because the whole point is that a visitor can see what Forma does to a
+ * game before deciding whether to hand over an archive. Rate limited by client
+ * address for the same reason `/beta-signups` is: this is the most expensive
+ * anonymous endpoint we have, since one call is a few dozen engine searches and
+ * several hundred policy inferences.
+ *
+ * The two refusals are the interesting part. A deployment without the human
+ * policy answers 503 and says so, rather than falling back to an accuracy score
+ * under this endpoint's name. And a game the scorer will not rate comes back
+ * 200 with `status: "unavailable"` and a reason, because "we will not say" is an
+ * answer the page is built to render, not an error.
+ */
+app.post("/rating", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = z
+    .object({
+      pgn: z.string().min(8).max(60_000),
+      whiteRating: z.number().int().min(100).max(4000).nullish(),
+      blackRating: z.number().int().min(100).max(4000).nullish(),
+    })
+    .safeParse(body);
+  if (!parsed.success) return c.json({ error: "expected { pgn: string }" }, 400);
+
+  const from =
+    c.req.header("cf-connecting-ip") ??
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown";
+  if (!rateLimit(from)) {
+    return c.json({ error: "Too many games from here. Try again in a few minutes." }, 429);
+  }
+
+  const game = parsePgn(parsed.data.pgn);
+  if (game.moves.length === 0) {
+    return c.json({ error: game.warning ?? "That did not parse as a game." }, 400);
+  }
+
+  const policy = humanPolicy();
+  if (policy === null) {
+    // Without a human policy there is no strength estimate, and the terms that
+    // remain are an accuracy score. Saying so is the honest answer; returning a
+    // number computed a different way under the same name is not.
+    return c.json({ error: "The rating model is not available on this deployment." }, 503);
+  }
+
+  // A declared rating in the PGN is a fact about the player. Absent, the
+  // assembler conditions on how the game was actually played instead.
+  const headerRating = (key: string): number | null => {
+    const raw = Number(game.headers[key]);
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  };
+  const whiteRating = parsed.data.whiteRating ?? headerRating("WhiteElo");
+  const blackRating = parsed.data.blackRating ?? headerRating("BlackElo");
+
+  try {
+    const analysed = await analyseGame(game.moves, {
+      engine: stockfishEngine(),
+      policy,
+      whiteRating,
+      blackRating,
+    });
+    const view = toRatingView(rateGame(analysed.input), {
+      game: {
+        white: game.headers.White ?? null,
+        black: game.headers.Black ?? null,
+        event: game.headers.Event ?? null,
+        date: game.headers.Date ?? null,
+        result: game.headers.Result ?? null,
+      },
+      declared: {
+        white: analysed.conditioning.white.declared,
+        black: analysed.conditioning.black.declared,
+      },
+    });
+    return c.json(view);
+  } catch (error) {
+    logSafeError("rating failed", error);
+    return c.json({ error: "Could not rate that game. Try again in a moment." }, 500);
+  }
 });
 
 // --- everything below needs a signed-in user ------------------------------
