@@ -86,6 +86,9 @@ jobs:
           npm run engine:unit
           npm run analysis:unit
           npm run models:unit
+          npm run rating:unit
+          npm run rating:analyse
+          npm run rating:calibration
           npm run estimates:unit
           npm run onboarding:unit
           npm run goals:unit
