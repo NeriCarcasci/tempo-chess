@@ -52,7 +52,7 @@ import {
 import { registerHandler, type WorkContext, type WorkResult } from "../ops/handlers.js";
 import { jsonParam } from "../db/json.js";
 import { assembleRating, planRating, screeningPositions, type DeepResult, type RatingPlan } from "./phases.js";
-import { ANALYSIS_BUDGET, type EngineLine } from "./ports.js";
+import { ANALYSIS_BUDGET, PUBLIC_SEARCH, type EngineLine } from "./ports.js";
 import { rateGame } from "./rating.js";
 import { ratingMethodHash, RATING_METHOD } from "./contract.js";
 import { toRatingView, type GameHeaders, type RatingView } from "./view.js";
@@ -60,13 +60,6 @@ import { RATING_RESOURCE_TYPE } from "./identity.js";
 
 export const PREPARE_TASK = "game_rating_prepare";
 export const ASSEMBLE_TASK = "game_rating_assemble";
-
-/** Depths for the public path, stated so two ratings are comparable. */
-export const PUBLIC_SEARCH = {
-  version: "1",
-  screeningDepth: 12,
-  deepDepth: 16,
-} as const;
 
 export interface RatingRequest {
   gameKey: string;

@@ -225,11 +225,13 @@ test("the estimate is the rung the likelihoods peak at", () => {
 });
 
 test("the interval covers the rungs the evidence cannot separate", () => {
-  // A flat-ish likelihood over a short game: the interval must be wide.
-  const short = game(10, () => ({ bandLogLikelihoods: bands(1600, 4000) })).map(scoreDecision);
+  // A flat-ish likelihood over a short game: the interval must be wide, but not
+  // so flat that no rung is excluded at all, which is a refusal rather than an
+  // estimate and has its own test below.
+  const short = game(10, () => ({ bandLogLikelihoods: bands(1600, 1500) })).map(scoreDecision);
   const wide = estimateStrength(short);
   // The same peak with far more evidence: the interval must narrow.
-  const long = game(80, () => ({ bandLogLikelihoods: bands(1600, 4000) })).map(scoreDecision);
+  const long = game(80, () => ({ bandLogLikelihoods: bands(1600, 1500) })).map(scoreDecision);
   const narrow = estimateStrength(long);
 
   assert.equal(wide.status, "available");
@@ -263,6 +265,22 @@ test("a rung the game did not score everywhere never wins the estimate", () => {
   const result = estimateStrength(scored);
   assert.equal(result.status === "available" && result.rating, 1200);
   assert.ok(result.status === "available" && result.intervalHigh < 2400);
+});
+
+test("an interval covering the whole ladder is a refusal, not an estimate", () => {
+  // Every rung equally likely on every ply. The maximum is then whichever rung
+  // was checked first, and publishing it would say "played like 800" about
+  // evidence that cannot tell an 800 from a 2400.
+  //
+  // This is not hypothetical. The first real run of the command-line rater, on
+  // Kasparov against Topalov with no human model configured, reported both
+  // players as 800 with an interval quietly spanning the entire ladder.
+  const flat: Record<number, number> = {};
+  for (const rung of CONTINUATION_RATINGS) flat[rung] = -2;
+  const scored = game(20, () => ({ bandLogLikelihoods: flat })).map(scoreDecision);
+  const result = estimateStrength(scored);
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.status === "unavailable" && result.reason, "indistinguishable");
 });
 
 test("an estimate beyond the calibrated range says so", () => {

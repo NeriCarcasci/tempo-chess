@@ -55,6 +55,7 @@ export interface Likelihoods {
 
 export const LIKELIHOOD_REFUSALS = [
   "no_policies",
+  "empty_distribution",
   "unretained_without_legal_move_count",
   "unretained_with_no_room",
 ] as const;
@@ -90,6 +91,15 @@ export function likelihoodsFor(
   const estimatedRungs: number[] = [];
 
   for (const rung of rungs) {
+    // A distribution with no moves in it is not a distribution. Left to the
+    // tail rule below it would hand every rung the same probability, and every
+    // rung agreeing is exactly what the estimator reads as "no evidence either
+    // way" — except it would read it as evidence, and publish the first rung on
+    // the ladder as the answer. A real run against a game with no policy
+    // configured reported Kasparov as an 800 that way.
+    if (rung.policy.moves.length === 0) {
+      return { status: "unavailable", reason: "empty_distribution", rating: rung.rating };
+    }
     const retained = rung.policy.moves.find((move) => move.uci === playedUci);
     if (retained && retained.probability > 0) {
       byRating[rung.rating] = Math.log(retained.probability);

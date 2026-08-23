@@ -47,7 +47,7 @@ export interface StrengthEstimate {
 
 export interface StrengthUnavailable {
   status: "unavailable";
-  reason: "insufficient_decisions";
+  reason: "insufficient_decisions" | "indistinguishable";
   decisionsScored: number;
   decisionsFaced: number;
 }
@@ -113,6 +113,20 @@ export function estimateStrength(decisions: readonly ScoredDecision[]): Strength
     .filter(([, total]) => best - total <= STRENGTH_POLICY.intervalLogLikelihoodDrop)
     .map(([rung]) => rung)
     .sort((left, right) => left - right);
+
+  // An interval covering the whole ladder is the estimator saying it cannot
+  // separate an 800 from a 2400, and a point estimate on top of that is a claim
+  // the evidence does not support. Publishing one is how a real run reported
+  // Kasparov as an 800 with an interval that quietly spanned everything: a
+  // reader takes the number and leaves the band behind.
+  if (inside.length === STRENGTH_POLICY.ladder.length) {
+    return {
+      status: "unavailable",
+      reason: "indistinguishable",
+      decisionsScored: scored.length,
+      decisionsFaced: decisions.length,
+    };
+  }
 
   return {
     status: "available",

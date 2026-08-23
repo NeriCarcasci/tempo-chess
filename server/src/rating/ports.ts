@@ -57,3 +57,17 @@ export const ANALYSIS_BUDGET = {
 } as const;
 
 export type AnalysisBudget = typeof ANALYSIS_BUDGET;
+
+/**
+ * How hard the objective engine looks, for the public path.
+ *
+ * Depth rather than nodes because that is what `analyzeFens` accepts. Stated
+ * here rather than passed in so two public ratings are comparable: a rating
+ * produced at depth 10 and one at depth 18 are answers to different questions,
+ * and the number does not carry the depth with it.
+ */
+export const PUBLIC_SEARCH = {
+  version: "1",
+  screeningDepth: 12,
+  deepDepth: 16,
+} as const;
