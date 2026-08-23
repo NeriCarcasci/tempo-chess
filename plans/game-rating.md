@@ -339,7 +339,24 @@ it with no database at all.
    pending, because their evidence does not exist yet.
 3. **Done.** `evidence.ts`, the adapter from the published review, and
    `likelihood.ts`, the per-rung likelihoods including the unretained tail.
-4. **Next, and it needs the engine.** Two reads per deep-selected transition:
+4. **Done.** `analyse.ts` assembles a rating for a game nobody has seen, in two
+   passes, against an engine port and a policy port. `ports.ts` binds those to
+   Stockfish and the promoted Maia. `view.ts` is the DTO. `POST /rating` is
+   public and rate limited, and `/rating` is the page.
+5. **Next, and it needs a running engine.** Everything above is verified against
+   fakes, because no Stockfish binary exists in the development environment. The
+   path has never executed with a real search. Before this is shown to anybody:
+   run it end to end, measure what one rating actually costs in wall clock and
+   money, and decide whether the ply policy budget of nine inferences per ply
+   survives contact with that number.
+6. **Then persistence.** A rating is expensive and deterministic given a method
+   version, so it should be computed once per `pgnFingerprint` and served
+   forever. That is the permanent per-game URL the honeypot actually runs on,
+   and it needs a table and a migration.
+
+### The original step 4, kept because it is still the work
+
+Two reads per deep-selected transition:
    a MultiPV search at the position *after* the move, for
    `expectedScoreIfMissed`, and one policy inference per rung of the ladder at
    the position *before* it, for the strength estimate. The second is the
@@ -347,10 +364,10 @@ it with no database at all.
    not for a whole archive, so the public path and the pipeline path will want
    different budgets. Then register the method as a `projection` component
    version and publish the rating behind a promotion gate.
-5. Score the eight corpus games and settle the policy constants against them.
+7. Score the eight corpus games and settle the policy constants against them.
    Until this happens the gate proves the formula's orderings, not the scale's,
    and nothing should be shown to a stranger.
-6. The public page and its permanent per-game URLs.
+8. Seed the famous games, so the page has depth on day one.
 
 ### What the numbers look like now
 
