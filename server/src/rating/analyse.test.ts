@@ -20,6 +20,8 @@ import { parsePgn } from "../ingest/pgn.js";
 import { normalizePolicy } from "../models/policy.js";
 import { STRENGTH_POLICY } from "./contract.js";
 import { ANALYSIS_BUDGET, analyseGame, type EngineLine, type EnginePort, type PolicyPort } from "./analyse.js";
+import { gameKey } from "./identity.js";
+import { planRating, screeningPositions } from "./phases.js";
 
 const failures: string[] = [];
 let passed = 0;
@@ -218,6 +220,101 @@ await test("a truncated game is truncated, not refused", async () => {
     budget: { ...ANALYSIS_BUDGET, maxPlies: 10 },
   });
   assert.equal(result.input.decisions.length, 10);
+});
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+await test("the same moves are the same game whatever the result says", () => {
+  // The metric never reads who won, so two pastes that disagree about the
+  // result tag must not produce two ratings. This is the test that keeps the
+  // key honest if somebody later reaches for createPgnFingerprint, which does
+  // include the result because import dedup needs it to.
+  const moves = parsePgn(OPERA_GAME).moves;
+  const drawn = parsePgn(OPERA_GAME.replace("1-0", "1/2-1/2")).moves;
+  const shape = { whiteRating: null, blackRating: null };
+  assert.equal(
+    gameKey({ startingFen: moves[0]!.fenBefore, moves: moves.map((m) => m.uci), ...shape }),
+    gameKey({ startingFen: drawn[0]!.fenBefore, moves: drawn.map((m) => m.uci), ...shape }),
+  );
+});
+
+await test("the same moves under different declared ratings are different games", () => {
+  // A declared rating changes what the opponent model is conditioned on, so it
+  // changes the pressure figures and therefore the rating.
+  const moves = parsePgn(OPERA_GAME).moves;
+  const base = { startingFen: moves[0]!.fenBefore, moves: moves.map((m) => m.uci) };
+  assert.notEqual(
+    gameKey({ ...base, whiteRating: null, blackRating: null }),
+    gameKey({ ...base, whiteRating: 2200, blackRating: null }),
+  );
+});
+
+await test("the headers are not part of the game", () => {
+  const named = parsePgn(OPERA_GAME.replace('[White "Morphy"]', '[White "Anonymous"]')).moves;
+  const moves = parsePgn(OPERA_GAME).moves;
+  const shape = { whiteRating: null, blackRating: null };
+  assert.equal(
+    gameKey({ startingFen: moves[0]!.fenBefore, moves: moves.map((m) => m.uci), ...shape }),
+    gameKey({ startingFen: named[0]!.fenBefore, moves: named.map((m) => m.uci), ...shape }),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The plan
+// ---------------------------------------------------------------------------
+
+await test("a game of n plies has n + 1 positions to screen", () => {
+  const moves = parsePgn(OPERA_GAME).moves;
+  assert.equal(screeningPositions(moves).length, moves.length + 1);
+});
+
+await test("book plies and forced moves never reach the policy budget", () => {
+  const moves = parsePgn(OPERA_GAME).moves;
+  const screened = new Map(screeningPositions(moves).map((fen) => [fen, 0.5]));
+  const plan = planRating(moves, screened, { bookPlies: 10 });
+  assert.equal(
+    plan.policyPlies.some((ply) => ply <= 10),
+    false,
+    "a book ply was given nine inferences",
+  );
+});
+
+await test("a decided game spends nothing on the human model", () => {
+  // Every position at 0.995: nothing is at stake anywhere. No ply qualifies for
+  // the ladder and no position qualifies for a deeper look, so not one
+  // inference is scheduled. The first version of this floor was on the policy
+  // selection only, and the deep set still dragged nine inferences each behind
+  // it for their replies, which is how a dead-won endgame could have spent the
+  // entire Maia budget on positions where the answer could not have mattered.
+  const moves = parsePgn(OPERA_GAME).moves;
+  const screened = new Map(screeningPositions(moves).map((fen) => [fen, 0.995]));
+  const plan = planRating(moves, screened);
+  assert.equal(plan.policyPlies.length, 0);
+  assert.equal(plan.deepPlies.length, 0);
+  assert.equal(plan.policyRequests.length, 0);
+});
+
+await test("the plan asks for every rung at every position it names", () => {
+  const moves = parsePgn(OPERA_GAME).moves;
+  const screened = new Map(screeningPositions(moves).map((fen) => [fen, 0.5]));
+  const plan = planRating(moves, screened);
+  const positions = new Set(plan.policyRequests.map((request) => request.fen));
+  assert.equal(plan.policyRequests.length, positions.size * STRENGTH_POLICY.ladder.length);
+});
+
+await test("a position the screening pass never valued is not scored", () => {
+  const moves = parsePgn(OPERA_GAME).moves;
+  // Value everything except the position before ply 5.
+  const screened = new Map(screeningPositions(moves).map((fen) => [fen, 0.5]));
+  screened.delete(moves[4]!.fenBefore);
+  const plan = planRating(moves, screened);
+  assert.equal(
+    plan.decisions.some((decision) => decision.ply === 5),
+    false,
+    "a decision was scored from a position nothing was measured about",
+  );
 });
 
 // ---------------------------------------------------------------------------

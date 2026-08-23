@@ -28,7 +28,13 @@ import { assessCandidates, fromActor, isAcceptableLoss, roundScore } from "../en
 import { CALIBRATED_RATING_CEILING, CALIBRATED_RATING_FLOOR } from "../models/contract.js";
 import type { PolicyDistribution } from "../models/policy.js";
 import type { ParsedPgnMove } from "../ingest/pgn.js";
-import { STRENGTH_POLICY, type Color, type Decision, type GameRatingInput } from "./contract.js";
+import {
+  CLEANLINESS_POLICY,
+  STRENGTH_POLICY,
+  type Color,
+  type Decision,
+  type GameRatingInput,
+} from "./contract.js";
 import { liveness, scoreDecision } from "./decisions.js";
 import { estimateStrength } from "./strength.js";
 import { likelihoodsFor, type RungPolicy } from "./likelihood.js";
@@ -120,12 +126,21 @@ function selectPolicyPlies(
     .sort((left, right) => left - right);
 }
 
-/** Positions worth a MultiPV search: where the game was, and what it cost. */
+/**
+ * Positions worth a MultiPV search: where the game was, and what it cost.
+ *
+ * The same liveness floor cleanliness uses, for the same reason and for one
+ * more. A decided position tells us nothing about either player, and every deep
+ * position also drags nine policy inferences behind it for its reply. Without
+ * the floor a dead-won endgame would spend the whole Maia budget on positions
+ * where the answer could not have mattered.
+ */
 function selectDeepPlies(
   candidates: readonly { ply: number; liveness: number; loss: number }[],
   limit: number,
 ): number[] {
   return candidates
+    .filter((entry) => entry.liveness >= CLEANLINESS_POLICY.livenessFloor)
     .map((entry) => ({ ply: entry.ply, weight: entry.liveness * (0.02 + Math.max(0, entry.loss)) }))
     .sort((left, right) => right.weight - left.weight || left.ply - right.ply)
     .slice(0, limit)
@@ -376,7 +391,11 @@ export function assembleRating(
   return {
     input: {
       decisions: finished,
-      deepPassRan: plan.deepPlies.length > 0,
+      // True because a plan exists at all: the selector ran over screened
+      // positions and reported what it chose. Choosing nothing is a finding
+      // about the game, not a gap in the analysis, so a dead game gets low
+      // demand rather than unknown demand.
+      deepPassRan: true,
       canonicalGameId: options.canonicalGameId ?? null,
     },
     conditioning,
