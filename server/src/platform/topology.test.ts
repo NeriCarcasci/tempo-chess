@@ -142,7 +142,12 @@ check("a queue may not dispatch more work than its target can run", () => {
 });
 
 check("migrations set exactly the current connection budget's peaks", () => {
-  const sql = ["0015_e05_service_topology.sql", "0038_maia3_position_continuations.sql"]
+  const sql = [
+    "0015_e05_service_topology.sql",
+    "0038_maia3_position_continuations.sql",
+    // Where forma_maia's limit moved to three, for the rating worker.
+    "0043_game_ratings.sql",
+  ]
     .map((file) => readFileSync(join(process.cwd(), "drizzle", file), "utf8"))
     .join("\n");
   const peaks: string[] = [];

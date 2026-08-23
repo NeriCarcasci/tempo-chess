@@ -316,6 +316,13 @@
       "when": 1787666400000,
       "tag": "0042_drop_contained_legacy_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1787752800000,
+      "tag": "0043_game_ratings",
+      "breakpoints": true
     }
   ]
 }

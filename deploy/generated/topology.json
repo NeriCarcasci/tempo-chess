@@ -3,7 +3,7 @@
   "project": "tempo-chess-neri",
   "region": "europe-west1",
   "connectionBudget": {
-    "availableToServices": 42
+    "availableToServices": 43
   },
   "services": [
     {
@@ -111,10 +111,10 @@
       "executes": [
         "cpu_interactive_model"
       ],
-      "maxInstances": 2,
+      "maxInstances": 3,
       "containerConcurrency": 1,
       "poolSize": 1,
-      "peakConnections": 2,
+      "peakConnections": 3,
       "cpu": "2",
       "memory": "2Gi",
       "timeoutSeconds": 90
@@ -179,6 +179,13 @@
       "target": "forma-maia",
       "maxConcurrentDispatches": 2,
       "maxDispatchesPerSecond": 2,
+      "maxAttempts": 3
+    },
+    {
+      "name": "maia-rating",
+      "target": "forma-maia",
+      "maxConcurrentDispatches": 1,
+      "maxDispatchesPerSecond": 1,
       "maxAttempts": 3
     },
     {

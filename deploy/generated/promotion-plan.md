@@ -66,7 +66,7 @@ gcloud run deploy forma-maia --project tempo-chess-neri --region europe-west1 \
   --image $MAIA_DIGEST --no-traffic --tag=next \
   --service-account forma-maia@tempo-chess-neri.iam.gserviceaccount.com \
   --ingress internal --no-allow-unauthenticated \
-  --max-instances 2 --concurrency 1 \
+  --max-instances 3 --concurrency 1 \
   --cpu 2 --memory 2Gi --timeout 90 \
   --set-secrets DATABASE_URL=forma-maia-db-url:latest \
   --set-env-vars FORMA_DEPLOYMENT=forma-maia,DATABASE_ROLE=forma_maia
@@ -121,6 +121,7 @@ gcloud run services update-traffic <service> --project tempo-chess-neri --region
 | `stockfish-screen` | forma-stockfish | 4 | 5 |
 | `stockfish-deep` | forma-stockfish | 2 | 3 |
 | `maia-play` | forma-maia | 2 | 3 |
+| `maia-rating` | forma-maia | 1 | 3 |
 | `analysis` | forma-analysis | 3 | 5 |
 | `maintenance` | forma-analysis | 1 | 3 |
 

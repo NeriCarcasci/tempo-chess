@@ -143,7 +143,16 @@ export const DEPLOYMENTS: readonly DeploymentEntry[] = [
     capabilities: ["model_inference"],
     executes: ["cpu_interactive_model"],
     audience: "forma-maia",
-    maxInstances: 2,
+    // Three: two for `maia-play` and one for `maia-rating`, so a pasted game
+    // can never take a slot a player is waiting on. Not four, which is what
+    // ratings would want, because the aggregate connection budget in
+    // connection.ts has exactly one connection spare and four would put the
+    // platform over it. Ratings are a background job and play is not, so the
+    // scarce connection goes to play and ratings run at half speed.
+    //
+    // Container concurrency stays one because the model process holds mutable
+    // board state and serializes anyway; instances are how this service scales.
+    maxInstances: 3,
     containerConcurrency: 1,
     poolSize: 1,
     cpu: "2",
@@ -221,6 +230,21 @@ export const QUEUE_ROUTES: readonly QueueEntry[] = [
     target: "forma-maia",
     maxConcurrentDispatches: 2,
     maxDispatchesPerSecond: 2,
+    maxAttempts: 3,
+  },
+  // Ratings get their own two slots rather than sharing play's.
+  //
+  // One rating is a few hundred inferences and one move is a single inference,
+  // so on a shared queue a player waiting for their opponent would sit behind a
+  // stranger's pasted game. Cloud Tasks makes concurrency a property of the
+  // queue, so a separate queue is the only way to say that, and `forma-maia`
+  // carries four instances instead of two to pay for it. Cloud Run scales to
+  // zero, so the two extra cost nothing while nobody is rating anything.
+  {
+    name: "maia-rating",
+    target: "forma-maia",
+    maxConcurrentDispatches: 1,
+    maxDispatchesPerSecond: 1,
     maxAttempts: 3,
   },
   {

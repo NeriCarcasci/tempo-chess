@@ -85,6 +85,11 @@ export const WORKFLOW_KINDS = [
   // CPU human-policy work for scenario continuations. It is not an objective
   // evaluation and not evidence from a historical game.
   "position_continuation",
+  // Rating a whole game somebody pasted. Distinct from `game_analysis`, which
+  // is a subject's own game and produces a published review: this owns no
+  // subject, writes no game row, and its product is one number about a game
+  // Forma may never see again.
+  "game_rating",
 ] as const;
 export type WorkflowKind = (typeof WORKFLOW_KINDS)[number];
 
@@ -115,6 +120,12 @@ export const QUEUES = [
   "stockfish-deep",
   "analysis",
   "maia-play",
+  // Batched human-policy work for game ratings, deliberately not `maia-play`.
+  // A rating is hundreds of inferences and a player's move is one, so sharing a
+  // queue would put an interactive reply behind a pasted game. Separate queues
+  // are the only place Cloud Tasks lets us state that, since concurrency is a
+  // property of the queue rather than of the item.
+  "maia-rating",
   "maintenance",
 ] as const;
 export type Queue = (typeof QUEUES)[number];
