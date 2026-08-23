@@ -143,12 +143,14 @@ await test("the policy ladder is asked once per rung per chosen ply", async () =
   const engine = fakeEngine();
   const policy = fakePolicy();
   const parsed = parsePgn(OPERA_GAME);
-  await analyseGame(parsed.moves, { engine, policy });
+  const result = await analyseGame(parsed.moves, { engine, policy });
 
-  // Thirty-three plies is under the ply cap, so every ply gets the ladder, plus
-  // one inference per reply position that reached the practical pass.
-  const ladder = 33 * STRENGTH_POLICY.ladder.length;
-  assert.ok(policy.calls >= ladder, `expected at least ${ladder} inferences, saw ${policy.calls}`);
+  // Exactly one inference per distinct (position, rating) pair the plan asked
+  // for. Asserting against the plan rather than a hardcoded number keeps this
+  // honest when the budget or the selection changes.
+  assert.equal(policy.calls, result.plan.policyRequests.length);
+  const distinct = new Set(result.plan.policyRequests.map((r) => `${r.fen}|${r.rating}`));
+  assert.equal(distinct.size, result.plan.policyRequests.length, "a pair was asked for twice");
 });
 
 await test("a game with no declared ratings conditions on how it was played", async () => {
@@ -160,7 +162,7 @@ await test("a game with no declared ratings conditions on how it was played", as
   // rather than to a default opponent.
   assert.equal(result.conditioning.white.declared, false);
   assert.equal(result.conditioning.black.declared, false);
-  assert.ok(result.conditioning.white.rating !== null);
+  assert.ok(result.conditioning.white.rung !== null);
 });
 
 await test("a declared rating beats an inferred one", async () => {
@@ -172,7 +174,7 @@ await test("a declared rating beats an inferred one", async () => {
     whiteRating: 1500,
   });
   assert.equal(result.conditioning.white.declared, true);
-  assert.equal(result.conditioning.white.rating, 1400);
+  assert.equal(result.conditioning.white.rung, 1400);
   assert.equal(result.conditioning.white.outOfDomain, false);
 });
 
@@ -184,7 +186,7 @@ await test("a declared rating outside the calibrated range answers and says so",
     policy: fakePolicy(),
     blackRating: 2700,
   });
-  assert.equal(result.conditioning.black.rating, 2400);
+  assert.equal(result.conditioning.black.rung, 2400);
   assert.equal(result.conditioning.black.outOfDomain, true);
 });
 
