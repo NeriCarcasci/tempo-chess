@@ -339,20 +339,36 @@ it with no database at all.
    pending, because their evidence does not exist yet.
 3. **Done.** `evidence.ts`, the adapter from the published review, and
    `likelihood.ts`, the per-rung likelihoods including the unretained tail.
-4. **Partly done, and the rest changed shape.** `analyse.ts` assembles a rating
-   for a game nobody has seen, against an engine port and a policy port, and
-   `view.ts` is the DTO. What landed on main stops there: no HTTP route and no
-   page, because the deployment cannot serve either yet.
+4. **Done.** The rating runs as durable work across two chained workflows.
+   `phases.ts` cuts it into three pure steps, `workflow.ts` schedules them,
+   `0043_game_ratings.sql` stores the result, and `maia-rating` is its own Cloud
+   Tasks queue so a pasted game can never take a slot a player is waiting on.
+5. **Done.** `/rating` is public to read and needs an account to compute, and
+   the page polls a game key rather than a job.
 
-   The reason is worth writing down. The first attempt resolved Maia in the API
-   process through `resolveHumanPolicyEngine`, and that only ever returns an
-   engine on `forma-maia`, where the weights and the Python runtime live.
-   `forma-api` would have answered 503 to every request. Maia is reached through
-   a durable workflow and a Cloud Tasks queue, not a function call.
+### What has still never happened
 
-### The original step 4, kept because it is still the work
+Nothing here has run against a real Stockfish or a real Maia. There is no engine
+binary and no disposable Postgres in the development environment, so:
 
-Two reads per deep-selected transition:
+- the migration is hand-checked against the roles, grants and schema usage the
+  tables already have, and `security:migration` passes 99/99 over it, which is
+  static;
+- every engine and policy read is exercised against fakes;
+- the page is typechecked and built but has never been looked at in a browser,
+  because the Browser pane is rooted at the main checkout rather than at this
+  worktree.
+
+The first real run is the next thing, and it is a measurement rather than a
+build. Codex measured 598ms for a warm Maia inference and 15.5s for a cold Cloud
+Run request. At one rating worker, a fully uncached game is roughly 300
+inferences and therefore about three minutes. What needs confirming is whether
+the cached share is what makes that acceptable in practice, and the ply budget
+should move from that number rather than from this estimate.
+
+### The reads, for the record
+
+Two per deep-selected transition:
    a MultiPV search at the position *after* the move, for
    `expectedScoreIfMissed`, and one policy inference per rung of the ladder at
    the position *before* it, for the strength estimate. The second is the
@@ -360,10 +376,10 @@ Two reads per deep-selected transition:
    not for a whole archive, so the public path and the pipeline path will want
    different budgets. Then register the method as a `projection` component
    version and publish the rating behind a promotion gate.
-7. Score the eight corpus games and settle the policy constants against them.
+6. Score the eight corpus games and settle the policy constants against them.
    Until this happens the gate proves the formula's orderings, not the scale's,
    and nothing should be shown to a stranger.
-8. Seed the famous games, so the page has depth on day one.
+7. Seed the famous games, so the page has depth on day one.
 
 ### What the numbers look like now
 
