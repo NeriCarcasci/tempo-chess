@@ -82,6 +82,7 @@
     "models:promote": "tsx src/models/promote.ts",
     "rating:unit": "tsx src/rating/rating.test.ts",
     "rating:calibration": "tsx src/rating/gates/calibration.ts",
+    "rating:analyse": "tsx src/rating/analyse.test.ts",
     "estimates:unit": "tsx src/estimates/estimates.test.ts",
     "estimates:integration": "tsx src/estimates/gates/integration.ts",
     "estimates:security": "tsx src/estimates/gates/security.ts",
