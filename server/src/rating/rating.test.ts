@@ -18,6 +18,7 @@ import { CONTINUATION_RATINGS } from "../models/continuation-rating.js";
 import {
   COMBINATION_POLICY,
   MOMENT_POLICY,
+  isCacheableRefusal,
   ratingMethodHash,
   type Decision,
   type ReplyEvidence,
@@ -538,6 +539,17 @@ test("the rating does not move when the result does", () => {
   const first = rateGame({ decisions, deepPassRan: true, canonicalGameId: "won" });
   const second = rateGame({ decisions, deepPassRan: true, canonicalGameId: "lost" });
   assert.equal(first.status === "available" && first.rating, second.status === "available" && second.rating);
+});
+
+test("a refusal about us is never cached, and one about the game is", () => {
+  // The rows are immutable and keyed by game and method, so a cached refusal is
+  // permanent. A game with eleven moves will still have eleven moves next year;
+  // a missing model will not still be missing, and caching that would make the
+  // game unratable under this method forever.
+  assert.equal(isCacheableRefusal("too_few_decisions"), true);
+  assert.equal(isCacheableRefusal("no_live_positions"), true);
+  assert.equal(isCacheableRefusal("no_inference"), false);
+  assert.equal(isCacheableRefusal("not_deep_searched"), false);
 });
 
 test("the method hash is stable and covers the policy", () => {

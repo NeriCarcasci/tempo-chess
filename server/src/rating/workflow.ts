@@ -54,7 +54,7 @@ import { jsonParam } from "../db/json.js";
 import { assembleRating, planRating, screeningPositions, type DeepResult, type RatingPlan } from "./phases.js";
 import { ANALYSIS_BUDGET, PUBLIC_SEARCH, type EngineLine } from "./ports.js";
 import { rateGame } from "./rating.js";
-import { ratingMethodHash, RATING_METHOD } from "./contract.js";
+import { isCacheableRefusal, ratingMethodHash, RATING_METHOD } from "./contract.js";
 import { toRatingView, type GameHeaders, type RatingView } from "./view.js";
 import { RATING_RESOURCE_TYPE } from "./identity.js";
 
@@ -314,12 +314,13 @@ export async function assembleRatingItem(context: WorkContext, sql: Sql): Promis
     },
   });
 
-  await writeRating(sql, payload.gameKey, context.item.workflowId, view);
+  const stored = await writeRating(sql, payload.gameKey, context.item.workflowId, view);
 
   return {
     outputRef: `gameRating:${payload.gameKey}`,
     outputSummary: {
       status: view.status,
+      stored,
       rating: view.status === "available" ? view.rating : null,
       policiesRead: policies.size,
       policiesAsked: payload.plan.policyRequests.length,
@@ -331,13 +332,22 @@ export async function assembleRatingItem(context: WorkContext, sql: Sql): Promis
 // Storage
 // ---------------------------------------------------------------------------
 
+/**
+ * Store a rating, unless the refusal was about us rather than about the game.
+ *
+ * Returns whether it was stored, so the work item can report it. A refusal that
+ * names our own missing model is not an answer worth keeping: the row would be
+ * immutable and keyed by game and method, so the game could never be rated
+ * again under this method once the model arrived.
+ */
 export async function writeRating(
   sql: Sql,
   gameKey: string,
   workflowId: string,
   view: RatingView,
-): Promise<void> {
+): Promise<boolean> {
   const available = view.status === "available";
+  if (!available && !isCacheableRefusal(view.reason)) return false;
   await sql`
     insert into analysis.game_ratings (
       game_key, method_key, method_version, method_hash, workflow_id,
@@ -351,6 +361,7 @@ export async function writeRating(
       ${jsonParam(view)}
     )
     on conflict (game_key, method_hash) do nothing`;
+  return true;
 }
 
 export async function readRating(sql: Sql, gameKey: string): Promise<RatingView | null> {
@@ -385,6 +396,10 @@ export async function ratingProgress(sql: Sql, gameKey: string): Promise<RatingP
   if (workflow.state === "failed" || workflow.state === "cancelled") {
     return { state: "failed", workflowId: workflow.id };
   }
+  // Finished, and nothing was stored. That is the refusal we decline to cache:
+  // the model was missing, or the deeper pass never ran. Reporting it as still
+  // working would leave the page polling a bar at a hundred per cent forever.
+  if (workflow.state === "succeeded") return { state: "failed", workflowId: workflow.id };
 
   // Counted across the whole chain, so a bar drawn from it does not restart
   // when the second workflow begins.

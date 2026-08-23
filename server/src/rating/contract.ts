@@ -363,6 +363,30 @@ export interface Moment {
   magnitude: number;
 }
 
+/**
+ * Refusals that are facts about the game, and may therefore be stored.
+ *
+ * The distinction is who the refusal is about. A game with eleven moves in it
+ * will still have eleven moves next year, so "too few decisions" is an answer
+ * and belongs in the cache. "No inference" and "not deep searched" are about
+ * Forma: the model was not promoted, or the deeper pass never ran. Storing one
+ * of those would be caching an outage, and because the table is immutable and
+ * keyed by game and method, that game could never be rated again under this
+ * method even after the outage was fixed.
+ *
+ * This matters most on the day the public page ships before the model does,
+ * which is exactly when every rating would refuse and every refusal would be
+ * permanent.
+ */
+export const CACHEABLE_REFUSALS: readonly UnavailableReason[] = [
+  "too_few_decisions",
+  "no_live_positions",
+];
+
+export function isCacheableRefusal(reason: string): boolean {
+  return (CACHEABLE_REFUSALS as readonly string[]).includes(reason);
+}
+
 export function isUnavailableReason(value: string): value is UnavailableReason {
   return (UNAVAILABLE_REASONS as readonly string[]).includes(value);
 }

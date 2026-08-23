@@ -14,7 +14,13 @@ export function BrandLock({ size = 22 }: { size?: number }) {
   return <Logo size={size} />;
 }
 
+/**
+ * "Rate a game" rather than "Rating", because on a chess site a rating is a
+ * number attached to a player. The nav has to say which one this is, and the
+ * verb does it in three words.
+ */
 const LINKS = [
+  { to: "/rating", label: "Rate a game" },
   { to: "/features", label: "Features" },
   { to: "/pricing", label: "Pricing" },
 ];
@@ -95,6 +101,7 @@ export function PublicFooter() {
         </div>
         <nav aria-label="Product">
           <h2>Product</h2>
+          <Link to="/rating">Rate a game</Link>
           <Link to="/features">Features</Link>
           <Link to="/pricing">Pricing</Link>
           <Link to="/signup">Create account</Link>
