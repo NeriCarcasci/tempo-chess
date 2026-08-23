@@ -112,6 +112,57 @@ export async function readContinuationPolicy(
   };
 }
 
+/**
+ * Everything a caller needs to reuse one continuation inference.
+ *
+ * The play route asks for a move and gets one. A game rating asks a different
+ * question of the same cache: is this `(position, rating)` already inferred,
+ * and if not, what does the work item that would infer it look like? Both
+ * answers have to come from here rather than from a second implementation,
+ * because the cache key is what makes the two features share work at all. A
+ * rating that computed its own key would miss every row play had written and
+ * quietly double the platform's Maia bill.
+ *
+ * Null means the position cannot be asked about: no promoted model, or a FEN
+ * that is not a legal position.
+ */
+export interface ContinuationLookup {
+  modelComponentVersionId: string;
+  cacheKey: string;
+  corePositionId: string;
+  halfmoveClock: number;
+  /** The cached distribution, or null when nothing has inferred this yet. */
+  policy: PolicyDistribution | null;
+}
+
+export async function lookupContinuation(
+  sql: Sql,
+  fen: string,
+  rating: number,
+): Promise<ContinuationLookup | null> {
+  const normalized = await internPosition(sql, fen);
+  if (typeof normalized === "string") return null;
+  const model = await productionMaia3(sql);
+  if (!model) return null;
+
+  const cacheKey = inferenceCacheKey({
+    modelComponentVersionId: model.id,
+    modelContentHash: model.contentHash,
+    corePositionKey: normalized.coreKey,
+    outputKind: "human_policy",
+    context: contextFor(rating),
+    retainedMoveLimit: CONTINUATION_RETAINED_MOVE_LIMIT,
+  });
+
+  return {
+    modelComponentVersionId: model.id,
+    cacheKey,
+    corePositionId: normalized.corePositionId,
+    halfmoveClock: normalized.halfmoveClock,
+    policy: await readContinuationPolicy(sql, model.id, cacheKey),
+  };
+}
+
 export async function requestContinuationMove(
   sql: Sql,
   request: ContinuationRequest,

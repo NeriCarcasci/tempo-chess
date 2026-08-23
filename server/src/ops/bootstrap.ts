@@ -27,6 +27,7 @@ import { registerConceptHandlers } from "../analysis/concepts/worker.js";
 import { registerOnboardingHandlers } from "../onboarding/worker.js";
 import { registerPositionHandlers } from "../positions/worker.js";
 import { registerSyncHandlers } from "../sync/worker.js";
+import { registerRatingHandlers } from "../rating/workflow.js";
 
 export type DeploymentName =
   | "forma-api"
@@ -49,6 +50,9 @@ export function registerDeploymentHandlers(deployment: string): string[] {
       // The engine service and only the engine handlers: screening, deepening
       // and the bounded interactive evaluation.
       registerEngineHandlers("engine");
+      // Preparing a rating is engine work: it screens every position in the
+      // game and runs the deeper searches the plan selects.
+      registerRatingHandlers("engine");
       break;
 
     case "forma-analysis":
@@ -56,6 +60,9 @@ export function registerDeploymentHandlers(deployment: string): string[] {
       // transition assessment lives here rather than on the engine service
       // because it writes analysis rows, and the engine role cannot.
       registerEngineHandlers("analysis");
+      // Assembling a rating writes analysis rows, which the engine role has no
+      // grant for, so it lands here rather than beside the screening.
+      registerRatingHandlers("analysis");
       registerModelHandlers();
       registerConceptHandlers();
       registerPositionHandlers();
@@ -98,6 +105,7 @@ export function registerDeploymentHandlers(deployment: string): string[] {
  */
 export function registerAllHandlers(): string[] {
   registerEngineHandlers("both");
+  registerRatingHandlers("both");
   registerModelHandlers();
   registerContinuationHandlers();
   registerConceptHandlers();
