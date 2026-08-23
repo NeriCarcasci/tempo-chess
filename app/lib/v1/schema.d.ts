@@ -4966,6 +4966,7 @@ export interface operations {
                         /** @default [] */
                         moves?: string[];
                     };
+                    turnKey: string;
                 };
             };
         };
@@ -5001,6 +5002,9 @@ export interface operations {
                                 san: string;
                                 uci: string;
                             } | null;
+                            /** @enum {string} */
+                            state: "ready" | "scheduled";
+                            workflowId: string | null;
                         };
                         meta: {
                             redactions?: {

@@ -7,11 +7,10 @@
  * §14 also reserves `POST /play/sessions`, `POST /play/sessions/{id}/moves` and
  * `DELETE /play/sessions/{id}`. This ships the stateless half of that: the
  * client holds the game and the server answers one position at a time. No game
- * is stored. The only durable trace a move leaves is the kernel's own
- * idempotency record — one response envelope in `ops`, keyed to a request,
- * expiring in a day, joined to nothing and reachable as nothing — which every
- * `/v1` command writes and which is not a record of a game. Three reasons, in
- * order of weight.
+ * is stored. Stockfish leaves only the kernel's expiring idempotency record.
+ * Maia-3 also leaves an anonymous, reusable position-policy inference plus the
+ * workflow that produced it. Neither stores the game, result or move history,
+ * and neither is historical chess evidence. Three reasons, in order of weight.
  *
  * The first is the one the rest of the platform cares about. Platform spec §3.1
  * puts bot games in a separate evidence stratum from a player's real games, and
@@ -40,11 +39,11 @@
  *
  * The response carries a move, a resulting position and which opponent played
  * it. It carries no score, and `engine/opponent.ts` never parses one off the
- * wire, so there is no field a caller could route into an evaluation. The
- * search is a handicapped few hundred milliseconds with no promoted recipe and
- * no calibration version behind it; it is not comparable with anything
- * `POST /v1/positions/evaluations` returns and is deliberately not shaped like
- * it.
+ * wire, so there is no field a caller could route into an evaluation.
+ * Stockfish uses a handicapped few-hundred-millisecond search; Maia uses the
+ * promoted human-policy model. Neither is comparable with anything
+ * `POST /v1/positions/evaluations` returns, and the response is deliberately
+ * not shaped like an evaluation.
  *
  * ## Why not `POST /v1/positions/evaluations`
  *
@@ -55,13 +54,21 @@
  * outbox that would dispatch that work runs on a one-minute schedule, which is
  * a minute per bot move. It also has no strength parameter and must not gain
  * one: its profile is fixed server-side precisely so nobody can ask for a
- * weaker search, and asking for a weaker search is the entire point here.
+ * weaker search, and asking for a weaker search is the entire point here. Maia
+ * uses its separate continuation workflow; this route waits through that
+ * workflow contract rather than turning a policy move into an evaluation.
  */
 
 import { z } from "zod";
+import { client } from "../../db/client.js";
 import { ProblemError } from "../problem.js";
 import type { RouteDefinition } from "../registry.js";
 import { POLICIES } from "../rate-limit.js";
+import { isContinuationRating } from "../../models/continuation-rating.js";
+import {
+  hasProductionMaia3,
+  requestContinuationMove,
+} from "../../models/continuation.js";
 import {
   MOVE_BUDGET_MS,
   MOVE_HISTORY_LIMIT,
@@ -70,6 +77,7 @@ import {
   PLAY_LEVEL_KEYS,
   describeReply,
   levelByKey,
+  maia3Level,
   opponentCatalogue,
   resolveGame,
   selectOpponent,
@@ -122,12 +130,13 @@ const listOpponentsRoute: RouteDefinition<never, never, z.infer<typeof catalogue
   successStatus: 200,
   dataSchema: catalogueSchema,
   etag: true,
-  // The catalogue is a pure function of this process's configuration, so it
-  // cannot change without a redeploy. It is deliberately not rate limited: the
-  // limiter costs a round trip to Postgres and this route costs none.
+  // Maia availability follows the promoted model pointer; Stockfish follows
+  // process configuration. The short private cache avoids querying that pointer
+  // on every render without claiming it can only change on a redeploy.
   cacheControl: "private, max-age=60",
   async handler() {
-    const families = opponentCatalogue().map((entry) => ({
+    const maiaAvailable = await hasProductionMaia3(client);
+    const families = opponentCatalogue(process.env, maiaAvailable).map((entry) => ({
       family: entry.family,
       available: entry.available,
       unavailableReason: entry.unavailableReason,
@@ -175,10 +184,14 @@ const moveBodySchema = z
         level: z.enum(PLAY_LEVEL_KEYS),
       })
       .strict(),
+    /** Stable for one bot turn so a completed Maia job samples once across retries. */
+    turnKey: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/),
   })
   .strict();
 
 const moveResultSchema = z.object({
+  state: z.enum(["ready", "scheduled"]),
+  workflowId: z.string().nullable(),
   /** Null when the position is already over; then `position.status` says how. */
   reply: z.object({ uci: z.string(), san: z.string() }).nullable(),
   position: z.object({
@@ -207,7 +220,7 @@ const requestMoveRoute: RouteDefinition<
   operationId: "requestOpponentMove",
   summary: "The opponent's reply in a game against the engine",
   description:
-    "Validates the position and every supplied move server-side, then returns one bounded engine move. No game is stored: it lives in the client, and a game against the engine is never part of the player's archive or of any analysis. The reply carries no evaluation, and there is no depth, time or MultiPV parameter. A family the deployment cannot serve is refused rather than answered by a different engine.",
+    "Validates the position and every supplied move server-side, then returns one bounded opponent move. Stockfish answers immediately; Maia can return a scheduled workflow before the completed move is cached. No game is stored: it lives in the client, and a game against the engine is never part of the player's archive or of any analysis. The reply carries no evaluation, and there is no depth, time or MultiPV parameter. A family the deployment cannot serve is refused rather than answered by a different engine.",
   kind: "command",
   auth: "required",
   idempotency: "key",
@@ -216,11 +229,10 @@ const requestMoveRoute: RouteDefinition<
   bodySchema: moveBodySchema,
   dataSchema: moveResultSchema,
   rateLimits: [{ policy: POLICIES.playMove, source: "actor" }],
-  // No `withActorContext`, and no actor is read from `auth` beyond the rate
-  // limit's identity: this handler touches no tenant table, which is only true
-  // because no game is persisted. Any future write here needs the actor binding
-  // back, and the RLS policies would refuse an unbound connection anyway.
-  async handler({ body }) {
+  // No game row is written. Maia's durable workflow still needs the authenticated
+  // profile as its owner so only that player can watch it; the anonymous policy
+  // cache remains reusable and contains no profile reference.
+  async handler({ auth, body }) {
     const resolved = resolveGame(body.position.fen, body.position.moves);
     if (!resolved.ok) {
       const { field, detail } = resolved.rejection;
@@ -233,24 +245,25 @@ const requestMoveRoute: RouteDefinition<
     // it into the level, and a null here would mean the two had drifted apart.
     const level = levelByKey(body.opponent.level);
     if (!level) throw new ProblemError("INTERNAL_ERROR");
-
-    const selection = selectOpponent(body.opponent.family);
-    if (!selection.ok) {
-      // Truthful rather than optimistic, and never substituted. The client asked
-      // for a specific opponent; answering with a different one would be a claim
-      // about the move that is not true.
-      throw new ProblemError("CONFLICT", { detail: selection.unavailable.detail });
-    }
-    const familyLevel = selection.adapter.levelFor(level);
     const game = resolved.game;
 
     if (game.status !== "in_play") {
+      let familyLevel = maia3Level(level);
+      if (body.opponent.family === "stockfish") {
+        const terminalSelection = selectOpponent("stockfish");
+        if (!terminalSelection.ok) {
+          throw new ProblemError("CONFLICT", { detail: terminalSelection.unavailable.detail });
+        }
+        familyLevel = terminalSelection.adapter.levelFor(level);
+      }
       return {
         data: {
+          state: "ready",
+          workflowId: null,
           reply: null,
           position: { fen: game.fen, turn: game.turn, status: game.status },
           opponent: {
-            family: selection.adapter.family,
+            family: body.opponent.family,
             level: level.key,
             nominalRating: level.nominalRating,
             playsAt: familyLevel.playsAt,
@@ -259,6 +272,80 @@ const requestMoveRoute: RouteDefinition<
           },
         },
       };
+    }
+
+    if (body.opponent.family === "maia") {
+      if (!isContinuationRating(level.nominalRating)) throw new ProblemError("INTERNAL_ERROR");
+      const outcome = await requestContinuationMove(client, {
+        fen: game.fen,
+        rating: level.nominalRating,
+        turnKey: body.turnKey,
+        ownerProfileId: auth!.profileId,
+      });
+      if (outcome.state === "unavailable") {
+        throw new ProblemError("CONFLICT", {
+          detail: "No calibrated Maia-3 model is currently promoted.",
+        });
+      }
+      if (outcome.state === "invalid_position" || outcome.state === "terminal_position") {
+        throw new ProblemError("INTERNAL_ERROR");
+      }
+      const familyLevel = maia3Level(level);
+      if (outcome.state === "scheduled") {
+        return {
+          status: 202,
+          data: {
+            state: "scheduled",
+            workflowId: outcome.workflowId,
+            reply: null,
+            position: { fen: game.fen, turn: game.turn, status: game.status },
+            opponent: {
+              family: "maia",
+              level: level.key,
+              nominalRating: level.nominalRating,
+              playsAt: familyLevel.playsAt,
+              clamped: false,
+              engine: null,
+            },
+          },
+          resource: { type: "workflow", id: outcome.workflowId },
+        };
+      }
+      const described = describeReply(game.position, outcome.moveUci);
+      if (!described.ok) {
+        throw new ProblemError("PROVIDER_UNAVAILABLE", {
+          detail: "Maia-3 did not return a legal move",
+        });
+      }
+      return {
+        status: 200,
+        data: {
+          state: "ready",
+          workflowId: null,
+          reply: { uci: described.uci, san: described.san },
+          position: {
+            fen: described.fen,
+            turn: game.turn === "white" ? "black" : "white",
+            status: described.status,
+          },
+          opponent: {
+            family: "maia",
+            level: level.key,
+            nominalRating: level.nominalRating,
+            playsAt: familyLevel.playsAt,
+            clamped: false,
+            engine: "Maia-3 5M",
+          },
+        },
+      };
+    }
+
+    const selection = selectOpponent(body.opponent.family);
+    if (!selection.ok) {
+      // Truthful rather than optimistic, and never substituted. The client asked
+      // for a specific opponent; answering with a different one would be a claim
+      // about the move that is not true.
+      throw new ProblemError("CONFLICT", { detail: selection.unavailable.detail });
     }
 
     let reply;
@@ -291,6 +378,8 @@ const requestMoveRoute: RouteDefinition<
 
     return {
       data: {
+        state: "ready",
+        workflowId: null,
         reply: { uci: described.uci, san: described.san },
         position: {
           fen: described.fen,

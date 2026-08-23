@@ -1,12 +1,10 @@
 /**
  * Playing a game against the engine, on `/v1`.
  *
- * The game itself lives in the browser. The server answers one position at a
- * time and stores nothing, which is deliberate — a training game against a bot
- * is not one of the player's real games and must never end up filed as one. So
- * this module is two calls and three pure helpers, and the helpers are here
- * rather than in the route because each of them is a place the screen could
- * start making a claim the server did not.
+ * The game itself lives in the browser and is never filed as a real game.
+ * Stockfish answers immediately; Maia may first schedule durable private model
+ * work. This module hides that transport difference so the board receives the
+ * same ready move contract from either family.
  */
 
 import { newIdempotencyKey, v1Data } from "./client";
@@ -16,6 +14,7 @@ import type {
   OpponentFamilyLevel,
   OpponentMove,
   OpponentMoveBody,
+  Workflow,
 } from "./types";
 
 export function getPlayOpponents(): Promise<OpponentCatalogue> {
@@ -30,20 +29,51 @@ export function getPlayOpponents(): Promise<OpponentCatalogue> {
  * back rather than being searched again. Omitting it makes every attempt a
  * fresh intent, which is the wrong behaviour for a retry loop.
  */
-export function requestOpponentMove(
-  body: OpponentMoveBody,
+type OpponentMoveInput = Omit<OpponentMoveBody, "turnKey"> & { turnKey?: string };
+type ReadyOpponentMove = OpponentMove & { state: "ready"; workflowId: null };
+
+const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+
+async function waitForMaiaWorkflow(workflowId: string): Promise<void> {
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    const workflow = await v1Data<Workflow>(`/v1/workflows/${workflowId}`);
+    if (workflow.state === "succeeded") return;
+    if (workflow.state === "failed" || workflow.state === "cancelled") {
+      throw new Error(workflow.error?.message ?? "Maia could not produce a move.");
+    }
+    await wait(1_000);
+  }
+  throw new Error("Maia took too long to produce a move.");
+}
+
+export async function requestOpponentMove(
+  body: OpponentMoveInput,
   idempotencyKey: string = newIdempotencyKey(),
-): Promise<OpponentMove> {
-  return v1Data<OpponentMove>("/v1/play/moves", { json: body, idempotencyKey });
+): Promise<ReadyOpponentMove> {
+  // Stable across the schedule/wait/retry cycle, while the HTTP command key is
+  // refreshed after a 202 so the idempotency layer does not replay that 202.
+  const payload = { ...body, turnKey: body.turnKey ?? idempotencyKey } as OpponentMoveBody;
+  let commandKey = idempotencyKey;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await v1Data<OpponentMove>("/v1/play/moves", {
+      json: payload,
+      idempotencyKey: commandKey,
+    });
+    if (result.state === "ready") return result as ReadyOpponentMove;
+    if (!result.workflowId) throw new Error("Maia scheduled no move workflow.");
+    await waitForMaiaWorkflow(result.workflowId);
+    commandKey = newIdempotencyKey();
+  }
+  throw new Error("Maia completed its work but the move was not available.");
 }
 
 /**
  * The families this deployment can actually play.
  *
  * A screen offers these and nothing else. The catalogue also describes the
- * families it cannot serve — Maia, until its weights are a decision somebody
- * has made — so that the day one is configured it appears here without a code
- * change, and until then it is never offered and never silently substituted.
+ * families it cannot serve, so an unavailable Maia deployment is never
+ * silently substituted with Stockfish.
  */
 export function availableFamilies(catalogue: OpponentCatalogue): OpponentFamilyEntry[] {
   return catalogue.families.filter((entry) => entry.available);

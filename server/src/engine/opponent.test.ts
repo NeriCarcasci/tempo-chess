@@ -15,14 +15,14 @@ import { fileURLToPath } from "node:url";
 
 import {
   IN_PROCESS_ENGINE_ENV,
-  MAIA_BANDS,
+  MAIA3_LEVELS,
   MOVE_HISTORY_LIMIT,
   OpponentEngineError,
   PLAY_LEVELS,
   STOCKFISH_ELO_FLOOR,
   describeReply,
   levelByKey,
-  maiaOpponent,
+  maia3Level,
   opponentCatalogue,
   resolveGame,
   selectOpponent,
@@ -175,43 +175,13 @@ test("Stockfish answers when nothing forbids it", () => {
   assert.equal(selection.adapter.family, "stockfish");
 });
 
-test("Maia is unavailable until its binary and weights are configured", () => {
+test("Maia cannot be selected as an in-process opponent", () => {
   const selection = selectOpponent("maia", {});
   assert.equal(selection.ok, false);
   if (selection.ok) return;
   assert.equal(selection.family, "maia");
-  assert.equal(selection.unavailable.reason, "not_configured");
-});
-
-test("half a Maia configuration is not a Maia configuration", () => {
-  for (const env of [{ MAIA_ENGINE_PATH: "/usr/bin/lc0" }, { MAIA_WEIGHTS: "/weights" }]) {
-    const selection = selectOpponent("maia", env);
-    assert.equal(selection.ok, false, JSON.stringify(env));
-  }
-});
-
-test("configuring Maia is what makes it selectable — no code path changes", () => {
-  const selection = selectOpponent("maia", {
-    MAIA_ENGINE_PATH: "/usr/bin/lc0",
-    MAIA_WEIGHTS: "/weights/maia-1500.pb.gz",
-  });
-  assert.equal(selection.ok, true);
-});
-
-test("an unimplemented Maia refuses rather than returning a Stockfish move", async () => {
-  const adapter = maiaOpponent({
-    MAIA_ENGINE_PATH: "/usr/bin/lc0",
-    MAIA_WEIGHTS: "/weights/maia-1500.pb.gz",
-  });
-  await assert.rejects(
-    adapter.reply({
-      rootFen: START,
-      moves: [],
-      level: levelByKey("1400")!,
-      budgetMs: 50,
-    }),
-    OpponentEngineError,
-  );
+  assert.equal(selection.unavailable.reason, "not_permitted_here");
+  assert.match(selection.unavailable.detail, /continuation service/);
 });
 
 test("a deployment without engine_analysis refuses to run an engine", () => {
@@ -263,16 +233,11 @@ test("Stockfish reports its floor instead of claiming the level", () => {
   assert.equal(high.clamped, false);
 });
 
-test("Maia answers a level with the nearest band it was trained on", () => {
-  const maia = maiaOpponent({});
-  assert.deepEqual(
-    [maia.levelFor(levelByKey("800")!).playsAt, maia.levelFor(levelByKey("2400")!).playsAt],
-    [MAIA_BANDS[0], MAIA_BANDS[MAIA_BANDS.length - 1]],
-  );
-  assert.equal(maia.levelFor(levelByKey("1400")!).clamped, false);
-  // Ties go to the lower band, matching `networkForRating` in models/maia.ts:
-  // the lower network is the more conservative claim about an unsure player.
-  assert.equal(maia.levelFor({ key: "tie", nominalRating: 1150 }).playsAt, 1100);
+test("Maia-3 accepts exactly the continuation strengths without clamping", () => {
+  assert.deepEqual(MAIA3_LEVELS, PLAY_LEVELS.map((level) => level.nominalRating));
+  for (const level of PLAY_LEVELS) {
+    assert.deepEqual(maia3Level(level), { ...level, playsAt: level.nominalRating, clamped: false });
+  }
 });
 
 test("the catalogue describes every family, including the ones it cannot serve", () => {
@@ -286,6 +251,13 @@ test("the catalogue describes every family, including the ones it cannot serve",
   assert.equal(maia.unavailableReason, "not_configured");
   // Still described: a screen has to be able to say what Maia would be.
   assert.equal(maia.levels.length, PLAY_LEVELS.length);
+});
+
+test("the catalogue advertises Maia only when a promoted Maia-3 model exists", () => {
+  const maia = opponentCatalogue({}, true).find((entry) => entry.family === "maia")!;
+  assert.equal(maia.available, true);
+  assert.equal(maia.unavailableReason, null);
+  assert.equal(maia.levels.every((level) => !level.clamped), true);
 });
 
 // ---------------------------------------------------------------------------

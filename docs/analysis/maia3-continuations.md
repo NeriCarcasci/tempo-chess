@@ -43,7 +43,7 @@ because its board state is mutable.
 ```json
 {
   "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-  "rating": 1500,
+  "rating": 1600,
   "turnKey": "session_a1b2_turn_0001"
 }
 ```
@@ -63,6 +63,12 @@ once.
 Positions are legal standard chess only. Terminal positions are refused. This
 first contract is position-conditioned and records `hasMoveHistory=false`; move
 history must not be added later without a new input contract and cache key.
+
+`POST /v1/play/moves` is the product-facing opponent boundary. Stockfish is
+answered synchronously; a Maia family request delegates to this continuation
+workflow, waits for its workflow when necessary, and retries with the same
+`turnKey` so the completed policy is sampled once. Maia therefore remains on
+`forma-maia`; the public API does not carry Python, PyTorch or checkpoint files.
 
 ## Cost controls
 

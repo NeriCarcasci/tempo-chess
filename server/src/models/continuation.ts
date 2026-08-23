@@ -69,6 +69,11 @@ async function productionMaia3(sql: Sql): Promise<ProductionModel | null> {
   return row ? { id: row.id, contentHash: row.content_hash } : null;
 }
 
+/** Whether the API may truthfully advertise Maia-3 as a playable family. */
+export async function hasProductionMaia3(sql: Sql): Promise<boolean> {
+  return (await productionMaia3(sql)) !== null;
+}
+
 function contextFor(rating: number): InferenceContext {
   return {
     provider: null,

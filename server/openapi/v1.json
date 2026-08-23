@@ -11447,11 +11447,16 @@
                       "fen"
                     ],
                     "type": "object"
+                  },
+                  "turnKey": {
+                    "pattern": "^[A-Za-z0-9_-]{8,128}$",
+                    "type": "string"
                   }
                 },
                 "required": [
                   "position",
-                  "opponent"
+                  "opponent",
+                  "turnKey"
                 ],
                 "type": "object"
               }
@@ -11580,9 +11585,28 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "state": {
+                          "enum": [
+                            "ready",
+                            "scheduled"
+                          ],
+                          "type": "string"
+                        },
+                        "workflowId": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
                       "required": [
+                        "state",
+                        "workflowId",
                         "reply",
                         "position",
                         "opponent"

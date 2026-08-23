@@ -6,9 +6,20 @@
  * a rating the engine is not actually playing at.
  */
 
-import { describe, expect, test } from "vitest";
-import { availableFamilies, nearestLevel, strengthNote } from "./play";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { newIdempotencyKey, v1Data } from "./client";
+import { availableFamilies, nearestLevel, requestOpponentMove, strengthNote } from "./play";
 import type { OpponentCatalogue, OpponentFamilyEntry, OpponentFamilyLevel } from "./types";
+
+vi.mock("./client", () => ({
+  newIdempotencyKey: vi.fn(),
+  v1Data: vi.fn(),
+}));
+
+beforeEach(() => {
+  vi.mocked(v1Data).mockReset();
+  vi.mocked(newIdempotencyKey).mockReset();
+});
 
 const level = (
   key: OpponentFamilyLevel["key"],
@@ -27,7 +38,7 @@ const MAIA: OpponentFamilyEntry = {
   family: "maia",
   available: false,
   unavailableReason: "not_configured",
-  levels: [level("800", 800, 1100), level("1400", 1400), level("2000", 2000, 1900)],
+  levels: [level("800", 800), level("1400", 1400), level("2000", 2000)],
 };
 
 const CATALOGUE: OpponentCatalogue = { families: [STOCKFISH, MAIA] };
@@ -75,5 +86,64 @@ describe("strengthNote", () => {
     const note = strengthNote(STOCKFISH.levels[0]);
     expect(note).toContain("1320");
     expect(note).not.toContain("800");
+  });
+});
+
+describe("requestOpponentMove", () => {
+  test("waits for Maia work and retries with one stable turn seed", async () => {
+    vi.mocked(newIdempotencyKey).mockReturnValue("retry_command_key");
+    vi.mocked(v1Data)
+      .mockResolvedValueOnce({
+        state: "scheduled",
+        workflowId: "workflow-1",
+        reply: null,
+        position: { fen: "current", turn: "black", status: "in_play" },
+        opponent: {
+          family: "maia",
+          level: "1600",
+          nominalRating: 1600,
+          playsAt: 1600,
+          clamped: false,
+          engine: null,
+        },
+      })
+      .mockResolvedValueOnce({ state: "succeeded", error: null })
+      .mockResolvedValueOnce({
+        state: "ready",
+        workflowId: null,
+        reply: { uci: "e7e5", san: "e5" },
+        position: { fen: "after", turn: "white", status: "in_play" },
+        opponent: {
+          family: "maia",
+          level: "1600",
+          nominalRating: 1600,
+          playsAt: 1600,
+          clamped: false,
+          engine: "Maia-3 5M",
+        },
+      });
+
+    const result = await requestOpponentMove(
+      {
+        position: { fen: "root", moves: ["e2e4"] },
+        opponent: { family: "maia", level: "1600" },
+      },
+      "turn_command_key",
+    );
+
+    expect(result.reply?.uci).toBe("e7e5");
+    expect(v1Data).toHaveBeenNthCalledWith(1, "/v1/play/moves", {
+      json: {
+        position: { fen: "root", moves: ["e2e4"] },
+        opponent: { family: "maia", level: "1600" },
+        turnKey: "turn_command_key",
+      },
+      idempotencyKey: "turn_command_key",
+    });
+    expect(v1Data).toHaveBeenNthCalledWith(2, "/v1/workflows/workflow-1");
+    expect(v1Data).toHaveBeenNthCalledWith(3, "/v1/play/moves", {
+      json: expect.objectContaining({ turnKey: "turn_command_key" }),
+      idempotencyKey: "retry_command_key",
+    });
   });
 });

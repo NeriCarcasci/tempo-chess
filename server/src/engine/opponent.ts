@@ -20,14 +20,11 @@
  *     about a position, and the surest way to keep it from becoming evidence is
  *     for it never to become a row.
  *
- * The intended opponent is Maia, not Stockfish. Maia is not deployed, so the
- * catalogue reports it as unavailable and the family is selected per request
- * rather than compiled in — when the weights and the `lc0` binary are a
- * decision somebody has made, a Maia adapter implements `OpponentAdapter` and
- * the route does not change. What must never happen in the meantime is a
- * Stockfish move returned under Maia's name: a request for a family we cannot
- * serve is refused, never substituted. See `models/maia.ts`, and platform spec
- * §12.1, which says the same thing about the analysis path.
+ * Maia-3 is served by the durable continuation workflow on the private
+ * `forma-maia` deployment, not by an in-process adapter here. The play route
+ * branches to that workflow before synchronous adapter selection. What must
+ * never happen is a Stockfish move returned under Maia's name: a request for a
+ * family we cannot serve is refused, never substituted.
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -35,6 +32,7 @@ import { Chess } from "chessops/chess";
 import { makeFen, parseFen } from "chessops/fen";
 import { makeSan } from "chessops/san";
 import { makeUci, parseUci } from "chessops/util";
+import { CONTINUATION_RATINGS } from "../models/continuation-rating.js";
 import { resolveDeployment, hasCapability } from "../platform/deployment.js";
 
 export const OPPONENT_FAMILIES = ["stockfish", "maia"] as const;
@@ -487,80 +485,38 @@ function askStockfish(
 }
 
 // ---------------------------------------------------------------------------
-// The Maia slot
+// The Maia-3 family
 // ---------------------------------------------------------------------------
 
 /**
- * The rating bands Maia is trained on: 1100 through 1900, in hundreds.
- *
- * A fact about the model family rather than a copy of runtime configuration —
- * it is what the networks are, published with them. When the weights are
- * actually configured, the adapter should read the bands it has instead, since
- * a deployment may hold fewer than nine.
+ * Maia-3 is exposed at the same closed strengths as the continuation contract.
+ * Keeping one source of truth means the catalogue cannot offer a level the
+ * worker will later reject.
  */
-export const MAIA_BANDS = [1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900] as const;
+export const MAIA3_LEVELS = CONTINUATION_RATINGS;
 
 /**
- * The strength Maia would answer a level at.
- *
- * Ties go to the lower band, matching `networkForRating` in `models/maia.ts`:
- * the lower network is the more conservative claim about a player we are not
- * sure of. Kept in step with that function deliberately, because a player who
- * picks 1500 must get the same network whichever door they came through.
+ * Maia-3 conditions directly on the selected level. There is no legacy
+ * nearest-network clamp: the private service carries one Maia-3 checkpoint and
+ * receives the requested rating as model context.
  */
-function maiaLevel(level: PlayLevel): FamilyLevel {
-  let band: number = MAIA_BANDS[0];
-  for (const candidate of MAIA_BANDS) {
-    if (Math.abs(level.nominalRating - candidate) < Math.abs(level.nominalRating - band)) {
-      band = candidate;
-    }
-  }
-  return { ...level, playsAt: band, clamped: band !== level.nominalRating };
+export function maia3Level(level: PlayLevel): FamilyLevel {
+  return { ...level, playsAt: level.nominalRating, clamped: false };
 }
 
 /**
- * Declared, not implemented.
- *
- * The adapter is here so the catalogue can describe Maia honestly — the family
- * exists, these are its levels, it is not currently available and this is why —
- * and so that landing it is writing one `reply` rather than changing a route, a
- * schema and a screen. `MAIA_ENGINE_PATH` and `MAIA_WEIGHTS` are the same two
- * variables `models/maia.ts` reads; neither is set anywhere, `lc0` is in no
- * image, and sourcing them is a supply-chain decision nobody has made.
- *
- * `reply` throws rather than falling back to Stockfish, and the throw is
- * unreachable because the route checks `unavailable()` first. Both halves are
- * the point: the one failure this file exists to prevent is a Stockfish move
- * being served as what a 1500-rated human would play.
+ * Maia has no synchronous in-process adapter. This explicit refusal protects a
+ * future caller from accidentally bypassing the private Maia-3 workflow.
  */
-export function maiaOpponent(env: NodeJS.ProcessEnv = process.env): OpponentAdapter {
-  return {
-    family: "maia",
-    levelFor: maiaLevel,
-    unavailable: () => {
-      if (!env.MAIA_ENGINE_PATH || !env.MAIA_WEIGHTS) {
-        return { reason: "not_configured", detail: "Forma does not currently run a Maia opponent" };
-      }
-      return engineCapability(env);
-    },
-    reply: async () => {
-      throw new OpponentEngineError("the Maia adapter is declared but not implemented");
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Selection
-// ---------------------------------------------------------------------------
-
 export type OpponentSelection =
   | { readonly ok: true; readonly adapter: OpponentAdapter }
   | { readonly ok: false; readonly family: OpponentFamily; readonly unavailable: OpponentUnavailable };
 
 function adapterFor(family: OpponentFamily, env: NodeJS.ProcessEnv): OpponentAdapter {
-  return family === "maia"
-    ? maiaOpponent(env)
-    : stockfishOpponent({ command: env.STOCKFISH_PATH || "stockfish", env });
+  if (family === "maia") {
+    throw new OpponentEngineError("Maia-3 must be served by the continuation workflow");
+  }
+  return stockfishOpponent({ command: env.STOCKFISH_PATH || "stockfish", env });
 }
 
 /**
@@ -575,6 +531,16 @@ export function selectOpponent(
   family: OpponentFamily,
   env: NodeJS.ProcessEnv = process.env,
 ): OpponentSelection {
+  if (family === "maia") {
+    return {
+      ok: false,
+      family,
+      unavailable: {
+        reason: "not_permitted_here",
+        detail: "Maia-3 must be requested through the private continuation service",
+      },
+    };
+  }
   const adapter = adapterFor(family, env);
   const unavailable = adapter.unavailable();
   return unavailable ? { ok: false, family, unavailable } : { ok: true, adapter };
@@ -594,8 +560,19 @@ export interface CatalogueFamily {
  * list that goes stale the day one is added or withdrawn. It is a pure function
  * of configuration: no query, nothing to cache beyond the process.
  */
-export function opponentCatalogue(env: NodeJS.ProcessEnv = process.env): readonly CatalogueFamily[] {
+export function opponentCatalogue(
+  env: NodeJS.ProcessEnv = process.env,
+  maiaAvailable = false,
+): readonly CatalogueFamily[] {
   return OPPONENT_FAMILIES.map((family) => {
+    if (family === "maia") {
+      return {
+        family,
+        available: maiaAvailable,
+        unavailableReason: maiaAvailable ? null : "not_configured",
+        levels: PLAY_LEVELS.map(maia3Level),
+      };
+    }
     const adapter = adapterFor(family, env);
     const unavailable = adapter.unavailable();
     return {
