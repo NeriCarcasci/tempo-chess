@@ -1,7 +1,7 @@
 import type { Sql } from "postgres";
 
 import { jsonParam } from "../db/json.js";
-import { internPosition } from "../engine/interactive.js";
+import { internPosition, type NormalizedPosition } from "../engine/interactive.js";
 import { DuplicateWorkError, insertWorkflow } from "../ops/ledger.js";
 import type { ContinuationRating } from "./continuation-rating.js";
 import { Maia3Engine } from "./maia3.js";
@@ -161,6 +161,78 @@ export async function lookupContinuation(
     halfmoveClock: normalized.halfmoveClock,
     policy: await readContinuationPolicy(sql, model.id, cacheKey),
   };
+}
+
+/**
+ * The same lookup for many positions at once.
+ *
+ * `lookupContinuation` costs about five round trips, which is fine for one move
+ * and ruinous for a game rating: a few hundred pairs became more than a
+ * thousand queries and blew the API's request timeout before it could schedule
+ * anything. The work here is identical, arranged so it is paid once.
+ *
+ * The promoted model is read once rather than per pair. Each distinct position
+ * is interned once rather than once per rung, which is a factor of nine on its
+ * own. And the cache is asked one question about every key instead of one
+ * question each.
+ */
+export interface ContinuationAsk {
+  fen: string;
+  rating: number;
+}
+
+export interface BatchedLookup extends ContinuationAsk {
+  modelComponentVersionId: string;
+  cacheKey: string;
+  corePositionId: string;
+  halfmoveClock: number;
+  /** True when this pair has already been inferred and needs no work item. */
+  cached: boolean;
+}
+
+export async function lookupContinuations(
+  sql: Sql,
+  asks: readonly ContinuationAsk[],
+): Promise<BatchedLookup[]> {
+  if (asks.length === 0) return [];
+  const model = await productionMaia3(sql);
+  if (!model) return [];
+
+  const positions = new Map<string, NormalizedPosition>();
+  for (const fen of new Set(asks.map((ask) => ask.fen))) {
+    const normalized = await internPosition(sql, fen);
+    if (typeof normalized === "string") continue;
+    positions.set(fen, normalized);
+  }
+
+  const resolved = asks.flatMap((ask) => {
+    const normalized = positions.get(ask.fen);
+    if (!normalized) return [];
+    return [
+      {
+        ...ask,
+        modelComponentVersionId: model.id,
+        corePositionId: normalized.corePositionId,
+        halfmoveClock: normalized.halfmoveClock,
+        cacheKey: inferenceCacheKey({
+          modelComponentVersionId: model.id,
+          modelContentHash: model.contentHash,
+          corePositionKey: normalized.coreKey,
+          outputKind: "human_policy",
+          context: contextFor(ask.rating),
+          retainedMoveLimit: CONTINUATION_RETAINED_MOVE_LIMIT,
+        }),
+        cached: false,
+      },
+    ];
+  });
+
+  const keys = resolved.map((entry) => entry.cacheKey);
+  const rows = await sql<{ cache_key: string }[]>`
+    select cache_key from analysis.model_inferences
+    where model_component_version_id = ${model.id} and cache_key = any(${keys})`;
+  const have = new Set(rows.map((row) => row.cache_key));
+  return resolved.map((entry) => ({ ...entry, cached: have.has(entry.cacheKey) }));
 }
 
 export async function requestContinuationMove(

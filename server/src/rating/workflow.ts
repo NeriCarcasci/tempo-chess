@@ -40,6 +40,7 @@ import { expectedScore } from "../engine/contract.js";
 import {
   CONTINUATION_TASK,
   lookupContinuation,
+  lookupContinuations,
   readContinuationPolicy,
 } from "../models/continuation.js";
 import type { PolicyDistribution } from "../models/policy.js";
@@ -293,31 +294,38 @@ export async function scheduleRatingPolicies(
   const stored = await readRatingPlan(sql, gameKey);
   if (!stored) return null;
 
-  const items: WorkItemInput[] = [];
-  let cached = 0;
-  for (const ask of stored.plan.policyRequests) {
-    const lookup = await lookupContinuation(sql, ask.fen, ask.rating);
-    if (!lookup) continue;
-    if (lookup.policy) {
-      cached += 1;
-      continue;
-    }
-    items.push({
+  // The poll runs on every tick, so the common case has to be one cheap query.
+  // Once the second workflow exists there is nothing left to schedule.
+  const [already] = await sql<{ id: string }[]>`
+    select w.id from ops.workflows w
+    join ops.work_items i on i.workflow_id = w.id
+    where w.resource_type = ${RATING_RESOURCE_TYPE} and w.resource_id = ${gameKey}
+      and i.task_type = ${ASSEMBLE_TASK}
+    limit 1`;
+  if (already) return { workflowId: already.id, scheduled: 0, cached: 0 };
+
+  // Batched: one model read, one intern per distinct position, one question to
+  // the cache about every key. The per-pair version cost over a thousand round
+  // trips for a single game and timed the API out before it scheduled anything.
+  const looked = await lookupContinuations(sql, stored.plan.policyRequests);
+  const cached = looked.filter((entry) => entry.cached).length;
+  const items: WorkItemInput[] = looked
+    .filter((entry) => !entry.cached)
+    .map((entry) => ({
       taskType: CONTINUATION_TASK,
-      resourceClass: "cpu_interactive_model",
-      queue: "maia-rating",
-      idempotencyKey: `rating:${CONTINUATION_TASK}:${lookup.cacheKey}`,
-      inputRef: `corePosition:${lookup.corePositionId}`,
+      resourceClass: "cpu_interactive_model" as const,
+      queue: "maia-rating" as const,
+      idempotencyKey: `rating:${CONTINUATION_TASK}:${entry.cacheKey}`,
+      inputRef: `corePosition:${entry.corePositionId}`,
       payload: {
-        corePositionId: lookup.corePositionId,
-        halfmoveClock: lookup.halfmoveClock,
-        rating: ask.rating,
-        modelComponentVersionId: lookup.modelComponentVersionId,
-        cacheKey: lookup.cacheKey,
+        corePositionId: entry.corePositionId,
+        halfmoveClock: entry.halfmoveClock,
+        rating: entry.rating,
+        modelComponentVersionId: entry.modelComponentVersionId,
+        cacheKey: entry.cacheKey,
       },
       timeoutSeconds: 90,
-    });
-  }
+    }));
 
   try {
     const workflow = await sql.begin(async (tx) =>
