@@ -14,7 +14,7 @@
   /* The public shell's own container (DESIGN.md, "Layout"). The result panel
      inside is capped narrower: 74rem is right for a marketing grid and far too
      wide for a column of figures somebody actually has to read. */
-  .rate-hero {
+  .gr-hero {
     margin: 0 auto;
     max-width: 74rem;
     padding: clamp(3.5rem, 8vw, 6rem) 1.5rem var(--section-y);
@@ -26,18 +26,18 @@
 
   /* The measure still has to be readable, so the column is centred and the
      prose inside it is not stretched to the shell's full width. */
-  .rate-hero > h1,
-  .rate-hero > p { margin-inline: auto; }
+  .gr-hero > h1,
+  .gr-hero > p { margin-inline: auto; }
 
   /* While a rating runs the page is only the rating, so it sits in the middle
      of the screen rather than under a form nobody can use yet. */
-  .rate-hero.is-waiting {
+  .gr-hero.is-waiting {
     min-height: 70vh;
     align-content: center;
     padding-top: clamp(2rem, 5vw, 4rem);
   }
 
-  .rate-hero h1 {
+  .gr-hero h1 {
     font-size: clamp(2.4rem, 5.4vw, 3.9rem);
     font-weight: 640;
     letter-spacing: -0.028em;
@@ -45,7 +45,7 @@
     max-width: 16ch;
   }
 
-  .rate-hero > p {
+  .gr-hero > p {
     max-width: 54ch;
     color: var(--color-ink-muted);
     font-size: 1.02rem;
@@ -54,9 +54,9 @@
 
   /* --- the form -------------------------------------------------- */
 
-  .rate-form { display: grid; gap: 0.9rem; max-width: 46rem; width: 100%; text-align: left; }
+  .gr-form { display: grid; gap: 0.9rem; max-width: 46rem; width: 100%; text-align: left; }
 
-  .rate-form label {
+  .gr-form label {
     font-family: var(--font-mono);
     font-size: 0.7rem;
     letter-spacing: 0.09em;
@@ -64,7 +64,7 @@
     color: var(--color-ink-faint);
   }
 
-  .rate-form textarea {
+  .gr-form textarea {
     width: 100%;
     min-height: 9.5rem;
     resize: vertical;
@@ -79,21 +79,21 @@
     color: var(--color-ink);
   }
 
-  .rate-form textarea::placeholder { color: var(--color-ink-faint); }
-  .rate-form textarea:hover { background: var(--color-surface-3); }
-  .rate-form textarea:focus-visible {
+  .gr-form textarea::placeholder { color: var(--color-ink-faint); }
+  .gr-form textarea:hover { background: var(--color-surface-3); }
+  .gr-form textarea:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
     background: var(--color-surface);
   }
-  .rate-form textarea:disabled { opacity: 0.55; cursor: not-allowed; }
+  .gr-form textarea:disabled { opacity: 0.55; cursor: not-allowed; }
 
-  .rate-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; }
-  .rate-hero > .rate-note { max-width: 46rem; }
+  .gr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; }
+  .gr-hero > .gr-note { max-width: 46rem; }
 
-  .rate-note { font-size: 0.82rem; color: var(--color-ink-faint); max-width: 40ch; }
+  .gr-note { font-size: 0.82rem; color: var(--color-ink-faint); max-width: 40ch; }
 
-  .rate-error {
+  .gr-error {
     font-size: 0.86rem;
     color: var(--color-loss);
     font-weight: 560;
@@ -101,7 +101,7 @@
 
   /* --- the result ------------------------------------------------ */
 
-  .rate-result {
+  .gr-result {
     margin-top: 3.2rem;
     text-align: left;
     width: 100%;
@@ -114,14 +114,14 @@
     gap: 2.4rem;
   }
 
-  .rate-headline {
+  .gr-headline {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     gap: 0.6rem 1.6rem;
   }
 
-  .rate-score {
+  .gr-score {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-size: clamp(3.6rem, 10vw, 5.6rem);
@@ -131,16 +131,16 @@
     color: var(--color-ink);
   }
 
-  .rate-score span { color: var(--color-ink-faint); font-size: 0.36em; letter-spacing: 0; }
+  .gr-score span { color: var(--color-ink-faint); font-size: 0.36em; letter-spacing: 0; }
 
-  .rate-interval {
+  .gr-interval {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-size: 0.86rem;
     color: var(--color-ink-muted);
   }
 
-  .rate-players {
+  .gr-players {
     margin-left: auto;
     text-align: right;
     font-size: 0.88rem;
@@ -148,13 +148,13 @@
     line-height: 1.5;
   }
 
-  .rate-players b { font-weight: 620; color: var(--color-ink); }
+  .gr-players b { font-weight: 620; color: var(--color-ink); }
 
   /* --- the two sides --------------------------------------------- */
 
-  .rate-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .gr-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 
-  .rate-side {
+  .gr-side {
     background: var(--color-surface-2);
     border-radius: var(--radius-panel);
     padding: 1.15rem 1.25rem;
@@ -163,7 +163,7 @@
     align-content: start;
   }
 
-  .rate-side h3 {
+  .gr-side h3 {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -172,19 +172,19 @@
   }
 
   /* Colour is never the only carrier: the disc is paired with the word. */
-  .rate-disc {
+  .gr-disc {
     width: 0.72rem;
     height: 0.72rem;
     border-radius: var(--radius-pill);
     flex: 0 0 auto;
     box-shadow: var(--shadow-flat);
   }
-  .rate-disc-white { background: var(--color-board-light); }
-  .rate-disc-black { background: var(--color-board-dark); }
+  .gr-disc-white { background: var(--color-board-light); }
+  .gr-disc-black { background: var(--color-board-dark); }
 
-  .rate-figure { display: grid; gap: 0.15rem; }
+  .gr-figure { display: grid; gap: 0.15rem; }
 
-  .rate-figure dt {
+  .gr-figure dt {
     font-family: var(--font-mono);
     font-size: 0.66rem;
     letter-spacing: 0.09em;
@@ -192,7 +192,7 @@
     color: var(--color-ink-faint);
   }
 
-  .rate-figure dd {
+  .gr-figure dd {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-size: 1.02rem;
@@ -200,43 +200,43 @@
     color: var(--color-ink);
   }
 
-  .rate-figure dd small {
+  .gr-figure dd small {
     font-size: 0.74rem;
     font-weight: 460;
     color: var(--color-ink-muted);
     margin-left: 0.35rem;
   }
 
-  .rate-caveat { font-size: 0.78rem; color: var(--color-ink-faint); line-height: 1.5; }
+  .gr-caveat { font-size: 0.78rem; color: var(--color-ink-faint); line-height: 1.5; }
 
   /* --- demand ----------------------------------------------------- */
 
-  .rate-demand { display: grid; gap: 0.9rem; }
+  .gr-demand { display: grid; gap: 0.9rem; }
 
-  .rate-demand h2,
-  .rate-moments h2,
-  .rate-coverage h2 {
+  .gr-demand h2,
+  .gr-moments h2,
+  .gr-coverage h2 {
     font-size: 1.05rem;
     font-weight: 620;
     letter-spacing: -0.012em;
   }
 
-  .rate-bars { display: grid; gap: 0.7rem; max-width: 34rem; }
+  .gr-bars { display: grid; gap: 0.7rem; max-width: 34rem; }
 
-  .rate-bar { display: grid; grid-template-columns: 7.5rem 1fr 3rem; align-items: center; gap: 0.75rem; }
+  .gr-bar { display: grid; grid-template-columns: 7.5rem 1fr 3rem; align-items: center; gap: 0.75rem; }
 
-  .rate-bar-label { font-size: 0.85rem; color: var(--color-ink-muted); }
+  .gr-bar-label { font-size: 0.85rem; color: var(--color-ink-muted); }
 
-  .rate-bar-track {
+  .gr-bar-track {
     height: 0.4rem;
     border-radius: var(--radius-pill);
     background: var(--color-surface-3);
     overflow: hidden;
   }
 
-  .rate-bar-fill { height: 100%; border-radius: var(--radius-pill); background: var(--color-accent); }
+  .gr-bar-fill { height: 100%; border-radius: var(--radius-pill); background: var(--color-accent); }
 
-  .rate-bar-value {
+  .gr-bar-value {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-size: 0.82rem;
@@ -246,15 +246,15 @@
 
   /* --- the wait ---------------------------------------------------- */
 
-  .rate-working { gap: 1.8rem; }
+  .gr-working { gap: 1.8rem; }
 
-  .rate-working-head { display: flex; align-items: flex-start; gap: 1.1rem; }
-  .rate-working-head h2 { font-size: 1.05rem; font-weight: 620; margin-bottom: 0.4rem; }
-  .rate-working-head > div { flex: 1 1 20rem; }
+  .gr-working-head { display: flex; align-items: flex-start; gap: 1.1rem; }
+  .gr-working-head h2 { font-size: 1.05rem; font-weight: 620; margin-bottom: 0.4rem; }
+  .gr-working-head > div { flex: 1 1 20rem; }
 
   /* The board sits beside the figure on a wide screen and above it on a narrow
      one, rather than shrinking to a size nobody can read pieces at. */
-  .rate-working-body {
+  .gr-working-body {
     display: grid;
     grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
     gap: clamp(1.2rem, 4vw, 2.4rem);
@@ -262,7 +262,7 @@
     justify-items: start;
   }
 
-  .rate-replay { display: grid; gap: 0.6rem; width: 100%; min-width: 0; }
+  .gr-replay { display: grid; gap: 0.6rem; width: 100%; min-width: 0; }
 
   /* Self-contained on purpose.
      
@@ -273,7 +273,7 @@
      ancestor it also did not have, so sixty-four cells laid themselves out
      across the page and pushed the whole document sideways. Inheriting a
      component's look means inheriting its container too. */
-  .rate-replay .hb-board {
+  .gr-replay .hb-board {
     position: relative;
     width: 100%;
     aspect-ratio: 1;
@@ -282,7 +282,7 @@
     box-shadow: var(--shadow-soft);
   }
 
-  .rate-replay .hb-grid {
+  .gr-replay .hb-grid {
     position: absolute;
     inset: 0;
     display: grid;
@@ -291,13 +291,13 @@
   }
 
   /* The product's board tokens, which respect a player's chosen board. */
-  .rate-replay .hb-sq { background: var(--color-board-light); }
-  .rate-replay .hb-sq.is-dark { background: var(--color-board-dark); }
+  .gr-replay .hb-sq { background: var(--color-board-light); }
+  .gr-replay .hb-sq.is-dark { background: var(--color-board-dark); }
 
-  .rate-replay .hb-slot { position: absolute; width: 12.5%; height: 12.5%; display: block; }
-  .rate-replay .hb-piece { width: 100%; height: 100%; display: block; }
+  .gr-replay .hb-slot { position: absolute; width: 12.5%; height: 12.5%; display: block; }
+  .gr-replay .hb-piece { width: 100%; height: 100%; display: block; }
 
-  .rate-replay-move {
+  .gr-replay-move {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-size: 0.8rem;
@@ -305,9 +305,9 @@
     text-align: center;
   }
 
-  .rate-working-progress { display: grid; gap: 0.7rem; align-content: center; max-width: 30rem; }
+  .gr-working-progress { display: grid; gap: 0.7rem; align-content: center; max-width: 30rem; }
 
-  .rate-progress-figure {
+  .gr-progress-figure {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-size: clamp(2.4rem, 6vw, 3.4rem);
@@ -317,48 +317,48 @@
     color: var(--color-ink);
   }
 
-  .rate-progress-figure span { font-size: 0.4em; color: var(--color-ink-faint); margin-left: 0.1em; }
+  .gr-progress-figure span { font-size: 0.4em; color: var(--color-ink-faint); margin-left: 0.1em; }
 
   /* The clock is a smaller figure than a percentage: it is context, not the
      headline, and it should not shout while nothing is being claimed. */
-  .rate-progress-elapsed { font-size: clamp(1.6rem, 4vw, 2.2rem); color: var(--color-ink-muted); }
+  .gr-progress-elapsed { font-size: clamp(1.6rem, 4vw, 2.2rem); color: var(--color-ink-muted); }
 
   /* An indeterminate bar sweeps rather than fills, so it cannot be read as a
      fraction. It stops entirely when motion is not wanted. */
-  .rate-bar-track.is-indeterminate { overflow: hidden; position: relative; }
-  .rate-bar-track.is-indeterminate .rate-bar-fill {
+  .gr-bar-track.is-indeterminate { overflow: hidden; position: relative; }
+  .gr-bar-track.is-indeterminate .gr-bar-fill {
     width: 35%;
     position: absolute;
     inset-block: 0;
-    animation: rate-sweep 1600ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    animation: gr-sweep 1600ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
   }
 
-  @keyframes rate-sweep {
+  @keyframes gr-sweep {
     0% { left: -35%; }
     100% { left: 100%; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .rate-bar-track.is-indeterminate .rate-bar-fill { animation: none; left: 0; width: 100%; opacity: 0.35; }
+    .gr-bar-track.is-indeterminate .gr-bar-fill { animation: none; left: 0; width: 100%; opacity: 0.35; }
   }
 
   /* The fill moves under a transition rather than jumping on each poll, and
      collapses to a plain width change when motion is not wanted. */
-  .rate-working-progress .rate-bar-fill {
+  .gr-working-progress .gr-bar-fill {
     transition: width 600ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .rate-working-progress .rate-bar-fill { transition: none; }
+    .gr-working-progress .gr-bar-fill { transition: none; }
   }
 
   /* --- moments ---------------------------------------------------- */
 
-  .rate-moments { display: grid; gap: 0.9rem; }
+  .gr-moments { display: grid; gap: 0.9rem; }
 
-  .rate-moment-list { display: grid; gap: 0.55rem; }
+  .gr-moment-list { display: grid; gap: 0.55rem; }
 
-  .rate-moment {
+  .gr-moment {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
@@ -368,7 +368,7 @@
     padding: 0.7rem 0.9rem;
   }
 
-  .rate-moment-move {
+  .gr-moment-move {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-size: 0.82rem;
@@ -377,12 +377,12 @@
     min-width: 5.5rem;
   }
 
-  .rate-moment-text { font-size: 0.9rem; color: var(--color-ink); }
+  .gr-moment-text { font-size: 0.9rem; color: var(--color-ink); }
 
-  .rate-moment-side { font-size: 0.8rem; color: var(--color-ink-faint); margin-left: auto; }
+  .gr-moment-side { font-size: 0.8rem; color: var(--color-ink-faint); margin-left: auto; }
 
   /* A moment is a button when there is a board for it to move. */
-  .rate-moment.is-clickable {
+  .gr-moment.is-clickable {
     width: 100%;
     text-align: left;
     border: none;
@@ -390,14 +390,14 @@
     font: inherit;
     transition: background 150ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .rate-moment.is-clickable:hover { background: var(--color-surface-3); }
-  .rate-moment.is-clickable:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  .gr-moment.is-clickable:hover { background: var(--color-surface-3); }
+  .gr-moment.is-clickable:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
   /* The board on a finished rating. Capped and centred rather than stretched:
      a chessboard the width of a results panel is a chessboard nobody reads. */
-  .rate-replay-wrap { max-width: 24rem; margin-inline: auto; }
+  .gr-replay-wrap { max-width: 24rem; margin-inline: auto; }
 
-  .rate-step {
+  .gr-step {
     border: none;
     background: var(--color-surface-2);
     color: var(--color-ink);
@@ -409,11 +409,11 @@
     line-height: 1;
     box-shadow: var(--shadow-flat);
   }
-  .rate-step:hover:not(:disabled) { background: var(--color-surface-3); }
-  .rate-step:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-  .rate-step:disabled { opacity: 0.4; cursor: not-allowed; }
+  .gr-step:hover:not(:disabled) { background: var(--color-surface-3); }
+  .gr-step:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  .gr-step:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  .rate-replay-move {
+  .gr-replay-move {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -422,18 +422,18 @@
 
   /* --- coverage and refusals -------------------------------------- */
 
-  .rate-coverage { display: grid; gap: 0.5rem; }
+  .gr-coverage { display: grid; gap: 0.5rem; }
 
-  .rate-coverage p { font-size: 0.85rem; color: var(--color-ink-muted); line-height: 1.6; max-width: 62ch; }
+  .gr-coverage p { font-size: 0.85rem; color: var(--color-ink-muted); line-height: 1.6; max-width: 62ch; }
 
-  .rate-method {
+  .gr-method {
     font-family: var(--font-mono);
     font-size: 0.7rem;
     color: var(--color-ink-faint);
     letter-spacing: 0.03em;
   }
 
-  .rate-refusal {
+  .gr-refusal {
     background: var(--color-surface-2);
     border-radius: var(--radius-panel);
     padding: 1.3rem 1.4rem;
@@ -441,14 +441,14 @@
     gap: 0.5rem;
   }
 
-  .rate-refusal h2 { font-size: 1rem; font-weight: 620; }
-  .rate-refusal p { font-size: 0.9rem; color: var(--color-ink-muted); line-height: 1.6; max-width: 60ch; }
+  .gr-refusal h2 { font-size: 1rem; font-weight: 620; }
+  .gr-refusal p { font-size: 0.9rem; color: var(--color-ink-muted); line-height: 1.6; max-width: 60ch; }
 
   @media (max-width: 768px) {
-    .rate-sides { grid-template-columns: 1fr; }
-    .rate-working-body { grid-template-columns: 1fr; }
-    .rate-working-head { flex-direction: column; }
-    .rate-players { margin-left: 0; text-align: left; width: 100%; }
-    .rate-bar { grid-template-columns: 6rem 1fr 2.6rem; }
+    .gr-sides { grid-template-columns: 1fr; }
+    .gr-working-body { grid-template-columns: 1fr; }
+    .gr-working-head { flex-direction: column; }
+    .gr-players { margin-left: 0; text-align: left; width: 100%; }
+    .gr-bar { grid-template-columns: 6rem 1fr 2.6rem; }
   }
 }

@@ -137,7 +137,7 @@ export default function RatingPage() {
   if (stage.kind === "working") {
     return (
       <PublicPage>
-        <div className="rate-hero is-waiting">
+        <div className="gr-hero is-waiting">
           <Working stage={stage.stage} done={stage.done} total={stage.total} pgn={pgn} />
         </div>
       </PublicPage>
@@ -146,7 +146,7 @@ export default function RatingPage() {
 
   return (
     <PublicPage>
-      <div className="rate-hero">
+      <div className="gr-hero">
         <h1>How well was this game played?</h1>
         <p>
           Paste a game. Forma prices every move against the player who had to answer it, not against
@@ -154,7 +154,7 @@ export default function RatingPage() {
           close to unreachable and meant to be.
         </p>
 
-        <form className="rate-form" onSubmit={submit}>
+        <form className="gr-form" onSubmit={submit}>
           <label htmlFor="pgn">Game in PGN</label>
           <textarea
             id="pgn"
@@ -164,7 +164,7 @@ export default function RatingPage() {
             spellCheck={false}
             placeholder={'[White "..."]\n[Black "..."]\n\n1. e4 e5 2. Nf3 Nc6 ...'}
           />
-          <div className="rate-actions">
+          <div className="gr-actions">
             <button
               type="submit"
               className="primary-button btn-lg"
@@ -172,12 +172,12 @@ export default function RatingPage() {
             >
               {stage.kind === "looking" ? "Reading the game" : "Rate this game"}
             </button>
-            <p className="rate-note">
+            <p className="gr-note">
               A full game, from any source. Ratings in the tags are used when they are there.
             </p>
           </div>
           {stage.kind === "error" ? (
-            <p className="rate-error" role="alert">
+            <p className="gr-error" role="alert">
               {stage.message}
             </p>
           ) : null}
@@ -186,7 +186,7 @@ export default function RatingPage() {
         {stage.kind === "ready" ? <GameRatingResult view={stage.view} pgn={pgn} /> : null}
 
         {stage.kind === "ready" ? (
-          <p className="rate-note">
+          <p className="gr-note">
             That was one game. <Link to="/signup">Connect an account</Link> and Forma does the same
             to every game you have played.
           </p>
@@ -262,12 +262,12 @@ export function Working({
   }, []);
 
   return (
-    <div className="rate-result rate-working" aria-live="polite">
-      <div className="rate-working-head">
+    <div className="gr-result gr-working" aria-live="polite">
+      <div className="gr-working-head">
         <RookMascot mood="curious" size={72} label="" />
         <div>
           <h2>Nobody has rated this one before</h2>
-          <p className="rate-caveat">
+          <p className="gr-caveat">
             Forma is pricing every position, then asking a human model what a player of each
             strength would have done here. That is a few hundred inferences, so it takes a few
             minutes. This page keeps itself up to date, and the answer is saved: the next person to
@@ -276,20 +276,20 @@ export function Working({
         </div>
       </div>
 
-      <div className="rate-working-body">
+      <div className="gr-working-body">
         <ReplayBoard pgn={pgn} />
-        <div className="rate-working-progress">
+        <div className="gr-working-progress">
           {percent === null ? (
             <>
-              <p className="rate-progress-figure rate-progress-elapsed">
+              <p className="gr-progress-figure gr-progress-elapsed">
                 {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
               </p>
               {/* Indeterminate on purpose: it says the work is moving without
                   claiming a fraction nobody can compute from one long item. */}
-              <span className="rate-bar-track is-indeterminate" aria-hidden="true">
-                <span className="rate-bar-fill" />
+              <span className="gr-bar-track is-indeterminate" aria-hidden="true">
+                <span className="gr-bar-fill" />
               </span>
-              <p className="rate-caveat">
+              <p className="gr-caveat">
                 Reading the game with the engine, position by position. There is no percentage for
                 this part because it is one long look rather than a hundred small ones. The counted
                 half starts after it.
@@ -297,21 +297,21 @@ export function Working({
             </>
           ) : (
             <>
-              <p className="rate-progress-figure">
+              <p className="gr-progress-figure">
                 {percent}
                 <span>%</span>
               </p>
               <span
-                className="rate-bar-track"
+                className="gr-bar-track"
                 role="progressbar"
                 aria-valuenow={done}
                 aria-valuemin={0}
                 aria-valuemax={total}
                 aria-label="Rating progress"
               >
-                <span className="rate-bar-fill" style={{ width: `${percent}%` }} />
+                <span className="gr-bar-fill" style={{ width: `${percent}%` }} />
               </span>
-              <p className="rate-caveat">
+              <p className="gr-caveat">
                 {done} of {total} positions done
                 {rate ? `, about ${Math.round(rate)} a minute` : ""}
                 {remaining ? ` and roughly ${remaining} ${remaining === 1 ? "minute" : "minutes"} left` : ""}.

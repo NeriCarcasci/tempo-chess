@@ -137,7 +137,7 @@ export function ReplayBoard({
   const san = index > 0 ? moves[index - 1] : null;
 
   return (
-    <figure className="rate-replay">
+    <figure className="gr-replay">
       <div className="hb-board">
         <div className="hb-grid" aria-hidden="true">
           {Array.from({ length: 64 }, (_, cell) => {
@@ -158,11 +158,11 @@ export function ReplayBoard({
           </span>
         ))}
       </div>
-      <figcaption className="rate-replay-move">
+      <figcaption className="gr-replay-move">
         {autoPlay ? null : (
           <button
             type="button"
-            className="rate-step"
+            className="gr-step"
             onClick={() => setIndex((c) => Math.max(0, c - 1))}
             disabled={index === 0}
             aria-label="Previous move"
@@ -183,7 +183,7 @@ export function ReplayBoard({
         {autoPlay ? null : (
           <button
             type="button"
-            className="rate-step"
+            className="gr-step"
             onClick={() => setIndex((c) => Math.min(fens.length - 1, c + 1))}
             disabled={index === fens.length - 1}
             aria-label="Next move"
