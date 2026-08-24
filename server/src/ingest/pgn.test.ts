@@ -40,4 +40,40 @@ assert.ok(malformed.warning);
 const repeated = parsePgn(`1. Nf3 {[%clk 0:01:00]} Nf6 {[%clk 0:00:59]} 2. Ng1 {[%clk 0:00:58]} Ng8 {[%clk 0:00:57]} 3. Nf3 {[%clk 0:00:56]} Nf6 {[%clk 0:00:55]} *`);
 assert.deepEqual(repeated.moves.map((move) => move.clockMs), [60_000, 59_000, 58_000, 57_000, 56_000, 55_000]);
 
+// Chess.com writes a judged move as two comments in a row: the prose, then the
+// machine annotations. chess.js parses one comment after a move and then wants
+// a move, so the second brace was a syntax error and the whole game was refused
+// with "Expected ... but "{" found". That is most of what a person pastes into
+// the public rating page, and the export is perfectly legal PGN.
+const twoComments = parsePgn(
+  `[White "Alice"]
+[Black "Bob"]
+
+` +
+    `1. e4 { [%eval 0.2] [%clk 0:21:08] } e5 { [%clk 0:21:06] } ` +
+    `2. Nf3? { (-7.50 → Mate in 1) Checkmate is now unavoidable. b4 was best. } ` +
+    `{ [%eval #-1] [%clk 0:21:06] } (2. Bc4 Nf6) 2... Nc6 ` +
+    `{ [%clk 0:21:04] } { Black wins by checkmate. } 0-1`,
+);
+assert.equal(twoComments.warning, undefined);
+assert.deepEqual(twoComments.moves.map((move) => move.san), ["e4", "e5", "Nf3", "Nc6"]);
+// The merge keeps the annotations, so the clocks inside the second block survive.
+assert.deepEqual(twoComments.moves.map((move) => move.clockMs), [
+  1_268_000,
+  1_266_000,
+  1_266_000,
+  1_264_000,
+]);
+
+// Three in a row, and comments separated by newlines rather than spaces.
+const threeComments = parsePgn(`[White "a"]
+[Black "b"]
+
+1. e4 { one }
+{ two }
+{ [%clk 0:05:00] } e5 1-0`);
+assert.equal(threeComments.warning, undefined);
+assert.equal(threeComments.moves.length, 2);
+assert.equal(threeComments.moves[0].clockMs, 300_000);
+
 console.log("pgn parsing tests passed");

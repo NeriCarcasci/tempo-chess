@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { PublicPage } from "../components/PublicShell";
 import { GameRatingResult } from "../components/GameRatingResult";
+import { ReplayBoard } from "../components/ReplayBoard";
+import { RookMascot } from "../components/RookMascot";
 import { ApiError } from "../lib/api";
 import { peekSession } from "../lib/session";
 import {
@@ -165,7 +167,7 @@ export default function RatingPage() {
           ) : null}
         </form>
 
-        {stage.kind === "working" ? <Working done={stage.done} total={stage.total} /> : null}
+        {stage.kind === "working" ? <Working done={stage.done} total={stage.total} pgn={pgn} /> : null}
         {stage.kind === "needs-account" ? <NeedsAccount /> : null}
         {stage.kind === "ready" ? <GameRatingResult view={stage.view} /> : null}
 
@@ -183,41 +185,64 @@ export default function RatingPage() {
 /**
  * The queue, mid-flight.
  *
- * The count is real work items, not a spinner pretending to be one. When the
- * total is not known yet the bar is left out rather than drawn at zero, because
- * a bar at zero says "nothing has happened" and what is true is "we have not
- * counted yet".
+ * A first rating is minutes of work, and a spinner for that long is a page
+ * asking somebody to trust it with nothing to look at. So three things share
+ * the wait: the game they pasted, playing itself; the rook, which is the only
+ * place on this site where waiting is allowed to have a personality; and a bar
+ * driven by real work items rather than a timer pretending to be one.
+ *
+ * The bar is left out entirely until the total is known. A bar at zero says
+ * "nothing has happened"; the truth at that moment is "we have not counted
+ * yet", and drawing the first is how a loader starts lying.
  */
-export function Working({ done, total }: { done: number; total: number }) {
+export function Working({ done, total, pgn }: { done: number; total: number; pgn: string }) {
   const share = total > 0 ? Math.min(1, done / total) : null;
+  const percent = share === null ? null : Math.round(share * 100);
+
   return (
-    <div className="rate-result" aria-live="polite">
-      <div className="rate-headline">
-        <p className="rate-score">
-          <span>rating this game</span>
-        </p>
+    <div className="rate-result rate-working" aria-live="polite">
+      <div className="rate-working-head">
+        <RookMascot mood="curious" size={72} label="" />
+        <div>
+          <h2>Nobody has rated this one before</h2>
+          <p className="rate-caveat">
+            Forma is pricing every position, then asking a human model what a player of each
+            strength would have done here. That is a few hundred inferences, so it takes a few
+            minutes. This page keeps itself up to date, and the answer is saved: the next person to
+            paste this game gets it straight away.
+          </p>
+        </div>
       </div>
-      <section className="rate-demand">
-        <h2>Nobody has rated this one before</h2>
-        <p className="rate-caveat">
-          Forma is pricing every position, then asking a human model what a player of each strength
-          would have done. That is a few hundred inferences, so it takes a few minutes. The page
-          keeps itself up to date.
-        </p>
-        {share === null ? null : (
-          <div className="rate-bars">
-            <div className="rate-bar">
-              <span className="rate-bar-label">Progress</span>
-              <span className="rate-bar-track">
-                <span className="rate-bar-fill" style={{ width: `${Math.round(share * 100)}%` }} />
+
+      <div className="rate-working-body">
+        <ReplayBoard pgn={pgn} />
+        <div className="rate-working-progress">
+          {percent === null ? (
+            <p className="rate-caveat">Working out how much there is to do.</p>
+          ) : (
+            <>
+              <p className="rate-progress-figure">
+                {percent}
+                <span>%</span>
+              </p>
+              <span
+                className="rate-bar-track"
+                role="progressbar"
+                aria-valuenow={done}
+                aria-valuemin={0}
+                aria-valuemax={total}
+                aria-label="Rating progress"
+              >
+                <span className="rate-bar-fill" style={{ width: `${percent}%` }} />
               </span>
-              <span className="rate-bar-value">
-                {done}/{total}
-              </span>
-            </div>
-          </div>
-        )}
-      </section>
+              <p className="rate-caveat">
+                {done} of {total} steps done. Positions other people have already had analysed are
+                free, so this can finish sooner than it looks.
+              </p>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

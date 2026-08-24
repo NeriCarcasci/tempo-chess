@@ -1,0 +1,123 @@
+import { useEffect, useMemo, useState } from "react";
+import { Chess } from "chess.js";
+import { PieceGlyph } from "./PieceGlyph";
+
+/**
+ * The game, playing itself, while Forma works out what to say about it.
+ *
+ * A rating takes minutes the first time, and a spinner for that long is a page
+ * asking somebody to trust it with nothing to look at. The game they just
+ * pasted is the one thing on screen they already care about, so it plays.
+ *
+ * Deliberately not interactive and not the product's board: no evaluation, no
+ * arrows, no judgement. Showing an assessment here would be showing an answer
+ * before the analysis that produces it has finished, and the first number a
+ * reader sees is the one they remember.
+ *
+ * Drawn with the marketing board's own classes (`hb-*`), so it inherits the
+ * squares, the piece vectors and the shape scale rather than introducing a
+ * second board style to the site.
+ */
+
+const FILES = "abcdefgh";
+
+interface Placed {
+  square: string;
+  letter: string;
+  white: boolean;
+  col: number;
+  row: number;
+}
+
+function parseBoard(fen: string): Placed[] {
+  const out: Placed[] = [];
+  const board = fen.split(" ")[0] ?? "";
+  board.split("/").forEach((row, index) => {
+    const rank = 8 - index;
+    let file = 0;
+    for (const character of row) {
+      if (character >= "1" && character <= "8") {
+        file += Number(character);
+        continue;
+      }
+      out.push({
+        square: `${FILES[file]!}${rank}`,
+        letter: character.toLowerCase(),
+        white: character === character.toUpperCase(),
+        col: file,
+        row: 8 - rank,
+      });
+      file += 1;
+    }
+  });
+  return out;
+}
+
+/** Every position the game passed through, or an empty list if it will not parse. */
+function positionsOf(pgn: string): { fens: string[]; moves: string[] } {
+  try {
+    const chess = new Chess();
+    chess.loadPgn(pgn, { strict: false });
+    const history = chess.history({ verbose: true });
+    return {
+      fens: [history[0]?.before ?? new Chess().fen(), ...history.map((move) => move.after)],
+      moves: history.map((move) => move.san),
+    };
+  } catch {
+    return { fens: [], moves: [] };
+  }
+}
+
+export function ReplayBoard({ pgn, stepMs = 900 }: { pgn: string; stepMs?: number }) {
+  const { fens, moves } = useMemo(() => positionsOf(pgn), [pgn]);
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (fens.length < 2) return;
+    // Loops rather than stopping at the end: the wait is longer than the game,
+    // and a board frozen on the final position looks like something crashed.
+    const timer = setInterval(() => setIndex((current) => (current + 1) % fens.length), stepMs);
+    return () => clearInterval(timer);
+  }, [fens.length, stepMs]);
+
+  if (fens.length < 2) return null;
+
+  const placed = parseBoard(fens[index] ?? fens[0]!);
+  const moveNumber = Math.ceil(index / 2);
+  const san = index > 0 ? moves[index - 1] : null;
+
+  return (
+    <figure className="rate-replay">
+      <div className="hb-board">
+        <div className="hb-grid" aria-hidden="true">
+          {Array.from({ length: 64 }, (_, cell) => {
+            const col = cell % 8;
+            const row = Math.floor(cell / 8);
+            return (
+              <span key={cell} className={`hb-sq ${(col + row) % 2 === 1 ? "is-dark" : ""}`} />
+            );
+          })}
+        </div>
+        {placed.map((piece) => (
+          <span
+            key={piece.square}
+            className="hb-slot"
+            style={{ left: `${piece.col * 12.5}%`, top: `${piece.row * 12.5}%` }}
+          >
+            <PieceGlyph letter={piece.letter} white={piece.white} className="hb-piece" />
+          </span>
+        ))}
+      </div>
+      <figcaption className="rate-replay-move">
+        {san ? (
+          <>
+            {moveNumber}
+            {index % 2 === 1 ? "." : "..."} {san}
+          </>
+        ) : (
+          "Starting position"
+        )}
+      </figcaption>
+    </figure>
+  );
+}
