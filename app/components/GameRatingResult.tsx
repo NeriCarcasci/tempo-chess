@@ -105,7 +105,7 @@ function resultWording(result: string | null): string | null {
  * only then talks about quality. None of this feeds the rating — it is here
  * because a number attached to an anonymous game is a number nobody can place.
  */
-function GameFacts({ opening, game }: { opening: OpeningView | null; game: GameHeaders }) {
+function GameFacts({ opening, game }: { opening?: OpeningView | null; game: GameHeaders }) {
   const line = opening?.name ?? null;
   const facts: string[] = [];
   if (game.moveCount) facts.push(`${game.moveCount} moves`);
@@ -152,7 +152,7 @@ function GameFacts({ opening, game }: { opening: OpeningView | null; game: GameH
 // The two players
 // ---------------------------------------------------------------------------
 
-function Side({ side, name, elo }: { side: SideView; name: string | null; elo: number | null }) {
+function Side({ side, name, elo }: { side: SideView; name?: string | null; elo?: number | null }) {
   return (
     <div className="gr-side">
       <h3>
@@ -224,27 +224,39 @@ function levelWord(kind: keyof typeof LEVELS, value: number): string {
 }
 
 function Demand({ demand }: { demand: DemandView }) {
+  // The evidence counts arrived with a later method than some stored ratings
+  // were written under, and the API serves whatever version rated the game. A
+  // missing count drops its line rather than rendering "undefined of undefined"
+  // — or, as it did before this guard, throwing on `.toFixed` of nothing.
+  const count = (value: number | undefined): value is number => typeof value === "number";
+
   const bars = [
     {
       kind: "sharpness" as const,
       label: "Sharpness",
       blurb: "how much a single move could swing",
       value: demand.tension,
-      evidence: `${demand.meanTopCriticality.toFixed(2)} of a point at stake across the sharpest positions`,
+      evidence: count(demand.meanTopCriticality)
+        ? `${demand.meanTopCriticality.toFixed(2)} of a point at stake across the sharpest positions`
+        : null,
     },
     {
       kind: "precision" as const,
       label: "Precision demanded",
       blurb: "how often exactly one move held",
       value: demand.narrowness,
-      evidence: `${demand.onlyMoves} of ${demand.positionsExamined} examined positions had one move that held`,
+      evidence: count(demand.onlyMoves) && count(demand.positionsExamined)
+        ? `${demand.onlyMoves} of ${demand.positionsExamined} examined positions had one move that held`
+        : null,
     },
     {
       kind: "pressure" as const,
       label: "Time under pressure",
       blurb: "how long the game stayed undecided",
       value: demand.duration,
-      evidence: `${demand.liveDecisions} of ${demand.totalDecisions} moves were played while the game was still live`,
+      evidence: count(demand.liveDecisions) && count(demand.totalDecisions)
+        ? `${demand.liveDecisions} of ${demand.totalDecisions} moves were played while the game was still live`
+        : null,
     },
   ];
 
@@ -268,7 +280,7 @@ function Demand({ demand }: { demand: DemandView }) {
               </span>
               <span className="gr-bar-level">{levelWord(bar.kind, bar.value)}</span>
             </div>
-            <p className="gr-bar-evidence">{bar.evidence}</p>
+            {bar.evidence ? <p className="gr-bar-evidence">{bar.evidence}</p> : null}
           </div>
         ))}
       </div>
@@ -282,7 +294,11 @@ function Demand({ demand }: { demand: DemandView }) {
 
 function moveLabel(moment: MomentView): string {
   const dots = moment.actor === "white" ? "." : "…";
-  return `${moment.moveNumber}${dots}${moment.playedSan ?? ""}`;
+  // Ratings stored before SAN was carried have only the number. Showing
+  // "10." with nothing after it reads as a truncation, so the dots wait
+  // until there is a move to attach them to.
+  if (!moment.playedSan) return String(moment.moveNumber);
+  return `${moment.moveNumber}${dots}${moment.playedSan}`;
 }
 
 function TurningPoints({

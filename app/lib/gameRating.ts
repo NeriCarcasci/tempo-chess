@@ -28,8 +28,8 @@ export interface SideView {
   playedLikeLow: number | null;
   playedLikeHigh: number | null;
   outOfDomain: boolean;
-  atCeiling: boolean;
-  bandOpenHigh: boolean;
+  atCeiling?: boolean;
+  bandOpenHigh?: boolean;
   gaveAway: number | null;
   cleanliness: number | null;
   decisionsScored: number;
@@ -44,9 +44,11 @@ export interface DemandView {
   duration: number;
   positionsExamined: number;
   onlyMoves: number;
-  liveDecisions: number;
-  totalDecisions: number;
-  meanTopCriticality: number;
+  /* Added with method 3. A rating stored under an earlier method has none of
+     these, and the API serves the version that rated the game. */
+  liveDecisions?: number;
+  totalDecisions?: number;
+  meanTopCriticality?: number;
 }
 
 export interface MomentView {
@@ -55,22 +57,22 @@ export interface MomentView {
   moveNumber: number;
   actor: Color;
   playedUci: string;
-  playedSan: string | null;
+  playedSan?: string | null;
   magnitude: number;
 }
 
 export interface GameHeaders {
   white: string | null;
   black: string | null;
-  whiteElo: number | null;
-  blackElo: number | null;
+  whiteElo?: number | null;
+  blackElo?: number | null;
   event: string | null;
-  site: string | null;
   date: string | null;
   result: string | null;
-  termination: string | null;
-  timeControl: string | null;
-  moveCount: number | null;
+  site?: string | null;
+  termination?: string | null;
+  timeControl?: string | null;
+  moveCount?: number | null;
 }
 
 /** Where the game came from, before anything was measured about it. */
@@ -102,7 +104,7 @@ export interface RatingAvailable {
   moments: MomentView[];
   coverage: { decisions: number; practicalDecisions: number; outOfDomain: boolean };
   game: GameHeaders;
-  opening: OpeningView | null;
+  opening?: OpeningView | null;
 }
 
 export interface RatingUnavailable {
@@ -113,7 +115,7 @@ export interface RatingUnavailable {
   black: SideView | null;
   demand: DemandView | null;
   game: GameHeaders;
-  opening: OpeningView | null;
+  opening?: OpeningView | null;
 }
 
 export type RatingView = RatingAvailable | RatingUnavailable;
