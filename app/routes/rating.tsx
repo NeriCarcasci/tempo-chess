@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { PublicPage } from "../components/PublicShell";
 import { GameRatingResult } from "../components/GameRatingResult";
@@ -30,7 +30,7 @@ const POLL_MS = 4000;
 type Stage =
   | { kind: "idle" }
   | { kind: "looking" }
-  | { kind: "working"; gameKey: string; done: number; total: number }
+  | { kind: "working"; gameKey: string; stage: "screening" | "inferring"; done: number; total: number }
   | { kind: "ready"; view: RatingView }
   | { kind: "error"; message: string };
 
@@ -86,6 +86,7 @@ export default function RatingPage() {
         return {
           kind: "working",
           gameKey: progress.gameKey,
+          stage: progress.stage,
           done: progress.done,
           total: progress.total,
         };
@@ -122,6 +123,19 @@ export default function RatingPage() {
   }
 
   const busy = stage.kind === "looking" || stage.kind === "working";
+
+  // While a rating is running the page is the rating. Keeping the form on
+  // screen invites a second paste that cannot start anything, and the heading
+  // asks a question the page is in the middle of answering.
+  if (stage.kind === "working") {
+    return (
+      <PublicPage>
+        <div className="rate-hero is-waiting">
+          <Working stage={stage.stage} done={stage.done} total={stage.total} pgn={pgn} />
+        </div>
+      </PublicPage>
+    );
+  }
 
   return (
     <PublicPage>
@@ -162,7 +176,6 @@ export default function RatingPage() {
           ) : null}
         </form>
 
-        {stage.kind === "working" ? <Working done={stage.done} total={stage.total} pgn={pgn} /> : null}
         {stage.kind === "ready" ? <GameRatingResult view={stage.view} pgn={pgn} /> : null}
 
         {stage.kind === "ready" ? (
@@ -189,9 +202,46 @@ export default function RatingPage() {
  * "nothing has happened"; the truth at that moment is "we have not counted
  * yet", and drawing the first is how a loader starts lying.
  */
-export function Working({ done, total, pgn }: { done: number; total: number; pgn: string }) {
-  const share = total > 0 ? Math.min(1, done / total) : null;
+export function Working({
+  stage,
+  done,
+  total,
+  pgn,
+}: {
+  stage: "screening" | "inferring";
+  done: number;
+  total: number;
+  pgn: string;
+}) {
+  // The engine half is one item that runs for minutes, so counting it produces
+  // "0 of 1" for the whole wait, which reads as broken. During that half the
+  // page says what is happening instead of drawing a bar that cannot move.
+  const counting = stage === "inferring" && total > 1;
+  const share = counting ? Math.min(1, done / total) : null;
   const percent = share === null ? null : Math.round(share * 100);
+
+  // Rate and remaining time are measured from the polls this page has actually
+  // seen, not from a constant. A number invented to look like progress is the
+  // thing every fake loading bar does, and this one has real counts to use.
+  const samples = useRef<{ at: number; done: number }[]>([]);
+  const [rate, setRate] = useState<number | null>(null);
+  useEffect(() => {
+    if (!counting) return;
+    const now = Date.now();
+    const seen = samples.current;
+    if (seen.length === 0 || seen[seen.length - 1]!.done !== done) {
+      seen.push({ at: now, done });
+    }
+    // A short window, so the figure tracks what is happening now rather than
+    // averaging in a slow cold start for the rest of the wait.
+    while (seen.length > 2 && now - seen[0]!.at > 90_000) seen.shift();
+    const first = seen[0]!;
+    const elapsed = (now - first.at) / 1000;
+    const moved = done - first.done;
+    setRate(elapsed > 10 && moved > 0 ? (moved / elapsed) * 60 : null);
+  }, [counting, done]);
+
+  const remaining = rate && rate > 0 ? Math.ceil((total - done) / rate) : null;
 
   return (
     <div className="rate-result rate-working" aria-live="polite">
@@ -212,7 +262,11 @@ export function Working({ done, total, pgn }: { done: number; total: number; pgn
         <ReplayBoard pgn={pgn} />
         <div className="rate-working-progress">
           {percent === null ? (
-            <p className="rate-caveat">Working out how much there is to do.</p>
+            <p className="rate-caveat">
+              Reading the game with the engine, position by position. This part takes a couple of
+              minutes and does not report a percentage, because it is one long look rather than a
+              hundred small ones.
+            </p>
           ) : (
             <>
               <p className="rate-progress-figure">
@@ -230,8 +284,11 @@ export function Working({ done, total, pgn }: { done: number; total: number; pgn
                 <span className="rate-bar-fill" style={{ width: `${percent}%` }} />
               </span>
               <p className="rate-caveat">
-                {done} of {total} steps done. Positions other people have already had analysed are
-                free, so this can finish sooner than it looks.
+                {done} of {total} positions done
+                {rate ? `, about ${Math.round(rate)} a minute` : ""}
+                {remaining ? ` and roughly ${remaining} ${remaining === 1 ? "minute" : "minutes"} left` : ""}.
+                Positions other people have already had analysed are free, so this can finish sooner
+                than it looks.
               </p>
             </>
           )}

@@ -53,11 +53,34 @@ function parseBoard(fen: string): Placed[] {
   return out;
 }
 
+/**
+ * Merge comment blocks that sit next to each other.
+ *
+ * The same rule as `mergeAdjacentComments` on the server, and here for the same
+ * reason: Chess.com and Lichess write a judged move as prose then annotations,
+ * and chess.js treats the second brace as a syntax error. The server learned
+ * this and the browser had not, so a real export rated fine and then showed no
+ * board at all, because this threw and the component quietly rendered nothing.
+ *
+ * Deliberately duplicated rather than shared. The web app cannot import from
+ * `server/`, and a six-line normaliser copied with a note is better than a
+ * package invented to hold it.
+ */
+function mergeAdjacentComments(pgn: string): string {
+  let merged = pgn;
+  let previous: string;
+  do {
+    previous = merged;
+    merged = merged.replace(/\}(\s*)\{/g, " ");
+  } while (merged !== previous);
+  return merged;
+}
+
 /** Every position the game passed through, or an empty list if it will not parse. */
 function positionsOf(pgn: string): { fens: string[]; moves: string[] } {
   try {
     const chess = new Chess();
-    chess.loadPgn(pgn, { strict: false });
+    chess.loadPgn(mergeAdjacentComments(pgn), { strict: false });
     const history = chess.history({ verbose: true });
     return {
       fens: [history[0]?.before ?? new Chess().fen(), ...history.map((move) => move.after)],

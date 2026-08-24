@@ -104,7 +104,14 @@ export type RatingView = RatingAvailable | RatingUnavailable;
  */
 export type RatingProgress =
   | { gameKey: string; state: "ready"; view: RatingView }
-  | { gameKey: string; state: "working"; done: number; total: number }
+  | {
+      gameKey: string;
+      state: "working";
+      /** The engine half runs as one long item; the policy half is countable. */
+      stage: "screening" | "inferring";
+      done: number;
+      total: number;
+    }
   | { gameKey: string; state: "failed" }
   | { gameKey: string; state: "absent" };
 

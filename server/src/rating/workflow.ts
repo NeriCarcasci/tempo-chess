@@ -489,7 +489,22 @@ export async function readRating(sql: Sql, gameKey: string): Promise<RatingView 
 
 export type RatingProgress =
   | { state: "ready"; view: RatingView }
-  | { state: "working"; workflowId: string; done: number; total: number }
+  | {
+      state: "working";
+      workflowId: string;
+      /**
+       * Which half of the work is happening.
+       *
+       * The engine half is a single work item that runs for minutes, so a bar
+       * driven by item counts sits at "0 of 1" the whole time and looks broken.
+       * It is honest and it is unreadable. Naming the stage lets the page say
+       * what is going on while the count still means something once counting
+       * is the right thing to do.
+       */
+      stage: "screening" | "inferring";
+      done: number;
+      total: number;
+    }
   | { state: "failed"; workflowId: string }
   | { state: "absent" };
 
@@ -526,9 +541,13 @@ export async function ratingProgress(sql: Sql, gameKey: string): Promise<RatingP
     from ops.work_items i
     join ops.workflows w on w.id = i.workflow_id
     where w.resource_type = ${RATING_RESOURCE_TYPE} and w.resource_id = ${gameKey}`;
+  // The plan existing is exactly the line between the two halves: before it,
+  // the engine is reading the game; after it, the policy queue is draining.
+  const plan = await readRatingPlan(sql, gameKey);
   return {
     state: "working",
     workflowId: workflow.id,
+    stage: plan ? "inferring" : "screening",
     done: Number(counts?.done ?? 0),
     total: Number(counts?.total ?? 0),
   };

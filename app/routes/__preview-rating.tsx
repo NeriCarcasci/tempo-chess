@@ -141,9 +141,16 @@ export default function RatingPreview() {
           nothing here was measured.
         </p>
         <section style={{ width: "100%" }}>
+          <h2 style={{ fontSize: "1.05rem", fontWeight: 620 }}>Reading the game</h2>
+          <p className="rate-note">
+            The engine half is one long item, so there is no percentage to draw and the page says so.
+          </p>
+          <Working stage="screening" done={0} total={1} pgn={OPERA_PGN} />
+        </section>
+        <section style={{ width: "100%" }}>
           <h2 style={{ fontSize: "1.05rem", fontWeight: 620 }}>Queued</h2>
           <p className="rate-note">A game nobody has rated, mid-flight. The count is real work items.</p>
-          <Working done={182} total={297} pgn={OPERA_PGN} />
+          <Working stage="inferring" done={182} total={297} pgn={OPERA_PGN} />
         </section>
         {CASES.map((entry) => (
           <section key={entry.title} style={{ width: "100%" }}>

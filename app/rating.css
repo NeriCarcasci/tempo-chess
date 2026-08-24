@@ -20,7 +20,21 @@
     padding: clamp(3.5rem, 8vw, 6rem) 1.5rem var(--section-y);
     display: grid;
     gap: 2.4rem;
-    justify-items: start;
+    justify-items: center;
+    text-align: center;
+  }
+
+  /* The measure still has to be readable, so the column is centred and the
+     prose inside it is not stretched to the shell's full width. */
+  .rate-hero > h1,
+  .rate-hero > p { margin-inline: auto; }
+
+  /* While a rating runs the page is only the rating, so it sits in the middle
+     of the screen rather than under a form nobody can use yet. */
+  .rate-hero.is-waiting {
+    min-height: 70vh;
+    align-content: center;
+    padding-top: clamp(2rem, 5vw, 4rem);
   }
 
   .rate-hero h1 {
@@ -40,7 +54,7 @@
 
   /* --- the form -------------------------------------------------- */
 
-  .rate-form { display: grid; gap: 0.9rem; max-width: 46rem; width: 100%; }
+  .rate-form { display: grid; gap: 0.9rem; max-width: 46rem; width: 100%; text-align: left; }
 
   .rate-form label {
     font-family: var(--font-mono);
@@ -75,6 +89,7 @@
   .rate-form textarea:disabled { opacity: 0.55; cursor: not-allowed; }
 
   .rate-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.9rem; }
+  .rate-hero > .rate-note { max-width: 46rem; }
 
   .rate-note { font-size: 0.82rem; color: var(--color-ink-faint); max-width: 40ch; }
 
@@ -88,6 +103,7 @@
 
   .rate-result {
     margin-top: 3.2rem;
+    text-align: left;
     width: 100%;
     max-width: 56rem;
     background: var(--color-surface);
