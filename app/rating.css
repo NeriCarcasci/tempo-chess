@@ -115,11 +115,19 @@
   }
 
   .gr-headline {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.6rem 1.6rem;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: start;
+    column-gap: 1.6rem;
+    row-gap: 0.35rem;
   }
+
+  .gr-headline .gr-score { grid-column: 1; }
+  .gr-headline .gr-stars { grid-column: 1; }
+  .gr-headline .gr-interval { grid-column: 1; }
+  /* The players span the headline's rows so the name block stays optically
+     tied to the number rather than floating level with one line of it. */
+  .gr-headline .gr-players { grid-column: 2; grid-row: 1 / -1; }
 
   .gr-score {
     font-family: var(--font-mono);
@@ -171,16 +179,35 @@
     font-weight: 620;
   }
 
-  /* Colour is never the only carrier: the disc is paired with the word. */
-  .gr-disc {
-    width: 0.72rem;
-    height: 0.72rem;
-    border-radius: var(--radius-pill);
+  /* A king rather than a disc. Two coloured circles need a legend; the piece
+     says "this is chess, and this is a side" without one. Colour is still not
+     the only carrier — the glyph sits next to the player's name. */
+  .gr-king {
+    font-size: 1.35rem;
+    line-height: 1;
     flex: 0 0 auto;
-    box-shadow: var(--shadow-flat);
+    /* The glyphs are drawn hollow, so black gets its fill from the text colour
+       and white gets an outline. Reversing them would make White the loud one. */
+    color: var(--color-ink);
   }
-  .gr-disc-white { background: var(--color-board-light); }
-  .gr-disc-black { background: var(--color-board-dark); }
+  .gr-king-white { color: var(--color-ink-muted); text-shadow: 0 0 1px var(--color-ink); }
+  .gr-king-black { color: var(--color-ink); }
+
+  .gr-side-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .gr-side-elo {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    font-weight: 460;
+    color: var(--color-ink-faint);
+    flex: 0 0 auto;
+  }
 
   .gr-figure { display: grid; gap: 0.15rem; }
 
@@ -221,27 +248,124 @@
     letter-spacing: -0.012em;
   }
 
-  .gr-bars { display: grid; gap: 0.7rem; max-width: 34rem; }
+  .gr-bars { display: grid; gap: 1.15rem; max-width: 40rem; }
 
-  .gr-bar { display: grid; grid-template-columns: 7.5rem 1fr 3rem; align-items: center; gap: 0.75rem; }
+  /* Stacked rather than tabular. The old row put a label, a bar and a bare
+     "1.00" side by side, which reads as a score out of something the page never
+     states. Each term now carries its own sentence and its own counts, so the
+     bar is a picture of a number the reader can already check. */
+  .gr-bar { display: grid; gap: 0.3rem; }
 
-  .gr-bar-label { font-size: 0.85rem; color: var(--color-ink-muted); }
+  .gr-bar-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.55rem; }
+
+  .gr-bar-label { font-size: 0.9rem; font-weight: 560; color: var(--color-ink); }
+
+  .gr-bar-blurb { font-size: 0.8rem; color: var(--color-ink-faint); }
+
+  /* A grid, not a flex row: the level words have very different lengths, and
+     letting them size themselves gave the three bars three different track
+     widths. Bars that are meant to be read against each other have to start and
+     end at the same two x positions or the comparison is a lie. */
+  .gr-bar-meter {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 12rem;
+    align-items: center;
+    gap: 0.7rem;
+  }
+
+  /* The word carries the reading; the bar is the picture of it. A number on
+     its own could not distinguish "as sharp as games get" from "the scale
+     stopped counting", and both of those render as 1.00. */
+  .gr-bar-level {
+    font-size: 0.78rem;
+    font-weight: 560;
+    color: var(--color-ink-muted);
+  }
+
+  .gr-bar-evidence { font-size: 0.76rem; color: var(--color-ink-faint); line-height: 1.5; }
 
   .gr-bar-track {
+    display: block;
     height: 0.4rem;
     border-radius: var(--radius-pill);
     background: var(--color-surface-3);
     overflow: hidden;
   }
 
-  .gr-bar-fill { height: 100%; border-radius: var(--radius-pill); background: var(--color-accent); }
+  /* `display: block` is load-bearing. These are spans, and width/height
+     percentages do not apply to inline boxes, so the fill measured zero and
+     every bar rendered as an empty track. */
+  .gr-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: var(--radius-pill);
+    background: var(--color-accent);
+  }
 
-  .gr-bar-value {
+  /* --- the score as stars ------------------------------------------ */
+
+  /* Five stars for a ten-point scale, halved rather than rescaled so the two
+     readings can never disagree. It is the same number twice: one form lands in
+     a glance, the other survives being quoted. */
+  .gr-stars {
+    display: flex;
+    gap: 0.15rem;
+    color: var(--color-accent);
+    margin-block: 0.15rem 0.1rem;
+  }
+
+  .gr-star { width: 1.05rem; height: 1.05rem; display: block; }
+
+  /* --- what the game was -------------------------------------------- */
+
+  .gr-facts {
+    display: grid;
+    gap: 0.3rem;
+    padding-block: 1rem;
+    border-block: 1px solid var(--color-line);
+  }
+
+  .gr-opening { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.55rem; }
+
+  .gr-eco {
     font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    color: var(--color-accent-ink);
+    background: var(--color-accent-wash);
+    border-radius: var(--radius-pill);
+    padding: 0.14rem 0.45rem;
+  }
+
+  .gr-opening-name { font-size: 1rem; font-weight: 620; color: var(--color-ink); }
+
+  .gr-facts-line {
     font-size: 0.82rem;
-    text-align: right;
-    color: var(--color-ink);
+    color: var(--color-ink-muted);
+    line-height: 1.6;
+  }
+
+  .gr-fact-strong { color: var(--color-ink); font-weight: 560; }
+
+  .gr-dot { color: var(--color-ink-faint); margin-inline: 0.45rem; }
+
+  /* --- section ledes ------------------------------------------------- */
+
+  /* Every section that shows numbers says what they are for first. The panel
+     used to open each block with a bar chart and let the reader guess. */
+  .gr-section-lede {
+    font-size: 0.85rem;
+    color: var(--color-ink-muted);
+    line-height: 1.6;
+    max-width: 58ch;
+    margin-top: -0.35rem;
+  }
+
+  .gr-moment-side-white,
+  .gr-moment-side-black { font-variant-caps: normal; }
+
+  @media (max-width: 34rem) {
+    .gr-bar-meter { grid-template-columns: minmax(0, 1fr); }
   }
 
   /* --- the wait ---------------------------------------------------- */

@@ -48,6 +48,18 @@ export const HASH_SHAPE = /^[0-9a-f]{64}$/;
  * looked. It narrows on its own as a game gets longer, which is the behaviour a
  * per-game number needs: a fifteen-move miniature should publish a wide band.
  */
+/**
+ * The ends of the rung ladder.
+ *
+ * Separate from the concept model's calibrated slice, which is a narrower range
+ * for a different purpose. A strength read is a choice among these rungs, so a
+ * result can only leave this range by falling off the ladder entirely. What it
+ * *can* do is pin to the top rung, and a reader is owed that as "2400+" rather
+ * than as a number pretending to be a measurement of a distinguishable level.
+ */
+export const LADDER_FLOOR = CONTINUATION_RATINGS[0];
+export const LADDER_CEILING = CONTINUATION_RATINGS[CONTINUATION_RATINGS.length - 1];
+
 export const STRENGTH_POLICY = {
   version: "1",
   ladder: CONTINUATION_RATINGS,

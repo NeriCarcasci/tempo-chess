@@ -284,10 +284,15 @@ test("an interval covering the whole ladder is a refusal, not an estimate", () =
   assert.equal(result.status === "unavailable" && result.reason, "indistinguishable");
 });
 
-test("an estimate beyond the calibrated range says so", () => {
+test("the top rung of the ladder is a reading, not an excursion", () => {
+  // The estimator chooses among the ladder's rungs, and 2400 is one of them.
+  // This used to assert the opposite, because the flag was comparing against
+  // the concept model's calibrated slice — a narrower range for a different
+  // purpose. Conflating the two attached a warning to every strong game.
   const scored = game(20, () => ({ bandLogLikelihoods: bands(2400) })).map(scoreDecision);
   const result = estimateStrength(scored);
-  assert.equal(result.status === "available" && result.outOfDomain, true);
+  assert.equal(result.status === "available" && result.rating, 2400);
+  assert.equal(result.status === "available" && result.outOfDomain, false);
 });
 
 // ---------------------------------------------------------------------------

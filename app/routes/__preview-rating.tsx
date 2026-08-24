@@ -1,7 +1,7 @@
 import { PublicPage } from "../components/PublicShell";
 import { GameRatingResult } from "../components/GameRatingResult";
 import { Working } from "./rating";
-import type { RatingView } from "../lib/gameRating";
+import type { GameHeaders, OpeningView, RatingView } from "../lib/gameRating";
 
 /**
  * `/dev/rating` — every state the rating panel can be in, on one page.
@@ -9,7 +9,7 @@ import type { RatingView } from "../lib/gameRating";
  * The real page needs Stockfish and a promoted human policy, so it cannot be
  * looked at during a front-end change without a fully provisioned backend. This
  * route exists so the panel's states stay reviewable: a strong game, a refusal,
- * an out-of-domain master game, and a mismatch.
+ * a game at the top of the ladder, and a mismatch.
  *
  * The figures are invented and this page is not public. That is the reason it
  * lives under `/dev` with the other preview routes rather than anywhere a
@@ -25,7 +25,30 @@ const OPERA_PGN = `[White "Morphy"]
 8.Nc3 c6 9.Bg5 b5 10.Nxb5 cxb5 11.Bxb5+ Nbd7 12.O-O-O Rd8 13.Rxd7 Rxd7
 14.Rd1 Qe6 15.Bxd7+ Nxd7 16.Qb8+ Nxb8 17.Rd8# 1-0`;
 
-const METHOD = { key: "game_rating", version: "1", hash: "3ae9e6be303895f9c1d2".padEnd(64, "0") };
+const METHOD = { key: "game_rating", version: "3", hash: "3ae9e6be303895f9c1d2".padEnd(64, "0") };
+
+const OPERA_OPENING: OpeningView = {
+  eco: "C41",
+  name: "Philidor Defence: General",
+  family: "Philidor Defence",
+  variation: "General",
+  bookPly: 6,
+  leftBookAt: { ply: 7, moveNumber: 4, san: "dxe5", side: "white" },
+};
+
+const OPERA_GAME: GameHeaders = {
+  white: "Morphy",
+  black: "Duke of Brunswick and Count Isouard",
+  whiteElo: null,
+  blackElo: null,
+  event: "Paris Opera",
+  site: "Paris",
+  date: "1858.10.21",
+  result: "1-0",
+  termination: null,
+  timeControl: null,
+  moveCount: 17,
+};
 
 const STRONG: RatingView = {
   status: "available",
@@ -40,6 +63,8 @@ const STRONG: RatingView = {
     playedLikeLow: 2000,
     playedLikeHigh: 2400,
     outOfDomain: false,
+    atCeiling: false,
+    bandOpenHigh: true,
     gaveAway: 0.009,
     cleanliness: 0.91,
     decisionsScored: 30,
@@ -48,10 +73,12 @@ const STRONG: RatingView = {
   },
   black: {
     color: "black",
-    playedLike: 2200,
-    playedLikeLow: 2000,
-    playedLikeHigh: 2200,
+    playedLike: 1800,
+    playedLikeLow: 1600,
+    playedLikeHigh: 2000,
     outOfDomain: false,
+    atCeiling: false,
+    bandOpenHigh: false,
     gaveAway: 0.012,
     cleanliness: 0.88,
     decisionsScored: 30,
@@ -59,31 +86,61 @@ const STRONG: RatingView = {
     ratingDeclared: true,
   },
   demand: {
-    demand: 1,
-    tension: 1,
-    narrowness: 1,
+    demand: 0.83,
+    tension: 0.91,
+    narrowness: 0.75,
     duration: 1,
     positionsExamined: 12,
     onlyMoves: 6,
+    liveDecisions: 33,
+    totalDecisions: 33,
+    meanTopCriticality: 0.46,
   },
   moments: [
-    { code: "collapse", ply: 44, moveNumber: 22, actor: "black", playedUci: "g7g6", magnitude: 0.31 },
-    { code: "pressure_created", ply: 41, moveNumber: 21, actor: "white", playedUci: "d4e6", magnitude: 0.45 },
-    { code: "only_move_found", ply: 68, moveNumber: 34, actor: "black", playedUci: "h7h6", magnitude: 0.52 },
+    { code: "pressure_created", ply: 19, moveNumber: 10, actor: "white", playedUci: "c3b5", playedSan: "Nxb5", magnitude: 0.45 },
+    { code: "advantage_returned", ply: 20, moveNumber: 10, actor: "black", playedUci: "c6b5", playedSan: "cxb5", magnitude: 0.31 },
+    { code: "pressure_created", ply: 31, moveNumber: 16, actor: "white", playedUci: "b3b8", playedSan: "Qb8+", magnitude: 0.52 },
   ],
-  coverage: { decisions: 60, practicalDecisions: 9, outOfDomain: false },
-  game: { white: "Morphy", black: "Allies", event: "Paris", date: "1858.10.21", result: "1-0" },
+  coverage: { decisions: 33, practicalDecisions: 9, outOfDomain: false },
+  game: OPERA_GAME,
+  opening: OPERA_OPENING,
 };
 
-const OUT_OF_DOMAIN: RatingView = {
+/**
+ * Both sides pinned to the top rung.
+ *
+ * This used to be the "outside the calibrated range" case and carried two
+ * apologies. The estimate was never outside anything — the ladder simply stops
+ * at 2400, so the honest reading is "at least this strong" and the panel now
+ * renders it as `2400+` with nothing else attached.
+ */
+const AT_CEILING: RatingView = {
   ...STRONG,
   rating: 9.3,
   ratingLow: 8.6,
   ratingHigh: 9.7,
-  white: { ...STRONG.white, playedLike: 2400, playedLikeHigh: 2400, outOfDomain: true, ratingDeclared: false },
-  black: { ...STRONG.black, playedLike: 2400, playedLikeLow: 2200, playedLikeHigh: 2400, outOfDomain: true, ratingDeclared: false },
-  coverage: { decisions: 74, practicalDecisions: 11, outOfDomain: true },
-  game: { white: "Kasparov", black: "Topalov", event: "Wijk aan Zee", date: "1999.01.20", result: "1-0" },
+  white: { ...STRONG.white, playedLike: 2400, playedLikeLow: 2200, playedLikeHigh: 2400, atCeiling: true, bandOpenHigh: true },
+  black: { ...STRONG.black, playedLike: 2400, playedLikeLow: 2200, playedLikeHigh: 2400, atCeiling: true, bandOpenHigh: true },
+  coverage: { decisions: 74, practicalDecisions: 11, outOfDomain: false },
+  game: {
+    ...OPERA_GAME,
+    white: "Kasparov",
+    black: "Topalov",
+    whiteElo: 2812,
+    blackElo: 2700,
+    event: "Hoogovens",
+    date: "1999.01.20",
+    moveCount: 44,
+    timeControl: "40/7200:20/3600:900+30",
+  },
+  opening: {
+    eco: "B07",
+    name: "Pirc Defence: Byrne Variation",
+    family: "Pirc Defence",
+    variation: "Byrne Variation",
+    bookPly: 10,
+    leftBookAt: { ply: 11, moveNumber: 6, san: "f3", side: "white" },
+  },
 } as RatingView;
 
 const MISMATCH: RatingView = {
@@ -92,7 +149,7 @@ const MISMATCH: RatingView = {
   ratingLow: 1.4,
   ratingHigh: 2.1,
   quality: 0.308,
-  white: { ...STRONG.white, playedLike: 2200, playedLikeLow: 2000, playedLikeHigh: 2200, gaveAway: 0.006 },
+  white: { ...STRONG.white, playedLike: 2200, playedLikeLow: 2000, playedLikeHigh: 2200, bandOpenHigh: false, gaveAway: 0.006 },
   black: {
     ...STRONG.black,
     playedLike: 1000,
@@ -101,13 +158,42 @@ const MISMATCH: RatingView = {
     gaveAway: 0.071,
     cleanliness: 0.29,
   },
-  demand: { demand: 0.79, tension: 0.7, narrowness: 0.75, duration: 1, positionsExamined: 10, onlyMoves: 3 },
+  demand: {
+    demand: 0.42,
+    tension: 0.31,
+    narrowness: 0.5,
+    duration: 0.55,
+    positionsExamined: 10,
+    onlyMoves: 2,
+    liveDecisions: 26,
+    totalDecisions: 47,
+    meanTopCriticality: 0.16,
+  },
   moments: [
-    { code: "collapse", ply: 18, moveNumber: 9, actor: "black", playedUci: "f7f6", magnitude: 0.44 },
-    { code: "advantage_returned", ply: 32, moveNumber: 16, actor: "black", playedUci: "c8d7", magnitude: 0.19 },
+    { code: "collapse", ply: 18, moveNumber: 9, actor: "black", playedUci: "f7f6", playedSan: "f6", magnitude: 0.44 },
+    { code: "advantage_returned", ply: 32, moveNumber: 16, actor: "black", playedUci: "c8d7", playedSan: "Bd7", magnitude: 0.19 },
   ],
-  coverage: { decisions: 50, practicalDecisions: 4, outOfDomain: false },
-  game: { white: "A", black: "B", event: null, date: null, result: "1-0" },
+  coverage: { decisions: 47, practicalDecisions: 4, outOfDomain: false },
+  game: {
+    ...OPERA_GAME,
+    white: "trappist_ilya",
+    black: "n_carcasci",
+    event: "Rated blitz game",
+    site: "lichess.org",
+    date: "2026.08.02",
+    result: "1-0",
+    moveCount: 24,
+    timeControl: "300+3",
+    termination: "Time forfeit",
+  },
+  opening: {
+    eco: "B01",
+    name: "Scandinavian Defence: Mieses-Kotroc Variation",
+    family: "Scandinavian Defence",
+    variation: "Mieses-Kotroc Variation",
+    bookPly: 6,
+    leftBookAt: { ply: 7, moveNumber: 4, san: "Nf6", side: "white" },
+  },
 } as RatingView;
 
 const REFUSED: RatingView = {
@@ -117,15 +203,21 @@ const REFUSED: RatingView = {
   white: { ...STRONG.white, playedLike: null, playedLikeLow: null, playedLikeHigh: null, decisionsScored: 0 },
   black: { ...STRONG.black, playedLike: null, playedLikeLow: null, playedLikeHigh: null, decisionsScored: 0 },
   demand: STRONG.status === "available" ? STRONG.demand : null,
-  game: { white: "Unknown", black: "Unknown", event: null, date: null, result: "1/2-1/2" },
+  game: { ...OPERA_GAME, white: "Unknown", black: "Unknown", result: "1/2-1/2" },
+  opening: OPERA_OPENING,
 };
 
-const CASES: { title: string; note: string; view: RatingView }[] = [
-  { title: "A strong game", note: "Both sides near the top of the ladder, in a game that kept asking.", view: STRONG },
+const CASES: { title: string; note: string; view: RatingView; pgn?: string }[] = [
   {
-    title: "Above the calibrated range",
-    note: "The estimate runs past where the human model was calibrated, and the panel says so twice rather than once.",
-    view: OUT_OF_DOMAIN,
+    title: "A strong game",
+    note: "One side near the top of the ladder, in a game that kept asking. The board is live: pick a turning point.",
+    view: STRONG,
+    pgn: OPERA_PGN,
+  },
+  {
+    title: "At the top of the ladder",
+    note: "Both sides pinned to the strongest rung the model can be conditioned on, read as 2400+ rather than apologised for.",
+    view: AT_CEILING,
   },
   { title: "A mismatch", note: "One side played well. The rating is still low, because half the moves were not.", view: MISMATCH },
   { title: "A refusal", note: "No policy inference, so no rating. The panel shows how far it got.", view: REFUSED },
@@ -156,7 +248,7 @@ export default function RatingPreview() {
           <section key={entry.title} style={{ width: "100%" }}>
             <h2 style={{ fontSize: "1.05rem", fontWeight: 620 }}>{entry.title}</h2>
             <p className="gr-note">{entry.note}</p>
-            <GameRatingResult view={entry.view} />
+            <GameRatingResult view={entry.view} pgn={entry.pgn} />
           </section>
         ))}
       </div>

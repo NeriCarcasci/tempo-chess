@@ -18,8 +18,7 @@
  * front of us, which is why the output is named for the game and not the person.
  */
 
-import { CALIBRATED_RATING_CEILING, CALIBRATED_RATING_FLOOR } from "../models/contract.js";
-import { STRENGTH_POLICY } from "./contract.js";
+import { LADDER_CEILING, LADDER_FLOOR, STRENGTH_POLICY } from "./contract.js";
 import { countsTowardStrength, type ScoredDecision } from "./decisions.js";
 
 export interface StrengthEstimate {
@@ -136,6 +135,12 @@ export function estimateStrength(decisions: readonly ScoredDecision[]): Strength
     decisionsScored: scored.length,
     decisionsFaced: decisions.length,
     meanLogLikelihood: best / scored.length,
-    outOfDomain: rating < CALIBRATED_RATING_FLOOR || rating >= CALIBRATED_RATING_CEILING,
+    // The ends of the *ladder*, not of the concept model's calibrated slice.
+    // Those are different ranges and conflating them published a warning on
+    // every strong game: the policy is conditioned up to 2400 and picks its
+    // rung from the whole ladder, so a 2200 read is inside the domain, not
+    // outside it. What is genuinely unknowable is anything above the top
+    // rung, and that is a ceiling to report rather than a caveat to attach.
+    outOfDomain: rating < LADDER_FLOOR || rating > LADDER_CEILING,
   };
 }

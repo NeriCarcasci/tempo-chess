@@ -57,6 +57,7 @@ import { ANALYSIS_BUDGET, PUBLIC_SEARCH, type EngineLine } from "./ports.js";
 import { rateGame } from "./rating.js";
 import { isCacheableRefusal, ratingMethodHash, RATING_METHOD } from "./contract.js";
 import { toRatingView, type GameHeaders, type RatingView } from "./view.js";
+import { readOpening } from "./opening.js";
 import { RATING_RESOURCE_TYPE } from "./identity.js";
 
 /**
@@ -433,19 +434,38 @@ export async function assembleRatingItem(context: WorkContext, sql: Sql): Promis
     { whiteRating: stored.whiteRating, blackRating: stored.blackRating },
   );
 
+  const elo = (raw: string | undefined): number | null => {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
   const headers: GameHeaders = {
     white: game.headers.White ?? null,
     black: game.headers.Black ?? null,
+    whiteElo: elo(game.headers.WhiteElo),
+    blackElo: elo(game.headers.BlackElo),
     event: game.headers.Event ?? null,
+    site: game.headers.Site ?? null,
     date: game.headers.Date ?? null,
     result: game.headers.Result ?? null,
+    termination: game.headers.Termination ?? null,
+    timeControl: game.headers.TimeControl ?? null,
+    moveCount: game.moves.length > 0 ? Math.ceil(game.moves.length / 2) : null,
   };
+
+  // Named from the whole game rather than from the analysed prefix: the
+  // catalogue stops well before the budget does, but truncating first would
+  // silently mis-name a game whose theory ran past the cut.
+  const opening = await readOpening(sql, game.moves);
+  const sanByPly = new Map(game.moves.map((move) => [move.ply, move.san]));
+
   const view = toRatingView(rateGame(assembled.input), {
     game: headers,
     declared: {
       white: assembled.conditioning.white.declared,
       black: assembled.conditioning.black.declared,
     },
+    opening,
+    sanByPly,
   });
 
   const wasStored = await writeRating(sql, payload.gameKey, context.item.workflowId, view);

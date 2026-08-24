@@ -19,7 +19,8 @@
 
 import type { GameRatingResult, SideReading } from "./rating.js";
 import type { Demand } from "./demand.js";
-import type { Color, MomentCode } from "./contract.js";
+import { LADDER_CEILING, type Color, type MomentCode } from "./contract.js";
+import type { OpeningView } from "./opening.js";
 
 export interface SideView {
   color: Color;
@@ -27,8 +28,15 @@ export interface SideView {
   playedLike: number | null;
   playedLikeLow: number | null;
   playedLikeHigh: number | null;
-  /** True when the estimate sits outside the range a slice was calibrated for. */
+  /** True when the estimate fell off the ladder entirely. Rare, and a real fault. */
   outOfDomain: boolean;
+  /**
+   * The estimate is the top rung. Above it the policy has no stronger opponent
+   * to be conditioned on, so the honest reading is "at least this", not "this".
+   */
+  atCeiling: boolean;
+  /** The interval reaches the top rung, so the band is open at the top. */
+  bandOpenHigh: boolean;
   /** Expected score given away per unit of liveness. Lower is cleaner. */
   gaveAway: number | null;
   cleanliness: number | null;
@@ -48,6 +56,9 @@ export interface DemandView {
   duration: number;
   positionsExamined: number;
   onlyMoves: number;
+  liveDecisions: number;
+  totalDecisions: number;
+  meanTopCriticality: number;
 }
 
 export interface MomentView {
@@ -56,15 +67,25 @@ export interface MomentView {
   moveNumber: number;
   actor: Color;
   playedUci: string;
+  /** The move as the players would write it. UCI alone told a reader nothing. */
+  playedSan: string | null;
   magnitude: number;
 }
 
 export interface GameHeaders {
   white: string | null;
   black: string | null;
+  whiteElo: number | null;
+  blackElo: number | null;
   event: string | null;
+  site: string | null;
   date: string | null;
   result: string | null;
+  /** How the game ended, when the file says. Resignation and timeout differ. */
+  termination: string | null;
+  timeControl: string | null;
+  /** Full moves, so "a 41-move game" needs no arithmetic from the reader. */
+  moveCount: number | null;
 }
 
 export interface RatingAvailableView {
@@ -84,6 +105,7 @@ export interface RatingAvailableView {
     outOfDomain: boolean;
   };
   game: GameHeaders;
+  opening: OpeningView | null;
 }
 
 export interface RatingUnavailableView {
@@ -95,6 +117,7 @@ export interface RatingUnavailableView {
   black: SideView | null;
   demand: DemandView | null;
   game: GameHeaders;
+  opening: OpeningView | null;
 }
 
 export type RatingView = RatingAvailableView | RatingUnavailableView;
@@ -113,6 +136,8 @@ function sideView(side: SideReading | null, ratingDeclared: boolean): SideView |
     playedLikeLow: strength.status === "available" ? strength.intervalLow : null,
     playedLikeHigh: strength.status === "available" ? strength.intervalHigh : null,
     outOfDomain: strength.status === "available" ? strength.outOfDomain : false,
+    atCeiling: strength.status === "available" && strength.rating >= LADDER_CEILING,
+    bandOpenHigh: strength.status === "available" && strength.intervalHigh >= LADDER_CEILING,
     gaveAway: cleanliness.status === "available" ? cleanliness.weightedLoss : null,
     cleanliness: cleanliness.status === "available" ? cleanliness.cleanliness : null,
     decisionsScored: strength.decisionsScored,
@@ -130,12 +155,18 @@ function demandView(demand: Demand | null): DemandView | null {
     duration: demand.duration,
     positionsExamined: demand.criticalPositions,
     onlyMoves: demand.onlyMoves,
+    liveDecisions: demand.liveDecisions,
+    totalDecisions: demand.totalDecisions,
+    meanTopCriticality: demand.meanTopCriticality,
   };
 }
 
 export interface ViewContext {
   game: GameHeaders;
   declared: Record<Color, boolean>;
+  opening: OpeningView | null;
+  /** SAN by ply, so a moment can name the move that was actually played. */
+  sanByPly: ReadonlyMap<number, string>;
 }
 
 export function toRatingView(result: GameRatingResult, context: ViewContext): RatingView {
@@ -154,6 +185,7 @@ export function toRatingView(result: GameRatingResult, context: ViewContext): Ra
       black: sideView(result.black, context.declared.black),
       demand: demandView(result.demand),
       game: context.game,
+      opening: context.opening,
     };
   }
 
@@ -173,9 +205,11 @@ export function toRatingView(result: GameRatingResult, context: ViewContext): Ra
       moveNumber: moveNumberOf(moment.ply),
       actor: moment.actor,
       playedUci: moment.playedUci,
+      playedSan: context.sanByPly.get(moment.ply) ?? null,
       magnitude: moment.magnitude,
     })),
     coverage: result.coverage,
     game: context.game,
+    opening: context.opening,
   };
 }

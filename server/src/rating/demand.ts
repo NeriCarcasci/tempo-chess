@@ -38,6 +38,17 @@ export interface DemandReading {
   /** Positions the deep pass actually looked at. */
   criticalPositions: number;
   onlyMoves: number;
+  /**
+   * The counts each term was computed from.
+   *
+   * A bar reading 1.00 is unreadable on its own — it could mean "as sharp as
+   * games get" or "the scale saturates early". Shipping the evidence beside it
+   * lets a reader see which, and check the arithmetic if they care.
+   */
+  liveDecisions: number;
+  totalDecisions: number;
+  /** Mean point swing across the sharpest positions the tension term read. */
+  meanTopCriticality: number;
 }
 
 export interface DemandUnavailable {
@@ -101,5 +112,12 @@ export function readDemand(
     duration: roundScore(duration),
     criticalPositions: deep.length,
     onlyMoves,
+    liveDecisions: live,
+    totalDecisions: decisions.length,
+    meanTopCriticality: roundScore(
+      criticalities.length === 0
+        ? 0
+        : criticalities.reduce((sum, value) => sum + value, 0) / criticalities.length,
+    ),
   };
 }
