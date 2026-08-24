@@ -317,6 +317,45 @@
 
   .rate-moment-side { font-size: 0.8rem; color: var(--color-ink-faint); margin-left: auto; }
 
+  /* A moment is a button when there is a board for it to move. */
+  .rate-moment.is-clickable {
+    width: 100%;
+    text-align: left;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    transition: background 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .rate-moment.is-clickable:hover { background: var(--color-surface-3); }
+  .rate-moment.is-clickable:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+  /* The board on a finished rating. Capped and centred rather than stretched:
+     a chessboard the width of a results panel is a chessboard nobody reads. */
+  .rate-replay-wrap { max-width: 24rem; }
+
+  .rate-step {
+    border: none;
+    background: var(--color-surface-2);
+    color: var(--color-ink);
+    border-radius: var(--radius-pill);
+    width: 1.9rem;
+    height: 1.9rem;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    line-height: 1;
+    box-shadow: var(--shadow-flat);
+  }
+  .rate-step:hover:not(:disabled) { background: var(--color-surface-3); }
+  .rate-step:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  .rate-step:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .rate-replay-move {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+  }
+
   /* --- coverage and refusals -------------------------------------- */
 
   .rate-coverage { display: grid; gap: 0.5rem; }

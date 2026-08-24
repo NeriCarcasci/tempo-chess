@@ -68,17 +68,34 @@ function positionsOf(pgn: string): { fens: string[]; moves: string[] } {
   }
 }
 
-export function ReplayBoard({ pgn, stepMs = 900 }: { pgn: string; stepMs?: number }) {
+export function ReplayBoard({
+  pgn,
+  stepMs = 900,
+  /** Plays itself while something else is happening; still when it is not. */
+  autoPlay = true,
+  /** Jump here when it changes. Ignored while auto-playing. */
+  jumpToPly,
+}: {
+  pgn: string;
+  stepMs?: number;
+  autoPlay?: boolean;
+  jumpToPly?: number | null;
+}) {
   const { fens, moves } = useMemo(() => positionsOf(pgn), [pgn]);
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    if (fens.length < 2) return;
+    if (!autoPlay || fens.length < 2) return;
     // Loops rather than stopping at the end: the wait is longer than the game,
     // and a board frozen on the final position looks like something crashed.
     const timer = setInterval(() => setIndex((current) => (current + 1) % fens.length), stepMs);
     return () => clearInterval(timer);
-  }, [fens.length, stepMs]);
+  }, [autoPlay, fens.length, stepMs]);
+
+  useEffect(() => {
+    if (autoPlay || jumpToPly == null) return;
+    setIndex(Math.max(0, Math.min(fens.length - 1, jumpToPly)));
+  }, [autoPlay, jumpToPly, fens.length]);
 
   if (fens.length < 2) return null;
 
@@ -109,13 +126,37 @@ export function ReplayBoard({ pgn, stepMs = 900 }: { pgn: string; stepMs?: numbe
         ))}
       </div>
       <figcaption className="rate-replay-move">
-        {san ? (
-          <>
-            {moveNumber}
-            {index % 2 === 1 ? "." : "..."} {san}
-          </>
-        ) : (
-          "Starting position"
+        {autoPlay ? null : (
+          <button
+            type="button"
+            className="rate-step"
+            onClick={() => setIndex((c) => Math.max(0, c - 1))}
+            disabled={index === 0}
+            aria-label="Previous move"
+          >
+            &lt;
+          </button>
+        )}
+        <span>
+          {san ? (
+            <>
+              {moveNumber}
+              {index % 2 === 1 ? "." : "..."} {san}
+            </>
+          ) : (
+            "Starting position"
+          )}
+        </span>
+        {autoPlay ? null : (
+          <button
+            type="button"
+            className="rate-step"
+            onClick={() => setIndex((c) => Math.min(fens.length - 1, c + 1))}
+            disabled={index === fens.length - 1}
+            aria-label="Next move"
+          >
+            &gt;
+          </button>
         )}
       </figcaption>
     </figure>

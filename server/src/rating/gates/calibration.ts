@@ -132,8 +132,12 @@ if (brilliancy) {
   }
 }
 
-// A brilliancy scored against the engine alone must rate *worse*, or the
-// practical reading is not doing anything and the Tal problem is unsolved.
+// A brilliancy scored against the engine alone must rate worse, and by enough
+// to matter. It used to have to rate *below the quiet grind*, on the belief
+// that an engine condemns a combination outright. Real data disagreed:
+// Kasparov against Topalov gives away 0.0298 per live move under an engine-only
+// reading, which is cleaner than a club game. The correction is a real but
+// modest effect on the headline and a large one on what moves are called.
 const withoutPractical = ARCHETYPES.find((entry) => entry.key === "brilliancy");
 if (withoutPractical && brilliancy) {
   const stripped = buildGame(withoutPractical.spec);
@@ -148,13 +152,11 @@ if (withoutPractical && brilliancy) {
       `brilliancy: the practical reading changed nothing (${objectiveOnly.rating} against ` +
         `${brilliancy.rating.rating}); a sacrifice nobody refutes must not be charged as an error`,
     );
-  } else if (grind !== null && objectiveOnly.rating >= grind) {
-    // If the engine-only reading already ranks the brilliancy correctly, this
-    // gate is not testing the Tal problem: it is testing a game that happens to
-    // rate well either way. The fixture has to be one an engine gets wrong.
+  } else if (brilliancy.rating.rating - objectiveOnly.rating < ANCHORS.practicalWorthAtLeast) {
     failures.push(
-      `brilliancy: an engine-only reading already ranks it above the quiet grind ` +
-        `(${objectiveOnly.rating} against ${grind}), so the reversal is untested`,
+      `brilliancy: the practical reading was worth only ` +
+        `${(brilliancy.rating.rating - objectiveOnly.rating).toFixed(1)} of rating, ` +
+        `under the ${ANCHORS.practicalWorthAtLeast} this fixture exists to demonstrate`,
     );
   } else {
     console.log(

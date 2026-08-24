@@ -85,12 +85,20 @@ export const CLEANLINESS_POLICY = {
   /**
    * The weighted loss that scores zero cleanliness.
    *
-   * A tenth of a point of expected score, given away on average across a live
-   * game, is a thoroughly bad game. Above it the term is clamped rather than
-   * continuing down, because the difference between very bad and much worse is
-   * not a difference the rating needs to resolve.
+   * Set from measured games rather than from a guess, which is what the first
+   * value was. Real weighted losses, from the live path:
+   *
+   *   Capablanca-Tartakower 1924   0.004  and 0.025   (master)
+   *   a rated 1550 pair            0.084  and 0.114   (club)
+   *
+   * The first value was 0.1, which put an ordinary club player at exactly zero
+   * and therefore at the same cleanliness as somebody far worse. That is not a
+   * strict scale, it is a scale with no range left where most players live: two
+   * quite different games scored identically. Zero now sits where play is
+   * genuinely dreadful, roughly three times a club error rate, so the club band
+   * still separates while the top stays as hard to reach as it was.
    */
-  lossAtZero: 0.1,
+  lossAtZero: 0.3,
 } as const;
 
 /**

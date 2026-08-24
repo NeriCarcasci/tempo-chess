@@ -154,6 +154,15 @@ export interface Archetype {
  * - `mismatch` sits below `club_sharp`. Half the moves in that game were bad
  *   moves, and no strength on the other side buys them back.
  */
+/**
+ * Loss values are measured, not imagined.
+ *
+ * The first set assumed a club player gives away about 0.03 expected score per
+ * live move. A rated 1550 pair on the live path gave away 0.084 and 0.114, and
+ * Capablanca gave away 0.004. So the old `mutual_collapse`, meant to be two
+ * players trading blunders, was cleaner than a real club game, and every
+ * ordering below it was fitted to a fantasy.
+ */
 export const ARCHETYPES: readonly Archetype[] = [
   {
     key: "masterpiece",
@@ -230,8 +239,8 @@ export const ARCHETYPES: readonly Archetype[] = [
       criticality: 0.45,
       onlyMoveRate: 0.4,
       deepPositions: 12,
-      white: { plays: 1600, lossPerMove: 0.03 },
-      black: { plays: 1600, lossPerMove: 0.035 },
+      white: { plays: 1600, lossPerMove: 0.08 },
+      black: { plays: 1600, lossPerMove: 0.1 },
     },
   },
   {
@@ -243,8 +252,8 @@ export const ARCHETYPES: readonly Archetype[] = [
       criticality: 0.35,
       onlyMoveRate: 0.3,
       deepPositions: 10,
-      white: { plays: 2200, lossPerMove: 0.006 },
-      black: { plays: 1000, lossPerMove: 0.07 },
+      white: { plays: 2200, lossPerMove: 0.01 },
+      black: { plays: 1000, lossPerMove: 0.22 },
     },
   },
   {
@@ -256,8 +265,8 @@ export const ARCHETYPES: readonly Archetype[] = [
       criticality: 0.4,
       onlyMoveRate: 0.2,
       deepPositions: 10,
-      white: { plays: 1000, lossPerMove: 0.09 },
-      black: { plays: 1000, lossPerMove: 0.1 },
+      white: { plays: 1000, lossPerMove: 0.25 },
+      black: { plays: 1000, lossPerMove: 0.28 },
     },
   },
 ];
@@ -277,6 +286,22 @@ export const ANCHORS = {
   nothingReaches: 10,
   /** The gap demand alone must open between identical play. */
   sterileBelowMasterpieceBy: 2.5,
+  /**
+   * What the practical reading must be worth on the brilliancy.
+   *
+   * This was once "it must overtake the quiet grind", on the belief that an
+   * engine-only reading condemns a combination. Real data says otherwise: on
+   * Kasparov against Topalov, the engine-only weighted loss for White is 0.0298
+   * per live move, which is cleaner than a club game. A brilliancy is not
+   * dragged to the bottom by an engine, because the sacrifices are few against a
+   * whole game and much of what follows is already decided.
+   *
+   * So the correction is a real but modest effect on the headline, and a large
+   * one on what individual moves are called. The assertion is now the thing that
+   * is actually true, rather than the thing the first fixture was cranked up
+   * until it showed.
+   */
+  practicalWorthAtLeast: 0.4,
 } as const;
 
 // ---------------------------------------------------------------------------

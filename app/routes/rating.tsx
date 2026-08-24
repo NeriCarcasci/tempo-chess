@@ -163,7 +163,7 @@ export default function RatingPage() {
         </form>
 
         {stage.kind === "working" ? <Working done={stage.done} total={stage.total} pgn={pgn} /> : null}
-        {stage.kind === "ready" ? <GameRatingResult view={stage.view} /> : null}
+        {stage.kind === "ready" ? <GameRatingResult view={stage.view} pgn={pgn} /> : null}
 
         {stage.kind === "ready" ? (
           <p className="rate-note">

@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Estimate } from "./v1/Honesty";
+import { ReplayBoard } from "./ReplayBoard";
 import {
   colorName,
   momentWording,
@@ -104,7 +106,11 @@ function Demand({ demand }: { demand: DemandView }) {
   );
 }
 
-export function GameRatingResult({ view }: { view: RatingView }) {
+export function GameRatingResult({ view, pgn }: { view: RatingView; pgn?: string }) {
+  // Which position the board is showing. A named moment sets it, so reading
+  // "gave the game away on move 22" and seeing move 22 is one click rather than
+  // a hunt through somebody else's PGN.
+  const [ply, setPly] = useState<number | null>(null);
   const players =
     view.game.white || view.game.black ? (
       <p className="rate-players">
@@ -165,16 +171,43 @@ export function GameRatingResult({ view }: { view: RatingView }) {
         <section className="rate-moments">
           <h2>What moved the number</h2>
           <div className="rate-moment-list">
-            {view.moments.map((moment) => (
-              <div className="rate-moment" key={`${moment.ply}-${moment.code}`}>
-                <span className="rate-moment-move">
-                  {moment.moveNumber}
-                  {moment.actor === "white" ? "." : "..."}
-                </span>
-                <span className="rate-moment-text">{momentWording(moment.code)}</span>
-                <span className="rate-moment-side">{colorName(moment.actor)}</span>
-              </div>
-            ))}
+            {view.moments.map((moment) => {
+              const label = (
+                <>
+                  <span className="rate-moment-move">
+                    {moment.moveNumber}
+                    {moment.actor === "white" ? "." : "..."}
+                  </span>
+                  <span className="rate-moment-text">{momentWording(moment.code)}</span>
+                  <span className="rate-moment-side">{colorName(moment.actor)}</span>
+                </>
+              );
+              // Only clickable when the game is on screen to be moved. A button
+              // that scrolls to nothing is worse than a line of text.
+              return pgn ? (
+                <button
+                  type="button"
+                  className="rate-moment is-clickable"
+                  key={`${moment.ply}-${moment.code}`}
+                  onClick={() => setPly(moment.ply)}
+                >
+                  {label}
+                </button>
+              ) : (
+                <div className="rate-moment" key={`${moment.ply}-${moment.code}`}>
+                  {label}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {pgn ? (
+        <section className="rate-moments">
+          <h2>The game</h2>
+          <div className="rate-replay-wrap">
+            <ReplayBoard pgn={pgn} autoPlay={false} jumpToPly={ply} />
           </div>
         </section>
       ) : null}
