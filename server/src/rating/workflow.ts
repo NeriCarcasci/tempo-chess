@@ -73,6 +73,24 @@ import { RATING_RESOURCE_TYPE } from "./identity.js";
  */
 export const RATING_CAPACITY = { version: "1", maxInflight: 3 } as const;
 
+/**
+ * What a rating workflow is about: this game, under this method.
+ *
+ * The resource was the game alone, and storage was already keyed by game and
+ * method together. The moment the method moved, every query that looked up "the
+ * workflow for this game" started finding the previous method's run: progress
+ * counted its items, the refusal detail quoted its summary, and a game that had
+ * been rated under version one reported a stale failure forever while its
+ * version two run proceeded invisibly beside it.
+ *
+ * Addressing work the same way the result is addressed removes the whole class.
+ * A method change is a different resource, so it gets its own workflows, its own
+ * counts and its own diagnosis, and an old version cannot answer for a new one.
+ */
+export function ratingResource(gameKey: string): string {
+  return `${gameKey}|${ratingMethodHash()}`;
+}
+
 export const PREPARE_TASK = "game_rating_prepare";
 export const ASSEMBLE_TASK = "game_rating_assemble";
 
@@ -174,7 +192,7 @@ export async function startRating(sql: Sql, request: RatingRequest): Promise<{ w
       insertWorkflow(tx as unknown as Sql, {
         kind: "game_rating",
         ownerProfileId: request.ownerProfileId,
-        resource: { type: RATING_RESOURCE_TYPE, id: request.gameKey },
+        resource: { type: RATING_RESOURCE_TYPE, id: ratingResource(request.gameKey) },
         items: [
           {
             taskType: PREPARE_TASK,
@@ -316,7 +334,7 @@ export async function scheduleRatingPolicies(
   const [already] = await sql<{ id: string }[]>`
     select w.id from ops.workflows w
     join ops.work_items i on i.workflow_id = w.id
-    where w.resource_type = ${RATING_RESOURCE_TYPE} and w.resource_id = ${gameKey}
+    where w.resource_type = ${RATING_RESOURCE_TYPE} and w.resource_id = ${ratingResource(gameKey)}
       and i.task_type = ${ASSEMBLE_TASK}
     limit 1`;
   if (already) return { workflowId: already.id, scheduled: 0, cached: 0 };
@@ -349,7 +367,7 @@ export async function scheduleRatingPolicies(
       insertWorkflow(tx as unknown as Sql, {
         kind: "game_rating",
         ownerProfileId: null,
-        resource: { type: RATING_RESOURCE_TYPE, id: gameKey },
+        resource: { type: RATING_RESOURCE_TYPE, id: ratingResource(gameKey) },
         items: [
           ...items,
           {
@@ -499,7 +517,7 @@ async function refusalDetail(sql: Sql, gameKey: string): Promise<string | null> 
     select i.output_summary as summary, i.status
     from ops.work_items i
     join ops.workflows w on w.id = i.workflow_id
-    where w.resource_type = ${RATING_RESOURCE_TYPE} and w.resource_id = ${gameKey}
+    where w.resource_type = ${RATING_RESOURCE_TYPE} and w.resource_id = ${ratingResource(gameKey)}
       and i.task_type = ${ASSEMBLE_TASK}
     order by i.id desc limit 1`;
   if (!row) return "the assembly step never ran";
@@ -566,7 +584,7 @@ export async function ratingProgress(sql: Sql, gameKey: string): Promise<RatingP
 
   const [workflow] = await sql<{ id: string; state: string }[]>`
     select id, state from ops.workflows
-    where resource_type = ${RATING_RESOURCE_TYPE} and resource_id = ${gameKey}
+    where resource_type = ${RATING_RESOURCE_TYPE} and resource_id = ${ratingResource(gameKey)}
     order by created_at desc limit 1`;
   if (!workflow) return { state: "absent" };
   if (workflow.state === "failed" || workflow.state === "cancelled") {
@@ -587,7 +605,7 @@ export async function ratingProgress(sql: Sql, gameKey: string): Promise<RatingP
       count(*) as total
     from ops.work_items i
     join ops.workflows w on w.id = i.workflow_id
-    where w.resource_type = ${RATING_RESOURCE_TYPE} and w.resource_id = ${gameKey}`;
+    where w.resource_type = ${RATING_RESOURCE_TYPE} and w.resource_id = ${ratingResource(gameKey)}`;
   // The plan existing is exactly the line between the two halves: before it,
   // the engine is reading the game; after it, the policy queue is draining.
   const plan = await readRatingPlan(sql, gameKey);
