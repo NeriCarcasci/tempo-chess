@@ -256,9 +256,10 @@
      one, rather than shrinking to a size nobody can read pieces at. */
   .rate-working-body {
     display: grid;
-    grid-template-columns: minmax(14rem, 22rem) 1fr;
-    gap: 1.6rem;
+    grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
+    gap: clamp(1.2rem, 4vw, 2.4rem);
     align-items: center;
+    justify-items: start;
   }
 
   .rate-replay { display: grid; gap: 0.6rem; }
@@ -280,7 +281,7 @@
     text-align: center;
   }
 
-  .rate-working-progress { display: grid; gap: 0.7rem; align-content: center; }
+  .rate-working-progress { display: grid; gap: 0.7rem; align-content: center; max-width: 30rem; }
 
   .rate-progress-figure {
     font-family: var(--font-mono);
@@ -293,6 +294,29 @@
   }
 
   .rate-progress-figure span { font-size: 0.4em; color: var(--color-ink-faint); margin-left: 0.1em; }
+
+  /* The clock is a smaller figure than a percentage: it is context, not the
+     headline, and it should not shout while nothing is being claimed. */
+  .rate-progress-elapsed { font-size: clamp(1.6rem, 4vw, 2.2rem); color: var(--color-ink-muted); }
+
+  /* An indeterminate bar sweeps rather than fills, so it cannot be read as a
+     fraction. It stops entirely when motion is not wanted. */
+  .rate-bar-track.is-indeterminate { overflow: hidden; position: relative; }
+  .rate-bar-track.is-indeterminate .rate-bar-fill {
+    width: 35%;
+    position: absolute;
+    inset-block: 0;
+    animation: rate-sweep 1600ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+
+  @keyframes rate-sweep {
+    0% { left: -35%; }
+    100% { left: 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rate-bar-track.is-indeterminate .rate-bar-fill { animation: none; left: 0; width: 100%; opacity: 0.35; }
+  }
 
   /* The fill moves under a transition rather than jumping on each poll, and
      collapses to a plain width change when motion is not wanted. */

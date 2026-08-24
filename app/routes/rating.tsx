@@ -250,6 +250,17 @@ export function Working({
 
   const remaining = rate && rate > 0 ? Math.ceil((total - done) / rate) : null;
 
+  // The engine half cannot report a percentage, so it reports the one thing it
+  // honestly knows: how long it has been going. A clock that moves is not a
+  // claim about how much is left, which is the difference between this and a
+  // bar invented to look busy.
+  const startedAt = useRef(Date.now());
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt.current) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <div className="rate-result rate-working" aria-live="polite">
       <div className="rate-working-head">
@@ -269,11 +280,21 @@ export function Working({
         <ReplayBoard pgn={pgn} />
         <div className="rate-working-progress">
           {percent === null ? (
-            <p className="rate-caveat">
-              Reading the game with the engine, position by position. This part takes a couple of
-              minutes and does not report a percentage, because it is one long look rather than a
-              hundred small ones.
-            </p>
+            <>
+              <p className="rate-progress-figure rate-progress-elapsed">
+                {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
+              </p>
+              {/* Indeterminate on purpose: it says the work is moving without
+                  claiming a fraction nobody can compute from one long item. */}
+              <span className="rate-bar-track is-indeterminate" aria-hidden="true">
+                <span className="rate-bar-fill" />
+              </span>
+              <p className="rate-caveat">
+                Reading the game with the engine, position by position. There is no percentage for
+                this part because it is one long look rather than a hundred small ones. The counted
+                half starts after it.
+              </p>
+            </>
           ) : (
             <>
               <p className="rate-progress-figure">

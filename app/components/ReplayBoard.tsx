@@ -109,9 +109,19 @@ export function ReplayBoard({
 
   useEffect(() => {
     if (!autoPlay || fens.length < 2) return;
-    // Loops rather than stopping at the end: the wait is longer than the game,
-    // and a board frozen on the final position looks like something crashed.
-    const timer = setInterval(() => setIndex((current) => (current + 1) % fens.length), stepMs);
+    // Plays through once and stops on the final position. It used to loop, on
+    // the theory that a still board looks broken during a long wait; watching
+    // the same game restart over and over is worse, and the progress beside it
+    // is what says the page is alive.
+    const timer = setInterval(() => {
+      setIndex((current) => {
+        if (current >= fens.length - 1) {
+          clearInterval(timer);
+          return current;
+        }
+        return current + 1;
+      });
+    }, stepMs);
     return () => clearInterval(timer);
   }, [autoPlay, fens.length, stepMs]);
 
