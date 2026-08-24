@@ -117,15 +117,44 @@ export function likelihoodsFor(
       };
     }
     const dropped = legalMoveCount - rung.policy.moves.length;
-    if (dropped <= 0 || rung.policy.unretainedMass <= 0) {
-      // The distribution says it covered every legal move, and this one is not
-      // in it. Something upstream is inconsistent — a policy from a different
-      // position, or a move list that does not match the board — and inventing
-      // a probability here would launder that into a strength claim.
+    if (dropped <= 0) {
+      // The distribution covers every legal move and this one is not in it.
+      // That is a real inconsistency — a policy from another position, or a
+      // move list that does not match the board — and inventing a probability
+      // would launder it into a strength claim.
       return { status: "unavailable", reason: "unretained_with_no_room", rating: rung.rating };
     }
 
-    byRating[rung.rating] = Math.log(rung.policy.unretainedMass / dropped);
+    if (rung.policy.unretainedMass > 0) {
+      byRating[rung.rating] = Math.log(rung.policy.unretainedMass / dropped);
+      estimatedRungs.push(rung.rating);
+      continue;
+    }
+
+    // Moves are missing but no mass is recorded as missing, because the model
+    // reported a subset and `normalizePolicy` renormalised it: a truncated
+    // distribution sums to one and its unretained mass is zero. Maia answers
+    // this way, so this is the ordinary case rather than a corner.
+    //
+    // Refusing here was wrong and expensive. It threw away every ply whose move
+    // the model did not rank, which in a club game is most of the informative
+    // ones: a blunder is precisely a move the model puts no mass on. Whole
+    // games came back unrated with every policy successfully read.
+    //
+    // What is actually known is a bound. The move was ranked below everything
+    // reported, so its probability is under the smallest retained one, and
+    // dividing that by the moves competing for the space below it is a stated
+    // estimate rather than a fabricated measurement. It is flagged as estimated
+    // like the tail case, and it errs low, which is the honest direction: a
+    // move the model never considered should not look likely.
+    const smallest = rung.policy.moves.reduce(
+      (least, move) => Math.min(least, move.probability),
+      Number.POSITIVE_INFINITY,
+    );
+    if (!Number.isFinite(smallest) || smallest <= 0) {
+      return { status: "unavailable", reason: "empty_distribution", rating: rung.rating };
+    }
+    byRating[rung.rating] = Math.log(smallest / (dropped + 1));
     estimatedRungs.push(rung.rating);
   }
 

@@ -618,6 +618,36 @@ test("a move missing from a distribution that covered everything is an inconsist
   assert.equal(result.status === "unavailable" && result.reason, "unretained_with_no_room");
 });
 
+test("a renormalised subset is not a distribution that covered everything", () => {
+  // Maia reports a subset of moves and normalizePolicy renormalises it, so the
+  // probabilities sum to one and unretainedMass is zero even though most legal
+  // moves are absent. Reading that as "the model covered everything" refused
+  // every ply whose move the model did not rank, which in a club game is most
+  // of the informative ones: a blunder is exactly a move with no mass on it.
+  // Whole games came back unrated with every policy successfully read.
+  const subset = normalizePolicy([
+    { uci: "e2e4", probability: 0.6 },
+    { uci: "d2d4", probability: 0.3 },
+    { uci: "g1f3", probability: 0.1 },
+  ]);
+  assert.equal(subset.unretainedMass, 0);
+
+  const result = likelihoodsFor("h2h4", [rung(1600, [["e2e4", 0.6]])], 20);
+  assert.equal(result.status, "available");
+  if (result.status !== "available") return;
+  // Bounded by the smallest reported move, divided among those below it, so a
+  // move the model never considered never looks likely.
+  assert.ok(result.byRating[1600]! < Math.log(1));
+  assert.deepEqual([...result.estimatedRungs], [1600]);
+});
+
+test("a move missing from a genuinely complete distribution is still refused", () => {
+  // Every legal move is present and the played one is not, so something
+  // upstream is wrong and a probability here would launder it.
+  const result = likelihoodsFor("h2h4", [rung(1600, [["e2e4", 0.5], ["d2d4", 0.5]])], 2);
+  assert.equal(result.status === "unavailable" && result.reason, "unretained_with_no_room");
+});
+
 test("the ladder is answered completely or not at all", () => {
   // The first rung retains the move, the second does not and cannot estimate.
   const result = likelihoodsFor(

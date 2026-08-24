@@ -436,6 +436,7 @@ export async function assembleRatingItem(context: WorkContext, sql: Sql): Promis
     outputRef: `gameRating:${payload.gameKey}`,
     outputSummary: {
       status: view.status,
+      reason: view.status === "unavailable" ? view.reason : null,
       stored: wasStored,
       rating: view.status === "available" ? view.rating : null,
       policiesRead: policies.size,
