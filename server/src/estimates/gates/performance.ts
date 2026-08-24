@@ -242,7 +242,7 @@ async function seedPublishedReport(
           claim, claim_family
         ) values (
           ${run!.id}, ${subject!.id}, 'insufficient_evidence', ${50 - i}, 'moderate',
-          ${jsonParam({ dimension: `perf_dim_${i}` })}::jsonb, 'concept_success'
+          ${jsonParam({ dimension: `perf_dim_${i}` })}::text::jsonb, 'concept_success'
         )
         returning id
       `;

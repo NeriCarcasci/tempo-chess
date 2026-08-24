@@ -40,7 +40,7 @@ export async function recordUsage(input: {
     values (${input.userId}, coalesce(${input.accountId ?? null}::uuid,
       (select id from linked_accounts where user_id = ${input.userId} order by created_at asc limit 1)),
       ${input.kind}, ${input.units},
-      ${JSON.stringify(input.metadata ?? {})}::jsonb)`;
+      ${JSON.stringify(input.metadata ?? {})}::text::jsonb)`;
 }
 
 export async function getUsageSummary(userId: string): Promise<UsageSummary> {

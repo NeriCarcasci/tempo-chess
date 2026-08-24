@@ -406,7 +406,7 @@ async function storeInference(
         ${input.context.actorRating}, ${input.context.opponentRating}, ${input.context.speed},
         ${input.context.hasMoveHistory}, ${HUMAN_POLICY_CONTRACT_HASH}, ${input.cacheKey},
         ${input.policy.retainedMass}, ${input.policy.moves.length}, ${input.policy.entropyBits},
-        ${jsonParam({ networkBand: input.networkBand, modelRating: input.modelRating })}::jsonb
+        ${jsonParam({ networkBand: input.networkBand, modelRating: input.modelRating })}::text::jsonb
       )
       returning id
     `;

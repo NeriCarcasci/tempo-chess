@@ -123,7 +123,7 @@ report.section("from an empty database");
                 consent_verified: true,
                 redactions_verified: true,
                 facts_unchanged: false,
-              })}::jsonb,
+              })}::text::jsonb,
               ${REDACTION_POLICY_VERSION}
             )
           `,

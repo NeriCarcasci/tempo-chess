@@ -52,7 +52,7 @@ export async function registerCohortVersion(
 
   const [row] = await sql<{ id: string }[]>`
     insert into analysis.cohort_definition_versions (cohort_key, version, definition, definition_hash)
-    values (${input.cohortKey}, ${input.version}, ${jsonParam(definition)}::jsonb, ${definitionHash})
+    values (${input.cohortKey}, ${input.version}, ${jsonParam(definition)}::text::jsonb, ${definitionHash})
     returning id
   `;
   return { id: row.id, definitionHash, alreadyRegistered: false };

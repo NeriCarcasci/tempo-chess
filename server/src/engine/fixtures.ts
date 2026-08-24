@@ -105,7 +105,7 @@ export async function seedAnalysableGame(
       normalized_sha256, played_at, rated, speed, result, ply_count, revision_reason
     ) values (
       ${providerGame!.id}, 1, 'norm-v1',
-      ${jsonParam({ moves })}::jsonb, ${SHA(stamp)}, now(), true, 'blitz', 'white',
+      ${jsonParam({ moves })}::text::jsonb, ${SHA(stamp)}, now(), true, 'blitz', 'white',
       ${moves.length}, 'first_seen'
     )
     returning id

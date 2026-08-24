@@ -198,7 +198,7 @@ export async function seedEditorial(
               redactions_verified: true,
               facts_unchanged: true,
             }
-          : { source_verified: true },)}::jsonb,
+          : { source_verified: true },)}::text::jsonb,
       ${policy},
       ${reviewDecision === "approved" ? null : "The source is not established."}
     )

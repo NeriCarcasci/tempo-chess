@@ -262,7 +262,7 @@ export async function recordValidation(
           blockers: verdict.blockers,
           supportedSliceCount: verdict.supportedSliceCount,
           totalSampleSize: verdict.totalSampleSize,
-        })}::jsonb
+        })}::text::jsonb
       )
       returning id
     `;
@@ -287,7 +287,7 @@ export async function recordValidation(
           insert into analysis.validation_metrics (
             validation_run_id, metric_key, slice, sample_size, value, unavailable_reason
           ) values (
-            ${run!.id}, ${key}, ${sliceJson}::jsonb, ${metrics.sampleSize},
+            ${run!.id}, ${key}, ${sliceJson}::text::jsonb, ${metrics.sampleSize},
             ${value}, ${value === null ? (slice.supported ? "not measured" : "slice is not supported") : null}
           )
         `;

@@ -115,7 +115,7 @@ export async function recordValidationRun(sql: Sql, input: ValidationRunInput): 
         ${input.datasetId}, ${candidateComponent}, ${candidateRecipe},
         ${input.baseline?.componentVersionId ?? null}, ${input.baseline?.recipeVersionId ?? null},
         ${input.executionRevision}, ${input.status}, ${input.outputChecksum},
-        ${jsonParam((input.summary ?? {}))}::jsonb
+        ${jsonParam((input.summary ?? {}))}::text::jsonb
       )
       returning id
     `;
@@ -125,7 +125,7 @@ export async function recordValidationRun(sql: Sql, input: ValidationRunInput): 
           validation_run_id, metric_key, slice, sample_size, value,
           interval_low, interval_high, unavailable_reason
         ) values (
-          ${run.id}, ${metric.metricKey}, ${jsonParam((metric.slice ?? {}))}::jsonb,
+          ${run.id}, ${metric.metricKey}, ${jsonParam((metric.slice ?? {}))}::text::jsonb,
           ${metric.sampleSize}, ${metric.value ?? null}, ${metric.intervalLow ?? null},
           ${metric.intervalHigh ?? null}, ${metric.unavailableReason ?? null}
         )

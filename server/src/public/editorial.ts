@@ -125,7 +125,7 @@ export async function recordReview(input: ReviewInput, sql: Sql = client): Promi
       redaction_policy_version, note
     ) values (
       ${input.subjectId}, ${input.runId}, ${input.reviewerUserId}, ${input.decision},
-      ${jsonParam(input.checklist)}::jsonb, ${input.redactionPolicyVersion ?? REDACTION_POLICY_VERSION},
+      ${jsonParam(input.checklist)}::text::jsonb, ${input.redactionPolicyVersion ?? REDACTION_POLICY_VERSION},
       ${input.note ?? null}
     )
     returning id

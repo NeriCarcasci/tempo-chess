@@ -180,7 +180,7 @@ export async function writeRequirements(
         ${input.cycleId}, ${requirement.requirementKey}, ${requirement.kind},
         ${requirement.quantity}, ${requirement.unit}, ${requirement.windowDays},
         ${requirement.essential}, ${requirement.rationale},
-        ${input.generatorComponentVersionId}, ${jsonParam(requirement.cohortFilter)}::jsonb,
+        ${input.generatorComponentVersionId}, ${jsonParam(requirement.cohortFilter)}::text::jsonb,
         ${requirement.displayRank}
       )
       on conflict (cycle_id, requirement_key) do nothing

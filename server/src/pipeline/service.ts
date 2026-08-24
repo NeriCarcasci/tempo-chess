@@ -309,8 +309,8 @@ async function upsertGame(userId: string, accountId: string, game: NormalizedGam
         color, result, termination, speed, time_control, user_rating, opponent_username,
         opponent_rating, eco, opening_name, ply_count)
       values (${userId}, ${accountId}, ${game.platform}, ${game.platformGameId}, ${game.schemaVersion},
-        ${game.canonicalGameId}, ${game.pgnFingerprint}, ${JSON.stringify(game.provenance)}::jsonb,
-        ${JSON.stringify(game.players)}::jsonb, ${game.providerAccuracy ? JSON.stringify(game.providerAccuracy) : null}::jsonb,
+        ${game.canonicalGameId}, ${game.pgnFingerprint}, ${JSON.stringify(game.provenance)}::text::jsonb,
+        ${JSON.stringify(game.players)}::text::jsonb, ${game.providerAccuracy ? JSON.stringify(game.providerAccuracy) : null}::text::jsonb,
         ${game.url}, ${game.playedAt?.toISOString() ?? null}, ${game.color}, ${game.result}, ${game.termination}, ${game.speed},
         ${game.timeControl}, ${game.userRating}, ${game.opponentUsername}, ${game.opponentRating},
         ${game.eco}, ${game.openingName}, ${game.plyCount})
@@ -331,7 +331,7 @@ async function upsertGame(userId: string, accountId: string, game: NormalizedGam
         clock_ms, think_time_ms, provider_evaluation, annotations)
         values (${gameId}, ${move.ply}, ${move.moveNumber}, ${move.color}, ${move.uci}, ${move.san},
           ${move.fenBefore}, ${move.fenAfter}, ${move.clockMs}, ${move.thinkTimeMs},
-          ${move.providerEvaluation ? JSON.stringify(move.providerEvaluation) : null}::jsonb, ${JSON.stringify(move.annotations)}::jsonb)`;
+          ${move.providerEvaluation ? JSON.stringify(move.providerEvaluation) : null}::text::jsonb, ${JSON.stringify(move.annotations)}::text::jsonb)`;
     }
     return gameId;
   });
@@ -422,7 +422,7 @@ async function workerLoop(): Promise<void> {
     await refreshImport(task.importId);
     try {
       const result = task.pass === "screening" ? await screenGame(task) : await deepenGame(task);
-      await client`update analysis_tasks set status = 'completed', result = ${JSON.stringify(result)}::jsonb, error = null,
+      await client`update analysis_tasks set status = 'completed', result = ${JSON.stringify(result)}::text::jsonb, error = null,
         completed_at = now(), updated_at = now() where id = ${task.id} and status = 'running'`;
     } catch (error) {
       engine?.quit(); engine = null;
@@ -490,7 +490,7 @@ async function saveEvaluation(value: PositionEval): Promise<void> {
     elapsed_ms, worker_revision, cache_provenance)
     values (${value.fen}, ${value.cacheKey}, ${value.depth}, ${value.evalCp ?? null}, ${value.mate ?? null},
       ${value.wdl?.[0] ?? null}, ${value.wdl?.[1] ?? null}, ${value.wdl?.[2] ?? null}, ${value.best ?? null},
-      ${value.candidates[0]?.pv.join(" ") ?? null}, ${JSON.stringify(value.candidates)}::jsonb, ${p.engine}, ${p.engineVersion ?? null},
+      ${value.candidates[0]?.pv.join(" ") ?? null}, ${JSON.stringify(value.candidates)}::text::jsonb, ${p.engine}, ${p.engineVersion ?? null},
       ${p.binarySha256 ?? null}, ${p.network ?? null}, ${p.networkHash ?? null}, ${p.profileId}, ${p.profileVersion},
       ${p.limit.type}, ${p.limit.value}, ${p.multiPv}, ${p.threads}, ${p.hashMb}, ${value.nodes ?? null}, ${value.nps ?? null},
       ${value.engineTimeMs ?? null}, ${value.elapsedMs}, ${p.workerRevision}, ${p.cacheProvenance})
@@ -534,7 +534,7 @@ async function screenGame(task: AnalysisTaskRecord): Promise<Json> {
   }));
   if (selected.length) {
     await client`insert into analysis_tasks (import_id, game_id, pass, priority, idempotency_key, payload)
-      values (${task.importId}, ${task.gameId}, 'deep', 10, ${`${task.importId}:${task.gameId}:deep:v1`}, ${JSON.stringify({ positions: selected })}::jsonb)
+      values (${task.importId}, ${task.gameId}, 'deep', 10, ${`${task.importId}:${task.gameId}:deep:v1`}, ${JSON.stringify({ positions: selected })}::text::jsonb)
       on conflict (idempotency_key) do nothing`;
     await client`update analysis_imports set deep_positions = deep_positions + ${selected.length},
       estimated_cost_usd = estimated_cost_usd + ${selected.length * DEFAULT_ANALYSIS_BUDGET.estimatedDeepCostPerPositionUsd}, updated_at = now()

@@ -373,8 +373,8 @@ export async function writeFinding(
     ) values (
       ${input.analysisRunId}, ${input.subjectId}, ${write.playerSkillEstimateId},
       ${candidate.findingType}, ${write.conceptVersionId}, ${write.role},
-      ${jsonParam(candidate.context)}::jsonb, ${candidate.priority}, ${candidate.confidenceTier},
-      ${jsonParam(candidate.claim)}::jsonb, ${candidate.claimFamily},
+      ${jsonParam(candidate.context)}::text::jsonb, ${candidate.priority}, ${candidate.confidenceTier},
+      ${jsonParam(candidate.claim)}::text::jsonb, ${candidate.claimFamily},
       ${candidate.adjustedProbability === null ? null : input.correctionComponentVersionId},
       ${candidate.adjustedProbability}
     )

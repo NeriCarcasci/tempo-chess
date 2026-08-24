@@ -441,7 +441,7 @@ async function seedPractice(sql: postgres.Sql): Promise<Seeded> {
         claim_family
       ) values (
         ${run!.id}, ${subject!.id}, 'foundational_miss', 90, 'high',
-        ${jsonParam({ dimension: "fork_recognize" })}::jsonb, 'concept_success'
+        ${jsonParam({ dimension: "fork_recognize" })}::text::jsonb, 'concept_success'
       )
       returning id
     `;

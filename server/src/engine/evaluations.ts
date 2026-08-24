@@ -227,7 +227,7 @@ export async function storeEvaluation(
           ${row.id}, ${candidate.rank}, ${candidate.pv[0]!}, ${candidate.evalCp ?? null},
           ${candidate.mate ?? null}, ${candidate.wdl?.[0] ?? null}, ${candidate.wdl?.[1] ?? null},
           ${candidate.wdl?.[2] ?? null}, ${roundScore(value.value)}, ${value.method},
-          ${jsonParam(candidate.pv)}::jsonb, ${candidate.nodes ?? null}
+          ${jsonParam(candidate.pv)}::text::jsonb, ${candidate.nodes ?? null}
         )
       `;
     }

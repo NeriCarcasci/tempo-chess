@@ -87,7 +87,7 @@ async function registerOne(sql: Sql, definition: ConceptDefinition): Promise<Reg
       rubric_contract, version_hash, promoted_at
     ) values (
       ${concept.id}, ${definition.versionNo}, ${definition.humanDefinition},
-      ${jsonParam(definition.detectorContract)}::jsonb, ${definition.supportedRoles as string[]},
+      ${jsonParam(definition.detectorContract)}::text::jsonb, ${definition.supportedRoles as string[]},
       null, ${hash}, now()
     )
     on conflict (concept_id, version_no) do nothing

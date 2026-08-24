@@ -162,7 +162,7 @@ export async function commitBatch(
             result, termination, ply_count, provider_url, revision_reason
           ) values (
             ${providerGame.id}, ${next_no}, ${NORMALIZER_VERSION},
-            ${JSON.stringify(game.normalizedReplay)}::jsonb, ${game.normalizedSha256},
+            ${JSON.stringify(game.normalizedReplay)}::text::jsonb, ${game.normalizedSha256},
             ${game.initialFen}, ${isoOf(game.playedAt)}, ${isoOf(game.completedAt)}, ${game.rated},
             ${game.speed}, ${game.timeControl}, ${game.result}, ${game.termination},
             ${game.plyCount}, ${game.providerUrl}, ${reason}
@@ -274,7 +274,7 @@ export async function finishSyncRun(
   await sql`
     update ops.sync_runs
     set state = ${state}, finished_at = now(),
-        rejection_summary = ${rejectionSummary ? JSON.stringify(rejectionSummary) : null}::jsonb,
+        rejection_summary = ${rejectionSummary ? JSON.stringify(rejectionSummary) : null}::text::jsonb,
         failure_class = ${failureClass ?? null}
     where id = ${syncRunId}
   `;

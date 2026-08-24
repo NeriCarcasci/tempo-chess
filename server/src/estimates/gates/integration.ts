@@ -206,7 +206,7 @@ try {
               claim, claim_family
             ) values (
               ${run.id}, ${game.subjectId}, 'strength', 50, 'high',
-              ${jsonParam({ dimension: "nothing" })}::jsonb, 'concept_success'
+              ${jsonParam({ dimension: "nothing" })}::text::jsonb, 'concept_success'
             )
           `;
         }),
@@ -222,7 +222,7 @@ try {
           claim, claim_family
         ) values (
           ${run.id}, ${game.subjectId}, 'insufficient_evidence', 10, 'low',
-          ${jsonParam({ dimension: "nothing yet" })}::jsonb, 'concept_success'
+          ${jsonParam({ dimension: "nothing yet" })}::text::jsonb, 'concept_success'
         )
       `;
     });
@@ -236,7 +236,7 @@ try {
           claim, claim_family
         ) values (
           ${run.id}, ${game.subjectId}, 'established_improvement', 90, 'high',
-          ${jsonParam({ dimension: "wishful" })}::jsonb, 'personal_change'
+          ${jsonParam({ dimension: "wishful" })}::text::jsonb, 'personal_change'
         )
       `,
       /findings_improvement_needs_estimate/,
@@ -462,8 +462,8 @@ async function seedConcept(): Promise<string> {
       rubric_contract, version_hash
     ) values (
       ${concept!.id}, 1, 'A fork attacks two targets at once.',
-      ${jsonParam({ detector: "gate" })}::jsonb, array['recognize','execute']::text[],
-      ${jsonParam({ rubric: "gate" })}::jsonb, ${SHA(`concept-${SUFFIX}`)}
+      ${jsonParam({ detector: "gate" })}::text::jsonb, array['recognize','execute']::text[],
+      ${jsonParam({ rubric: "gate" })}::text::jsonb, ${SHA(`concept-${SUFFIX}`)}
     )
     returning id
   `;
@@ -504,7 +504,7 @@ async function seedOpportunities(
         end_ply, actor_color, facts, completeness
       ) values (
         ${game.materializationRunId}, ${game.replayRevisionId}, ${game.subjectGameId},
-        'tactical_opportunity', ${i}, ${i}, ${i}, 'white', ${jsonParam({ gate: true })}::jsonb,
+        'tactical_opportunity', ${i}, ${i}, ${i}, 'white', ${jsonParam({ gate: true })}::text::jsonb,
         ${censored ? "censored" : "complete"}
       )
       returning id

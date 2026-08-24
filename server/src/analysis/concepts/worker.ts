@@ -603,7 +603,7 @@ export async function detectForRun(
             ${group.event.eventType}, ${group.event.startPly},
             ${group.event.focalPly}, ${group.event.endPly},
             ${resolveColor(group.event.actor)}, ${resolveColor(group.event.affected)},
-            ${jsonParam(group.event.facts)}::jsonb, ${group.event.confidence},
+            ${jsonParam(group.event.facts)}::text::jsonb, ${group.event.confidence},
             ${group.event.completeness},
             ${detectionKey}
           )
@@ -656,8 +656,8 @@ export async function detectForRun(
             ${observation.draft.responsePly}, ${observation.draft.responseObserved},
             ${observation.draft.censoredReason}, ${observation.draft.success},
             ${observation.draft.score}, ${observation.draft.rubricComponentVersionId},
-            ${jsonParam(observation.draft.difficulty)}::jsonb, ${observation.phase},
-            ${game.speed}, ${jsonParam({ evidenceItemId: evidence.id })}::jsonb, null,
+            ${jsonParam(observation.draft.difficulty)}::text::jsonb, ${observation.phase},
+            ${game.speed}, ${jsonParam({ evidenceItemId: evidence.id })}::text::jsonb, null,
             ${evidenceSourceKind}, ${facts.playedAt.toISOString()}, ${Number(evidence.id)}
           ) returning id
         `;

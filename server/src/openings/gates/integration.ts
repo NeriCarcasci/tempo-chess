@@ -216,7 +216,7 @@ async function seedGame(options: SeedGameOptions): Promise<SeededGame> {
       provider_game_id, revision_no, normalizer_component_version_id, normalized_replay,
       normalized_sha256, played_at, rated, speed, result, ply_count, revision_reason
     ) values (
-      ${providerGame.id}, 1, 'norm-v1', ${JSON.stringify({ moves: options.moves })}::jsonb,
+      ${providerGame.id}, 1, 'norm-v1', ${JSON.stringify({ moves: options.moves })}::text::jsonb,
       ${SHA(`e20-${STAMP}-${ordinal}`)}, ${playedAt}, true, ${options.speed}, 'white',
       ${options.moves.length}, 'first_seen'
     )

@@ -328,7 +328,7 @@ export async function storeContinuationPolicy(
         ${input.modelComponentVersionId}, ${input.corePositionId}, 'human_policy',
         ${input.rating}, ${input.rating}, false, ${CONTINUATION_CONTRACT_HASH}, ${input.cacheKey},
         ${input.policy.retainedMass}, ${input.policy.moves.length}, ${input.policy.entropyBits},
-        ${jsonParam({ family: "maia3", model: "5m", rating: input.rating, latencyMs: input.latencyMs })}::jsonb
+        ${jsonParam({ family: "maia3", model: "5m", rating: input.rating, latencyMs: input.latencyMs })}::text::jsonb
       )
       on conflict (model_component_version_id, cache_key) do nothing
       returning id

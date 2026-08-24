@@ -23,7 +23,7 @@
  * to find out why it is absent, and a bare `JSON.stringify` beside a `::jsonb`
  * cast does not tell them.
  *
- * Always cast at the call site — `${jsonParam(value)}::jsonb` — so the column's
+ * Always cast at the call site — `${jsonParam(value)}::text::jsonb` — so the column's
  * type is never inferred from an untyped parameter.
  */
 
@@ -31,3 +31,27 @@
 export function jsonParam(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
+
+/**
+ * Always write the parameter as `${jsonParam(value)}::text::jsonb`.
+ *
+ * The `::text` step is load-bearing and the reason this note exists. postgres.js
+ * asks the server to describe a prepared statement and takes the parameter types
+ * it infers; `$n::jsonb` makes Postgres infer jsonb, and postgres.js then runs
+ * its jsonb serializer over the value on the way out. That serializer is
+ * `JSON.stringify`, so a value this helper has already turned into JSON text is
+ * encoded a second time and arrives as a jsonb *string* containing JSON rather
+ * than as the object or array it was.
+ *
+ * It was invisible almost everywhere: a column with no shape constraint accepts
+ * a JSON string without complaint. `analysis.evaluation_candidates.pv` checks
+ * `jsonb_typeof(pv) = 'array'`, so it was the one column that said so, and it
+ * said so only in the gates — the connection `db/client.ts` exports has been
+ * through `drizzle()`, which replaces those serializers, while a gate opening
+ * its own connection gets the defaults.
+ *
+ * Casting through `text` makes the parameter a text parameter, which no json
+ * serializer touches, and lets Postgres parse it once. It behaves the same
+ * whichever serializers happen to be installed, which is the property worth
+ * having.
+ */

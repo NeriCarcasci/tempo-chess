@@ -229,7 +229,7 @@ export async function backfillLegacyGames(sql: Sql, resumeRunId?: string): Promi
     update ops.backfill_runs
     set state = 'succeeded', finished_at = now(),
         source_checksum = ${sourceChecksum}, target_checksum = ${targetChecksum},
-        manifest = ${JSON.stringify(manifest)}::jsonb
+        manifest = ${JSON.stringify(manifest)}::text::jsonb
     where id = ${runId}
   `;
 
