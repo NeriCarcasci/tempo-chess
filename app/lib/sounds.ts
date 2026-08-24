@@ -1,4 +1,5 @@
 import { Chess } from "chess.js";
+import { DEFAULT_VOICE, voiceFor, type Cue, type VoiceKey } from "./soundVoices";
 
 /**
  * Lightweight board sound effects, synthesised with the Web Audio API so there
@@ -8,7 +9,7 @@ import { Chess } from "chess.js";
  */
 
 const MUTE_KEY = "tempo-sound-muted";
-type Cue = "move" | "capture" | "castle" | "check" | "promote" | "end";
+const VOICE_KEY = "tempo-sound-voice";
 
 let ctx: AudioContext | null = null;
 
@@ -40,72 +41,35 @@ export function setMuted(muted: boolean): void {
   }
 }
 
-/** A filtered noise burst — reads as a wooden knock/click. */
-function knock(ac: AudioContext, when: number, { gain = 0.5, cutoff = 1400, decay = 0.09 }: { gain?: number; cutoff?: number; decay?: number }) {
-  const frames = Math.floor(ac.sampleRate * decay);
-  const buffer = ac.createBuffer(1, frames, ac.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < frames; i++) {
-    const env = Math.pow(1 - i / frames, 2.4);
-    data[i] = (Math.random() * 2 - 1) * env;
+export function soundVoice(): VoiceKey {
+  try {
+    return (localStorage.getItem(VOICE_KEY) as VoiceKey | null) ?? DEFAULT_VOICE;
+  } catch {
+    return DEFAULT_VOICE;
   }
-  const src = ac.createBufferSource();
-  src.buffer = buffer;
-  const filter = ac.createBiquadFilter();
-  filter.type = "lowpass";
-  filter.frequency.value = cutoff;
-  const amp = ac.createGain();
-  amp.gain.value = gain;
-  src.connect(filter).connect(amp).connect(ac.destination);
-  src.start(when);
 }
 
-/** A short sine blip — used for check / promotion accents. */
-function blip(ac: AudioContext, when: number, freq: number, { gain = 0.16, decay = 0.16 }: { gain?: number; decay?: number } = {}) {
-  const osc = ac.createOscillator();
-  osc.type = "triangle";
-  osc.frequency.value = freq;
-  const amp = ac.createGain();
-  amp.gain.setValueAtTime(0, when);
-  amp.gain.linearRampToValueAtTime(gain, when + 0.008);
-  amp.gain.exponentialRampToValueAtTime(0.0001, when + decay);
-  osc.connect(amp).connect(ac.destination);
-  osc.start(when);
-  osc.stop(when + decay + 0.02);
+export function setSoundVoice(key: VoiceKey): void {
+  try {
+    localStorage.setItem(VOICE_KEY, key);
+  } catch {
+    /* ignore */
+  }
 }
 
-export function playSound(cue: Cue): void {
+/**
+ * Play one cue.
+ *
+ * The synthesis itself lives in `soundVoices`, one voice per palette, so the
+ * board's sound is a choice a listener makes rather than a constant buried in
+ * this file. `voice` is for the audition page, which needs to play a palette
+ * without adopting it.
+ */
+export function playSound(cue: Cue, voice?: VoiceKey): void {
   if (isMuted()) return;
   const ac = audio();
   if (!ac) return;
-  const t = ac.currentTime;
-  switch (cue) {
-    case "move":
-      knock(ac, t, { gain: 0.42, cutoff: 1100, decay: 0.08 });
-      break;
-    case "capture":
-      knock(ac, t, { gain: 0.6, cutoff: 2600, decay: 0.1 });
-      knock(ac, t + 0.012, { gain: 0.3, cutoff: 900, decay: 0.08 });
-      break;
-    case "castle":
-      knock(ac, t, { gain: 0.4, cutoff: 1100, decay: 0.08 });
-      knock(ac, t + 0.1, { gain: 0.4, cutoff: 1100, decay: 0.08 });
-      break;
-    case "check":
-      knock(ac, t, { gain: 0.4, cutoff: 1400, decay: 0.07 });
-      blip(ac, t + 0.02, 880, { gain: 0.14, decay: 0.14 });
-      break;
-    case "promote":
-      blip(ac, t, 660);
-      blip(ac, t + 0.09, 880);
-      blip(ac, t + 0.18, 1180, { gain: 0.18, decay: 0.22 });
-      break;
-    case "end":
-      blip(ac, t, 520, { decay: 0.3 });
-      blip(ac, t + 0.14, 392, { decay: 0.34 });
-      blip(ac, t + 0.3, 294, { gain: 0.18, decay: 0.5 });
-      break;
-  }
+  voiceFor(voice ?? soundVoice()).play(ac, cue, ac.currentTime);
 }
 
 /**

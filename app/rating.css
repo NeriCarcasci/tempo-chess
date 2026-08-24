@@ -368,6 +368,56 @@
     .gr-bar-meter { grid-template-columns: minmax(0, 1fr); }
   }
 
+  /* --- the sound audition ------------------------------------------ */
+
+  .snd-mute { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
+
+  .snd-list { display: grid; gap: 1rem; width: 100%; max-width: 46rem; text-align: left; }
+
+  .snd-voice {
+    display: grid;
+    gap: 0.55rem;
+    background: var(--color-surface);
+    border-radius: var(--radius-panel);
+    padding: 1.1rem 1.25rem;
+    box-shadow: var(--shadow-soft);
+    border: 1px solid transparent;
+  }
+
+  .snd-voice.is-chosen { border-color: var(--color-accent); }
+
+  .snd-voice-head { display: flex; align-items: center; gap: 0.6rem; }
+  .snd-voice-head h2 { font-size: 1.05rem; font-weight: 620; }
+
+  .snd-blurb { font-size: 0.86rem; color: var(--color-ink-muted); line-height: 1.55; max-width: 60ch; }
+
+  .snd-cues { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+  .snd-cue {
+    border: none;
+    background: var(--color-surface-2);
+    color: var(--color-ink);
+    border-radius: var(--radius-pill);
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .snd-cue:hover { background: var(--color-surface-3); }
+  .snd-cue:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+  .snd-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 0.2rem; }
+
+  .snd-passage {
+    border: 1px solid var(--color-line-strong);
+    background: none;
+    color: var(--color-ink);
+    border-radius: var(--radius-pill);
+    padding: 0.35rem 0.9rem;
+    font-size: 0.84rem;
+    cursor: pointer;
+  }
+  .snd-passage:hover { background: var(--color-surface-2); }
+
   /* --- the wait ---------------------------------------------------- */
 
   .gr-working { gap: 1.8rem; }
