@@ -508,7 +508,13 @@ async function refusalDetail(sql: Sql, gameKey: string): Promise<string | null> 
   const read = summary.policiesRead;
   const asked = summary.policiesAsked;
   const coverage = read != null && asked != null ? `, ${read} of ${asked} policies read` : "";
-  return reason ? `${reason}${coverage}` : `assembly finished ${row.status}${coverage}`;
+  // Whether it was written is the fact that separates "we refused" from "we
+  // produced a rating and lost it", and the first version of this message left
+  // it out, which cost a whole round of investigation.
+  const kept = summary.stored === false ? ", and it was not stored" : "";
+  return reason
+    ? `${reason}${coverage}${kept}`
+    : `assembly produced a ${String(summary.status)} rating${coverage}${kept}`;
 }
 
 export type RatingProgress =
