@@ -54,7 +54,13 @@ import { assertDeploymentIdentity } from "./platform/deployment.js";
 import { betaSignupSchema, rateLimit, recordBetaSignup } from "./beta.js";
 import { parsePgn } from "./ingest/pgn.js";
 import { gameKey } from "./rating/identity.js";
-import { RATING_CAPACITY, inflightRatings, ratingProgress, startRating } from "./rating/workflow.js";
+import {
+  RATING_CAPACITY,
+  inflightRatings,
+  ratingProgress,
+  scheduleRatingPolicies,
+  startRating,
+} from "./rating/workflow.js";
 import { logSafeError, safeClientMessage } from "./security/redaction.js";
 import { isDeployed } from "./security/config.js";
 import { mountInternal, mountV1 } from "./v1/kernel.js";
@@ -263,6 +269,30 @@ function ratingLimited(c: Context): boolean {
   return !rateLimit(from);
 }
 
+/**
+ * Move a rating along, if it is waiting on us.
+ *
+ * A rating is two stages: the engine screens the game and writes a plan, then
+ * the human policy answers the positions that plan selected. Only the second
+ * can be described once the first has run, and only `forma_api` may create a
+ * workflow at all, so the API is what joins them. This runs on the poll the
+ * page is already making, which means the chain advances without a scheduler,
+ * a cron, or a worker holding a privilege it should not have.
+ *
+ * Idempotent by construction: the second workflow carries the game's own
+ * idempotency key, so two polls landing together produce one workflow and the
+ * loser is handed the winner's id.
+ */
+async function advanceRating(sql: import("postgres").Sql, gameKey: string): Promise<void> {
+  try {
+    await scheduleRatingPolicies(sql, gameKey);
+  } catch (error) {
+    // A rating that cannot be advanced is not a lookup that failed. The caller
+    // still gets the truthful progress below, and the next poll tries again.
+    logSafeError("rating advance failed", error);
+  }
+}
+
 /** Is this game already rated, or already being rated? Never starts anything. */
 app.post("/rating/lookup", async (c) => {
   if (ratingLimited(c)) {
@@ -271,6 +301,7 @@ app.post("/rating/lookup", async (c) => {
   const request = ratingRequestFrom(await c.req.json().catch(() => null));
   if (!request.ok) return c.json({ error: request.error }, 400);
   try {
+    await advanceRating(dbClient, request.gameKey);
     const progress = await ratingProgress(dbClient, request.gameKey);
     return c.json({ gameKey: request.gameKey, ...progress });
   } catch (error) {
@@ -284,6 +315,10 @@ app.get("/rating/:gameKey", async (c) => {
   const key = c.req.param("gameKey");
   if (!key || key.length > 200) return c.json({ error: "not a game key" }, 400);
   try {
+    // The plan carries the game, so a poll can move the chain on without the
+    // client resending anything. That is what lets a shared link finish a
+    // rating somebody else started.
+    await advanceRating(dbClient, key);
     const progress = await ratingProgress(dbClient, key);
     return c.json({ gameKey: key, ...progress });
   } catch (error) {
@@ -319,6 +354,7 @@ app.post("/rating", async (c) => {
 
   try {
     const sql = dbClient;
+    await advanceRating(sql, request.gameKey);
     const existing = await ratingProgress(sql, request.gameKey);
     if (existing.state === "ready") return c.json({ gameKey: request.gameKey, ...existing });
     if (existing.state === "working") {

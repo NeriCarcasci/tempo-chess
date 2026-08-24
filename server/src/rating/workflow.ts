@@ -219,12 +219,84 @@ export async function prepareRating(context: WorkContext, sql: Sql): Promise<Wor
     if (!(await context.checkpoint()).continue) return { outputSummary: { cancelled: true } };
   }
 
-  // Only the misses become work. A game whose positions the play feature has
-  // already seen can be almost free, which is the whole economics of the page.
+  // The engine schedules nothing. `forma_stockfish` holds no insert on
+  // ops.workflows, because workers execute work and only the API creates it,
+  // and that is a boundary worth keeping rather than working around. So the
+  // plan is written down and the API picks it up on the next poll it is
+  // already serving.
+  await sql`
+    insert into analysis.game_rating_plans (
+      game_key, method_hash, workflow_id, plan, deep, pgn, white_rating, black_rating
+    ) values (
+      ${payload.gameKey}, ${ratingMethodHash()}, ${context.item.workflowId},
+      ${jsonParam(plan)}, ${jsonParam(deep)}, ${payload.pgn},
+      ${payload.whiteRating}, ${payload.blackRating}
+    )
+    on conflict (game_key, method_hash) do nothing`;
+
+  return {
+    outputRef: `gameRatingPlan:${payload.gameKey}`,
+    outputSummary: {
+      screened: screened.size,
+      deepPositions: plan.deepPlies.length,
+      policyPlies: plan.policyPlies.length,
+      policyRequests: plan.policyRequests.length,
+    },
+  };
+}
+
+/** The engine's half of a rating, once it has finished, and the game it read. */
+export interface StoredPlan {
+  plan: RatingPlan;
+  deep: Record<string, DeepResult>;
+  pgn: string;
+  whiteRating: number | null;
+  blackRating: number | null;
+}
+
+export async function readRatingPlan(sql: Sql, gameKey: string): Promise<StoredPlan | null> {
+  const [row] = await sql<
+    {
+      plan: RatingPlan;
+      deep: Record<string, DeepResult>;
+      pgn: string;
+      white_rating: number | null;
+      black_rating: number | null;
+    }[]
+  >`
+    select plan, deep, pgn, white_rating, black_rating from analysis.game_rating_plans
+    where game_key = ${gameKey} and method_hash = ${ratingMethodHash()}`;
+  return row
+    ? {
+        plan: row.plan,
+        deep: row.deep,
+        pgn: row.pgn,
+        whiteRating: row.white_rating,
+        blackRating: row.black_rating,
+      }
+    : null;
+}
+
+/**
+ * Turn a finished plan into the work that answers it.
+ *
+ * Runs on the API, because the API is the only role that may create a workflow.
+ * Everything it needs in order to decide what to schedule it can already read:
+ * the promoted model, the core positions, and the policy cache. Only the misses
+ * become items, so a game whose positions the play feature has already inferred
+ * can be almost free, which is the whole economics of the public page.
+ */
+export async function scheduleRatingPolicies(
+  sql: Sql,
+  gameKey: string,
+): Promise<{ workflowId: string; scheduled: number; cached: number } | null> {
+  const stored = await readRatingPlan(sql, gameKey);
+  if (!stored) return null;
+
   const items: WorkItemInput[] = [];
   let cached = 0;
-  for (const request of plan.policyRequests) {
-    const lookup = await lookupContinuation(sql, request.fen, request.rating);
+  for (const ask of stored.plan.policyRequests) {
+    const lookup = await lookupContinuation(sql, ask.fen, ask.rating);
     if (!lookup) continue;
     if (lookup.policy) {
       cached += 1;
@@ -232,14 +304,14 @@ export async function prepareRating(context: WorkContext, sql: Sql): Promise<Wor
     }
     items.push({
       taskType: CONTINUATION_TASK,
-      resourceClass: "cpu_interactive_model" as const,
-      queue: "maia-rating" as const,
+      resourceClass: "cpu_interactive_model",
+      queue: "maia-rating",
       idempotencyKey: `rating:${CONTINUATION_TASK}:${lookup.cacheKey}`,
       inputRef: `corePosition:${lookup.corePositionId}`,
       payload: {
         corePositionId: lookup.corePositionId,
         halfmoveClock: lookup.halfmoveClock,
-        rating: request.rating,
+        rating: ask.rating,
         modelComponentVersionId: lookup.modelComponentVersionId,
         cacheKey: lookup.cacheKey,
       },
@@ -247,45 +319,35 @@ export async function prepareRating(context: WorkContext, sql: Sql): Promise<Wor
     });
   }
 
-  const assembleIndex = items.length;
-  const workflow = await sql.begin(async (tx) =>
-    insertWorkflow(tx as unknown as Sql, {
-      kind: "game_rating",
-      ownerProfileId: payload.ownerProfileId,
-      resource: { type: RATING_RESOURCE_TYPE, id: payload.gameKey },
-      items: [
-        ...items,
-        {
-          taskType: ASSEMBLE_TASK,
-          resourceClass: "aggregation" as const,
-          queue: "analysis" as const,
-          idempotencyKey: `rating:${ASSEMBLE_TASK}:${payload.gameKey}:${ratingMethodHash()}`,
-          inputRef: `gameRating:${payload.gameKey}`,
-          dependsOn: items.map((_, index) => index),
-          payload: {
-            gameKey: payload.gameKey,
-            pgn: payload.pgn,
-            whiteRating: payload.whiteRating,
-            blackRating: payload.blackRating,
-            plan: plan as unknown as Record<string, unknown>,
-            deep: deep as unknown as Record<string, unknown>,
+  try {
+    const workflow = await sql.begin(async (tx) =>
+      insertWorkflow(tx as unknown as Sql, {
+        kind: "game_rating",
+        ownerProfileId: null,
+        resource: { type: RATING_RESOURCE_TYPE, id: gameKey },
+        items: [
+          ...items,
+          {
+            taskType: ASSEMBLE_TASK,
+            resourceClass: "aggregation",
+            queue: "analysis",
+            idempotencyKey: `rating:${ASSEMBLE_TASK}:${gameKey}:${ratingMethodHash()}`,
+            inputRef: `gameRating:${gameKey}`,
+            dependsOn: items.map((_, index) => index),
+            payload: { gameKey },
+            timeoutSeconds: 900,
           },
-          timeoutSeconds: 900,
-        },
-      ],
-    }),
-  );
-
-  return {
-    outputRef: `workflow:${workflow.workflowId}`,
-    outputSummary: {
-      screened: screened.size,
-      deepPositions: plan.deepPlies.length,
-      policyPlies: plan.policyPlies.length,
-      policyCached: cached,
-      policyScheduled: assembleIndex,
-    },
-  };
+        ],
+      }),
+    );
+    return { workflowId: workflow.workflowId, scheduled: items.length, cached };
+  } catch (error) {
+    // Another poll got here first. Theirs is the workflow.
+    if (error instanceof DuplicateWorkError && error.existingWorkflowId) {
+      return { workflowId: error.existingWorkflowId, scheduled: 0, cached };
+    }
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -294,23 +356,20 @@ export async function prepareRating(context: WorkContext, sql: Sql): Promise<Wor
 
 interface AssemblePayload {
   gameKey: string;
-  pgn: string;
-  whiteRating: number | null;
-  blackRating: number | null;
-  plan: RatingPlan;
-  deep: Record<string, DeepResult>;
 }
 
 export async function assembleRatingItem(context: WorkContext, sql: Sql): Promise<WorkResult> {
   const payload = context.item.payload as unknown as AssemblePayload;
-  const game = parsePgn(payload.pgn);
+  const stored = await readRatingPlan(sql, payload.gameKey);
+  if (!stored) throw new Error("the engine plan for this game is missing");
+  const game = parsePgn(stored.pgn);
   const moves = game.moves.slice(0, ANALYSIS_BUDGET.maxPlies);
 
   // Read every policy the plan asked for. A miss here is not a failure: the
   // scorer already knows how to publish less, and a position whose inference
   // was dead-lettered should cost coverage rather than the whole rating.
   const policies = new Map<string, PolicyDistribution>();
-  for (const request of payload.plan.policyRequests) {
+  for (const request of stored.plan.policyRequests) {
     const lookup = await lookupContinuation(sql, request.fen, request.rating);
     if (!lookup) continue;
     const policy =
@@ -320,15 +379,15 @@ export async function assembleRatingItem(context: WorkContext, sql: Sql): Promis
   }
 
   const deep = new Map<number, DeepResult>(
-    Object.entries(payload.deep).map(([ply, result]) => [Number(ply), result]),
+    Object.entries(stored.deep).map(([ply, result]) => [Number(ply), result]),
   );
 
   const assembled = assembleRating(
     moves,
-    payload.plan,
+    stored.plan,
     deep,
     (fen, rating) => policies.get(`${fen}|${rating}`),
-    { whiteRating: payload.whiteRating, blackRating: payload.blackRating },
+    { whiteRating: stored.whiteRating, blackRating: stored.blackRating },
   );
 
   const headers: GameHeaders = {
@@ -346,16 +405,16 @@ export async function assembleRatingItem(context: WorkContext, sql: Sql): Promis
     },
   });
 
-  const stored = await writeRating(sql, payload.gameKey, context.item.workflowId, view);
+  const wasStored = await writeRating(sql, payload.gameKey, context.item.workflowId, view);
 
   return {
     outputRef: `gameRating:${payload.gameKey}`,
     outputSummary: {
       status: view.status,
-      stored,
+      stored: wasStored,
       rating: view.status === "available" ? view.rating : null,
       policiesRead: policies.size,
-      policiesAsked: payload.plan.policyRequests.length,
+      policiesAsked: stored.plan.policyRequests.length,
     },
   };
 }
