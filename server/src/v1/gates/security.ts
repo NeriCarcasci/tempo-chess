@@ -153,7 +153,14 @@ try {
   await get(`/v1/gate/subjects/${ACTOR}`, { authorization: `Bearer ${await token()}` });
   const operator = postgres(harness.db.adminUrl, { max: 1, prepare: false, onnotice: () => {} });
   try {
-    await operator`update app.access_requests set state = 'approved' where user_id = ${ACTOR}::uuid`;
+    // `decided_at` is not optional: the table requires a decided row to carry
+    // its decision time, so that a half-written decision cannot read as pending
+    // while the state says otherwise.
+    await operator`
+      update app.access_requests
+         set state = 'approved', decided_at = now()
+       where user_id = ${ACTOR}::uuid
+    `;
   } finally {
     await operator.end({ timeout: 5 });
   }
