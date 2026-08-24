@@ -112,7 +112,7 @@ export type RatingProgress =
       done: number;
       total: number;
     }
-  | { gameKey: string; state: "failed" }
+  | { gameKey: string; state: "failed"; detail: string | null }
   | { gameKey: string; state: "absent" };
 
 /** Has anybody rated this game already? Anonymous, and starts nothing. */

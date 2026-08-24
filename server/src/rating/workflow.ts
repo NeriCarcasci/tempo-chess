@@ -487,6 +487,30 @@ export async function readRating(sql: Sql, gameKey: string): Promise<RatingView 
   return row?.rating_view ?? null;
 }
 
+/**
+ * What the assembler recorded about a rating that produced nothing.
+ *
+ * Read from the work item rather than stored separately, because the ledger
+ * already keeps it and a second copy would be a second thing to keep true.
+ */
+async function refusalDetail(sql: Sql, gameKey: string): Promise<string | null> {
+  const [row] = await sql<{ summary: Record<string, unknown> | null; status: string }[]>`
+    select i.output_summary as summary, i.status
+    from ops.work_items i
+    join ops.workflows w on w.id = i.workflow_id
+    where w.resource_type = ${RATING_RESOURCE_TYPE} and w.resource_id = ${gameKey}
+      and i.task_type = ${ASSEMBLE_TASK}
+    order by i.id desc limit 1`;
+  if (!row) return "the assembly step never ran";
+  const summary = row.summary;
+  if (!summary) return `assembly ended ${row.status} without recording anything`;
+  const reason = summary.status === "unavailable" ? String(summary.reason ?? "unavailable") : null;
+  const read = summary.policiesRead;
+  const asked = summary.policiesAsked;
+  const coverage = read != null && asked != null ? `, ${read} of ${asked} policies read` : "";
+  return reason ? `${reason}${coverage}` : `assembly finished ${row.status}${coverage}`;
+}
+
 export type RatingProgress =
   | { state: "ready"; view: RatingView }
   | {
@@ -505,7 +529,21 @@ export type RatingProgress =
       done: number;
       total: number;
     }
-  | { state: "failed"; workflowId: string }
+  | {
+      state: "failed";
+      workflowId: string;
+      /**
+       * What the assembler said, when it said anything.
+       *
+       * A workflow that finished and stored nothing is a refusal we decline to
+       * cache, not a crash, and "that rating did not finish" is the least
+       * useful sentence available about it. The assembler already records the
+       * status and how many policies it managed to read; surfacing that turns a
+       * mystery into a number, both for the reader and for whoever is debugging
+       * it at the time.
+       */
+      detail: string | null;
+    }
   | { state: "absent" };
 
 /**
@@ -525,12 +563,14 @@ export async function ratingProgress(sql: Sql, gameKey: string): Promise<RatingP
     order by created_at desc limit 1`;
   if (!workflow) return { state: "absent" };
   if (workflow.state === "failed" || workflow.state === "cancelled") {
-    return { state: "failed", workflowId: workflow.id };
+    return { state: "failed", workflowId: workflow.id, detail: await refusalDetail(sql, gameKey) };
   }
   // Finished, and nothing was stored. That is the refusal we decline to cache:
   // the model was missing, or the deeper pass never ran. Reporting it as still
   // working would leave the page polling a bar at a hundred per cent forever.
-  if (workflow.state === "succeeded") return { state: "failed", workflowId: workflow.id };
+  if (workflow.state === "succeeded") {
+    return { state: "failed", workflowId: workflow.id, detail: await refusalDetail(sql, gameKey) };
+  }
 
   // Counted across the whole chain, so a bar drawn from it does not restart
   // when the second workflow begins.

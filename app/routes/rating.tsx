@@ -91,7 +91,14 @@ export default function RatingPage() {
           total: progress.total,
         };
       case "failed":
-        return { kind: "error", message: "That rating did not finish. Try it again." };
+        // The reason comes from the assembler rather than from a guess here.
+        // "Did not finish" was true and told nobody anything, including us.
+        return {
+          kind: "error",
+          message: progress.detail
+            ? `That rating did not finish: ${progress.detail}.`
+            : "That rating did not finish. Try it again.",
+        };
       case "absent":
         // Nothing has been started for this game yet. The caller asks for one.
         return { kind: "looking" };
