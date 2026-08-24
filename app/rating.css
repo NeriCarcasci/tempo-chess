@@ -386,40 +386,79 @@
     justify-items: start;
   }
 
-  .gr-replay { display: grid; gap: 0.6rem; width: 100%; min-width: 0; }
+  /* The replay now mounts the product's own `Board`, so there is no board CSS
+     here at all. Everything below is layout around it: the hand-rolled squares
+     this file used to carry were a second board that drifted from the real one
+     and ignored the player's chosen theme. */
+  .gr-replay { display: grid; gap: 0.6rem; width: 100%; min-width: 0; justify-items: center; }
 
-  /* Self-contained on purpose.
-     
-     This board first borrowed the marketing hero's `.hb-*` rules, which was a
-     mistake twice over: the square colours live in custom properties declared
-     on a `.hb` wrapper this markup does not have, so every square resolved to
-     nothing and the board rendered white, and the grid relied on a positioned
-     ancestor it also did not have, so sixty-four cells laid themselves out
-     across the page and pushed the whole document sideways. Inheriting a
-     component's look means inheriting its container too. */
-  .gr-replay .hb-board {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 1;
-    border-radius: var(--radius-panel);
-    overflow: hidden;
-    box-shadow: var(--shadow-soft);
+  .gr-replay-board { width: 100%; max-width: 22rem; }
+
+  .gr-replay.is-interactive {
+    grid-template-columns: minmax(0, 22rem) minmax(12rem, 16rem);
+    gap: 1.2rem;
+    align-items: start;
+    justify-items: stretch;
   }
 
-  .gr-replay .hb-grid {
-    position: absolute;
-    inset: 0;
+  .gr-replay-side {
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    grid-template-rows: repeat(8, 1fr);
+    gap: 0.7rem;
+    align-content: start;
+    min-width: 0;
   }
 
-  /* The product's board tokens, which respect a player's chosen board. */
-  .gr-replay .hb-sq { background: var(--color-board-light); }
-  .gr-replay .hb-sq.is-dark { background: var(--color-board-dark); }
+  /* A scoresheet: number, White, Black. Capped to the board's height so the
+     panel does not grow to the length of the game. */
+  .gr-movelist {
+    display: grid;
+    grid-template-columns: 2.2rem 1fr 1fr;
+    gap: 0.1rem 0.3rem;
+    align-content: start;
+    max-height: 18rem;
+    overflow-y: auto;
+    padding-right: 0.3rem;
+    font-size: 0.85rem;
+  }
 
-  .gr-replay .hb-slot { position: absolute; width: 12.5%; height: 12.5%; display: block; }
-  .gr-replay .hb-piece { width: 100%; height: 100%; display: block; }
+  .gr-movelist li { display: contents; }
+
+  .gr-movelist-no {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--color-ink-faint);
+    align-self: center;
+    text-align: right;
+  }
+
+  .gr-movelist-move {
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    border-radius: var(--radius-control);
+    padding: 0.12rem 0.35rem;
+    color: var(--color-ink);
+  }
+
+  .gr-movelist-move:hover { background: var(--color-surface-2); }
+  .gr-movelist-move:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+
+  .gr-movelist-move.is-current {
+    background: var(--color-accent-wash);
+    color: var(--color-accent-ink);
+    font-weight: 620;
+  }
+
+  .gr-replay-controls { display: flex; gap: 0.35rem; }
+
+  .gr-step-flip { margin-left: auto; }
+
+  @media (max-width: 46rem) {
+    .gr-replay.is-interactive { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+    .gr-replay-side { width: 100%; max-width: 22rem; }
+    .gr-movelist { max-height: 12rem; }
+  }
 
   .gr-replay-move {
     font-family: var(--font-mono);
@@ -517,9 +556,9 @@
   .gr-moment.is-clickable:hover { background: var(--color-surface-3); }
   .gr-moment.is-clickable:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
-  /* The board on a finished rating. Capped and centred rather than stretched:
-     a chessboard the width of a results panel is a chessboard nobody reads. */
-  .gr-replay-wrap { max-width: 24rem; margin-inline: auto; }
+  /* The board on a finished rating. The board itself is capped inside
+     `.gr-replay-board`; the wrapper gives the scoresheet beside it room. */
+  .gr-replay-wrap { width: 100%; }
 
   .gr-step {
     border: none;
@@ -536,13 +575,6 @@
   .gr-step:hover:not(:disabled) { background: var(--color-surface-3); }
   .gr-step:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
   .gr-step:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .gr-replay-move {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.6rem;
-  }
 
   /* --- coverage and refusals -------------------------------------- */
 

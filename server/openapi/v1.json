@@ -11373,7 +11373,7 @@
     },
     "/v1/play/moves": {
       "post": {
-        "description": "Validates the position and every supplied move server-side, then returns one bounded engine move. No game is stored: it lives in the client, and a game against the engine is never part of the player's archive or of any analysis. The reply carries no evaluation, and there is no depth, time or MultiPV parameter. A family the deployment cannot serve is refused rather than answered by a different engine.",
+        "description": "Validates the position and every supplied move server-side, then returns one bounded opponent move. Stockfish answers immediately; Maia can return a scheduled workflow before the completed move is cached. No game is stored: it lives in the client, and a game against the engine is never part of the player's archive or of any analysis. The reply carries no evaluation, and there is no depth, time or MultiPV parameter. A family the deployment cannot serve is refused rather than answered by a different engine.",
         "operationId": "requestOpponentMove",
         "parameters": [
           {
@@ -14078,7 +14078,8 @@
                 "subject_estimation",
                 "maintenance",
                 "position_evaluation",
-                "position_continuation"
+                "position_continuation",
+                "game_rating"
               ],
               "type": "string"
             }
@@ -14165,7 +14166,8 @@
                               "subject_estimation",
                               "maintenance",
                               "position_evaluation",
-                              "position_continuation"
+                              "position_continuation",
+                              "game_rating"
                             ],
                             "type": "string"
                           },
@@ -14492,7 +14494,8 @@
                             "subject_estimation",
                             "maintenance",
                             "position_evaluation",
-                            "position_continuation"
+                            "position_continuation",
+                            "game_rating"
                           ],
                           "type": "string"
                         },
@@ -14813,7 +14816,8 @@
                             "subject_estimation",
                             "maintenance",
                             "position_evaluation",
-                            "position_continuation"
+                            "position_continuation",
+                            "game_rating"
                           ],
                           "type": "string"
                         },

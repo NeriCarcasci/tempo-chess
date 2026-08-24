@@ -268,10 +268,8 @@ export function Working({
         <div>
           <h2>Nobody has rated this one before</h2>
           <p className="gr-caveat">
-            Forma is pricing every position, then asking a human model what a player of each
-            strength would have done here. That is a few hundred inferences, so it takes a few
-            minutes. This page keeps itself up to date, and the answer is saved: the next person to
-            paste this game gets it straight away.
+            This one takes a few minutes. The page keeps itself up to date, and the answer is
+            saved — the next person to paste this game gets it straight away.
           </p>
         </div>
       </div>
@@ -289,11 +287,7 @@ export function Working({
               <span className="gr-bar-track is-indeterminate" aria-hidden="true">
                 <span className="gr-bar-fill" />
               </span>
-              <p className="gr-caveat">
-                Reading the game with the engine, position by position. There is no percentage for
-                this part because it is one long look rather than a hundred small ones. The counted
-                half starts after it.
-              </p>
+              <p className="gr-caveat">Reading the game. The counted half starts after this.</p>
             </>
           ) : (
             <>

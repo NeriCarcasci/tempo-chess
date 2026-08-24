@@ -208,9 +208,9 @@ const LEVELS: Record<string, readonly [string, string, string, string, string]> 
   pressure: [
     "decided early",
     "decided by the middlegame",
-    "live for most of it",
-    "live almost throughout",
-    "live from first move to last",
+    "open for most of it",
+    "open almost to the end",
+    "open to the last move",
   ],
 };
 
@@ -251,11 +251,16 @@ function Demand({ demand }: { demand: DemandView }) {
     },
     {
       kind: "pressure" as const,
-      label: "Time under pressure",
-      blurb: "how long the game stayed undecided",
+      label: "Stayed in doubt",
+      blurb: "how long the result was genuinely open",
       value: demand.duration,
+      // "33 of 33" is not a sentence. When every move was played with the
+      // result open, say that; a ratio is only worth printing when it is
+      // actually a ratio.
       evidence: count(demand.liveDecisions) && count(demand.totalDecisions)
-        ? `${demand.liveDecisions} of ${demand.totalDecisions} moves were played while the game was still live`
+        ? demand.liveDecisions >= demand.totalDecisions
+          ? "Neither side was ever out of it — the result was open at the final move."
+          : `Open for ${demand.liveDecisions} of ${demand.totalDecisions} moves.`
         : null,
     },
   ];
@@ -401,9 +406,6 @@ export function GameRatingResult({ view, pgn }: { view: RatingView; pgn?: string
           </div>
         ) : null}
         {view.demand ? <Demand demand={view.demand} /> : null}
-        <p className="gr-method">
-          {view.method.key}/{view.method.version} · {view.method.hash.slice(0, 12)}
-        </p>
       </div>
     );
   }
@@ -444,21 +446,6 @@ export function GameRatingResult({ view, pgn }: { view: RatingView; pgn?: string
         </section>
       ) : null}
 
-      <section className="gr-coverage">
-        <h2>What this number is</h2>
-        <p>
-          {view.coverage.decisions} decisions were priced. Of those,{" "}
-          {view.coverage.practicalDecisions} were also read against the player who had to answer
-          them, which is what separates a sacrifice from a blunder.
-        </p>
-        <p>
-          The rating is how well the game was played, by both sides, given what it asked of them. It
-          is not a measure of how entertaining it was, and it does not know who won.
-        </p>
-        <p className="gr-method">
-          {view.method.key}/{view.method.version} · {view.method.hash.slice(0, 12)}
-        </p>
-      </section>
     </div>
   );
 }
