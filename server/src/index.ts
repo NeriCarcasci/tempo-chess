@@ -54,7 +54,7 @@ import { assertDeploymentIdentity } from "./platform/deployment.js";
 import { betaSignupSchema, rateLimit, recordBetaSignup } from "./beta.js";
 import { parsePgn } from "./ingest/pgn.js";
 import { gameKey } from "./rating/identity.js";
-import { ratingProgress, startRating } from "./rating/workflow.js";
+import { RATING_CAPACITY, inflightRatings, ratingProgress, startRating } from "./rating/workflow.js";
 import { logSafeError, safeClientMessage } from "./security/redaction.js";
 import { isDeployed } from "./security/config.js";
 import { mountInternal, mountV1 } from "./v1/kernel.js";
@@ -292,6 +292,62 @@ app.get("/rating/:gameKey", async (c) => {
   }
 });
 
+/**
+ * Rate a game that nobody has rated yet.
+ *
+ * Open to anybody, with no account. That is the point of the page: it exists so
+ * a stranger can watch Forma work on a game they already care about before they
+ * have any reason to trust us, and asking them to sign up first is asking for
+ * the trust the page was supposed to earn.
+ *
+ * The expense is real, so it is bounded by things that do not need a login: one
+ * rating per game however many people paste it, a per-address rate limit, and a
+ * ceiling on how many ratings may be in flight at once. Past the ceiling a
+ * caller is told to come back rather than added to a queue that will not move.
+ *
+ * It answers 202 rather than a rating. A first-time game is minutes of queued
+ * work, so the reply is a game key and a progress count, and the page polls the
+ * public endpoint from there. A game already rated answers 200 immediately,
+ * because there is nothing to schedule.
+ */
+app.post("/rating", async (c) => {
+  if (ratingLimited(c)) {
+    return c.json({ error: "Too many games from here. Try again in a few minutes." }, 429);
+  }
+  const request = ratingRequestFrom(await c.req.json().catch(() => null));
+  if (!request.ok) return c.json({ error: request.error }, 400);
+
+  try {
+    const sql = dbClient;
+    const existing = await ratingProgress(sql, request.gameKey);
+    if (existing.state === "ready") return c.json({ gameKey: request.gameKey, ...existing });
+    if (existing.state === "working") {
+      return c.json({ gameKey: request.gameKey, ...existing }, 202);
+    }
+
+    if ((await inflightRatings(sql)) >= RATING_CAPACITY.maxInflight) {
+      return c.json(
+        { error: "Forma is rating as many games as it can right now. Try again in a few minutes." },
+        503,
+      );
+    }
+
+    await startRating(sql, {
+      gameKey: request.gameKey,
+      pgn: request.pgn,
+      whiteRating: request.whiteRating,
+      blackRating: request.blackRating,
+      // No account, no owner. A rating is about a game, not a person.
+      ownerProfileId: null,
+    });
+    const started = await ratingProgress(sql, request.gameKey);
+    return c.json({ gameKey: request.gameKey, ...started }, 202);
+  } catch (error) {
+    logSafeError("rating failed", error);
+    return c.json({ error: "Could not rate that game. Try again in a moment." }, 500);
+  }
+});
+
 // --- everything below needs a signed-in user ------------------------------
 
 app.use("/me/*", requireAuth);
@@ -309,7 +365,6 @@ app.use("/training/*", requireAuth);
 app.use("/lessons/*", requireAuth);
 app.use("/analyze", requireAuth);
 app.use("/engine/*", requireAuth);
-app.use("/rating", requireAuth);
 
 // --- me: identity, linked accounts, hub data ------------------------------
 
@@ -667,49 +722,6 @@ app.post("/lessons/progress", async (c) => {
     return c.json(await saveLessonProgress(currentUser(c).id, parsed.data));
   } catch (error) {
     return fail(c, error);
-  }
-});
-
-/**
- * Rate a game that nobody has rated yet.
- *
- * Behind auth because this is the expensive door: one call is a few dozen
- * engine searches and up to a few hundred human-policy inferences, on a service
- * with one rating worker. The owner profile is recorded on the workflow so the
- * compute has somebody attached to it.
- *
- * It answers 202 rather than a rating. A first-time game is minutes of queued
- * work, so the reply is a game key and a progress count, and the page polls the
- * public endpoint from there. A game already rated answers 200 immediately,
- * because there is nothing to schedule.
- */
-app.post("/rating", async (c) => {
-  if (ratingLimited(c)) {
-    return c.json({ error: "Too many games from here. Try again in a few minutes." }, 429);
-  }
-  const request = ratingRequestFrom(await c.req.json().catch(() => null));
-  if (!request.ok) return c.json({ error: request.error }, 400);
-
-  try {
-    const sql = dbClient;
-    const existing = await ratingProgress(sql, request.gameKey);
-    if (existing.state === "ready") return c.json({ gameKey: request.gameKey, ...existing });
-    if (existing.state === "working") {
-      return c.json({ gameKey: request.gameKey, ...existing }, 202);
-    }
-
-    await startRating(sql, {
-      gameKey: request.gameKey,
-      pgn: request.pgn,
-      whiteRating: request.whiteRating,
-      blackRating: request.blackRating,
-      ownerProfileId: currentUser(c).id,
-    });
-    const started = await ratingProgress(sql, request.gameKey);
-    return c.json({ gameKey: request.gameKey, ...started }, 202);
-  } catch (error) {
-    logSafeError("rating failed", error);
-    return c.json({ error: "Could not rate that game. Try again in a moment." }, 500);
   }
 });
 

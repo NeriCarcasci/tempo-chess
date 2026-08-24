@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { PublicPage } from "../components/PublicShell";
 import { GameRatingResult } from "../components/GameRatingResult";
 import { ReplayBoard } from "../components/ReplayBoard";
 import { RookMascot } from "../components/RookMascot";
 import { ApiError } from "../lib/api";
-import { peekSession } from "../lib/session";
 import {
   lookupRating,
   pollRating,
@@ -33,7 +32,6 @@ type Stage =
   | { kind: "looking" }
   | { kind: "working"; gameKey: string; done: number; total: number }
   | { kind: "ready"; view: RatingView }
-  | { kind: "needs-account" }
   | { kind: "error"; message: string };
 
 /**
@@ -55,7 +53,6 @@ type Stage =
 export default function RatingPage() {
   const [pgn, setPgn] = useState("");
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
-  const signedIn = useRef(Boolean(peekSession()));
 
   // Polling lives in an effect keyed by the game so that leaving the page, or
   // pasting a different game, stops the previous one rather than leaving two
@@ -95,7 +92,8 @@ export default function RatingPage() {
       case "failed":
         return { kind: "error", message: "That rating did not finish. Try it again." };
       case "absent":
-        return { kind: "needs-account" };
+        // Nothing has been started for this game yet. The caller asks for one.
+        return { kind: "looking" };
     }
   }
 
@@ -104,14 +102,11 @@ export default function RatingPage() {
     if (stage.kind === "looking" || pgn.trim() === "") return;
     setStage({ kind: "looking" });
     try {
+      // A game somebody has already rated comes back from the free lookup, so
+      // the common case costs nothing and answers immediately.
       const found = await lookupRating(pgn);
       if (found.state !== "absent") {
         setStage(stageFor(found));
-        return;
-      }
-      // Nobody has rated it. Only an account can pay for that.
-      if (!signedIn.current) {
-        setStage({ kind: "needs-account" });
         return;
       }
       setStage(stageFor(await requestRating(pgn)));
@@ -168,7 +163,6 @@ export default function RatingPage() {
         </form>
 
         {stage.kind === "working" ? <Working done={stage.done} total={stage.total} pgn={pgn} /> : null}
-        {stage.kind === "needs-account" ? <NeedsAccount /> : null}
         {stage.kind === "ready" ? <GameRatingResult view={stage.view} /> : null}
 
         {stage.kind === "ready" ? (
@@ -242,26 +236,6 @@ export function Working({ done, total, pgn }: { done: number; total: number; pgn
             </>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
-
-/** The one thing a visitor cannot have for free, and why. */
-export function NeedsAccount() {
-  return (
-    <div className="rate-result">
-      <div className="rate-refusal">
-        <h2>This game has not been rated yet</h2>
-        <p>
-          Reading a rating is free and always will be. Producing a new one is a few hundred engine
-          and model runs, so it needs an account behind it. Games other people have already rated
-          stay open to everybody, including this one once it is done.
-        </p>
-        <p>
-          <Link to="/signup">Create an account</Link> to rate it, or paste a game somebody has
-          already run.
-        </p>
       </div>
     </div>
   );

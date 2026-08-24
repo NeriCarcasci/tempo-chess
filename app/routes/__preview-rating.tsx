@@ -1,6 +1,6 @@
 import { PublicPage } from "../components/PublicShell";
 import { GameRatingResult } from "../components/GameRatingResult";
-import { NeedsAccount, Working } from "./rating";
+import { Working } from "./rating";
 import type { RatingView } from "../lib/gameRating";
 
 /**
@@ -144,11 +144,6 @@ export default function RatingPreview() {
           <h2 style={{ fontSize: "1.05rem", fontWeight: 620 }}>Queued</h2>
           <p className="rate-note">A game nobody has rated, mid-flight. The count is real work items.</p>
           <Working done={182} total={297} pgn={OPERA_PGN} />
-        </section>
-        <section style={{ width: "100%" }}>
-          <h2 style={{ fontSize: "1.05rem", fontWeight: 620 }}>Not rated, and not signed in</h2>
-          <p className="rate-note">Reading is free; producing a new rating is the door that needs an account.</p>
-          <NeedsAccount />
         </section>
         {CASES.map((entry) => (
           <section key={entry.title} style={{ width: "100%" }}>

@@ -58,6 +58,20 @@ import { isCacheableRefusal, ratingMethodHash, RATING_METHOD } from "./contract.
 import { toRatingView, type GameHeaders, type RatingView } from "./view.js";
 import { RATING_RESOURCE_TYPE } from "./identity.js";
 
+/**
+ * How many ratings may be in flight at once, across everybody.
+ *
+ * The page is open to anybody, so the protection against a queue nobody can
+ * drain is a ceiling rather than a login. One rating is a few hundred
+ * inferences against a single rating worker, so three in flight is already
+ * something like a quarter of an hour of backlog: past that, a new arrival is
+ * better told to come back than added to a line that will not move.
+ *
+ * Games already in flight do not count against a *new* caller asking for the
+ * same game: that returns the existing workflow and costs nothing.
+ */
+export const RATING_CAPACITY = { version: "1", maxInflight: 3 } as const;
+
 export const PREPARE_TASK = "game_rating_prepare";
 export const ASSEMBLE_TASK = "game_rating_assemble";
 
@@ -66,8 +80,17 @@ export interface RatingRequest {
   pgn: string;
   whiteRating: number | null;
   blackRating: number | null;
-  /** The profile that pays for the compute. Cache reads need no owner. */
-  ownerProfileId: string;
+  /**
+   * The profile that asked, when there is one.
+   *
+   * Null for a visitor with no account, which is the ordinary case: this page
+   * exists to show a stranger what Forma does before they have any reason to
+   * sign up, so making them sign up first defeats the whole point of it. A
+   * rating is about a game rather than about a person, so an ownerless workflow
+   * is the honest shape and not a workaround. Cost is bounded by
+   * `RATING_CAPACITY` and by the per-address rate limit instead.
+   */
+  ownerProfileId: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +133,15 @@ async function evaluate(fen: string, multipv: number): Promise<EngineLine[]> {
 // ---------------------------------------------------------------------------
 // Starting a rating
 // ---------------------------------------------------------------------------
+
+/** Ratings currently queued or running, across the whole platform. */
+export async function inflightRatings(sql: Sql): Promise<number> {
+  const [row] = await sql<{ count: string }[]>`
+    select count(*) as count from ops.workflows
+    where resource_type = ${RATING_RESOURCE_TYPE}
+      and state in ('queued', 'running')`;
+  return Number(row?.count ?? 0);
+}
 
 export async function startRating(sql: Sql, request: RatingRequest): Promise<{ workflowId: string }> {
   try {
