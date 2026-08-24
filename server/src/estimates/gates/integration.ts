@@ -31,7 +31,11 @@ import { freezeSubjectSnapshot, registerCohortVersion } from "../../analysis/sna
 import { planRun } from "../../analysis/runs.js";
 import { readDashboard } from "../dashboard.js";
 import { setEstimatesEventSink } from "../telemetry.js";
-import { ESTIMATE_COMPONENT_KEYS, registerEstimateComponents } from "../store.js";
+import {
+  ESTIMATE_COMPONENT_KEYS,
+  ESTIMATE_COMPONENT_VERSIONS,
+  registerEstimateComponents,
+} from "../store.js";
 import { jsonParam } from "../../db/json.js";
 
 const report = new GateReport("E15 estimates integration gate");
@@ -563,16 +567,16 @@ async function seedSubjectRecipe(): Promise<string> {
     outputSchemaVersion: "subject_report.v1",
     requiredArtifacts: ["skill_estimates", "trajectory_bins", "findings"],
     roles: {
-      estimator: { componentKey: ESTIMATE_COMPONENT_KEYS.estimator, version: "estimator_v1" },
+      estimator: { componentKey: ESTIMATE_COMPONENT_KEYS.estimator, version: ESTIMATE_COMPONENT_VERSIONS.estimator },
       trajectory_aligner: {
         componentKey: ESTIMATE_COMPONENT_KEYS.alignment,
-        version: "trajectory_alignment_v1",
+        version: ESTIMATE_COMPONENT_VERSIONS.alignment,
       },
       finding_rules: {
         componentKey: ESTIMATE_COMPONENT_KEYS.findingRules,
-        version: "finding_rules_v1",
+        version: ESTIMATE_COMPONENT_VERSIONS.findingRules,
       },
-      renderer: { componentKey: ESTIMATE_COMPONENT_KEYS.renderer, version: "template_renderer_v1" },
+      renderer: { componentKey: ESTIMATE_COMPONENT_KEYS.renderer, version: ESTIMATE_COMPONENT_VERSIONS.renderer },
     },
   });
   const dataset = await registerValidationDataset(sql, {

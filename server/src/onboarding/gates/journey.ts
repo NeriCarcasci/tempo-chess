@@ -135,9 +135,8 @@ const { assignPractice } = await import("../../practice/select.js");
 const { promoteRecipe, recordValidationRun, registerValidationDataset } = await import(
   "../../analysis/validation.js"
 );
-const { registerEstimateComponents, ESTIMATE_COMPONENT_KEYS } = await import(
-  "../../estimates/store.js"
-);
+const { registerEstimateComponents, ESTIMATE_COMPONENT_KEYS, ESTIMATE_COMPONENT_VERSIONS } =
+  await import("../../estimates/store.js");
 const { registerRecipeVersion } = await import("../../analysis/versions.js");
 
 setEngineSessionFactory(async () => fixtureEngineSession());
@@ -188,16 +187,16 @@ const subjectRecipe = await registerRecipeVersion(sql, {
   outputSchemaVersion: "subject_report.v1",
   requiredArtifacts: ["skill_estimates", "trajectory_bins", "findings"],
   roles: {
-    estimator: { componentKey: ESTIMATE_COMPONENT_KEYS.estimator, version: "estimator_v1" },
+    estimator: { componentKey: ESTIMATE_COMPONENT_KEYS.estimator, version: ESTIMATE_COMPONENT_VERSIONS.estimator },
     trajectory_aligner: {
       componentKey: ESTIMATE_COMPONENT_KEYS.alignment,
-      version: "trajectory_alignment_v1",
+      version: ESTIMATE_COMPONENT_VERSIONS.alignment,
     },
     finding_rules: {
       componentKey: ESTIMATE_COMPONENT_KEYS.findingRules,
-      version: "finding_rules_v1",
+      version: ESTIMATE_COMPONENT_VERSIONS.findingRules,
     },
-    renderer: { componentKey: ESTIMATE_COMPONENT_KEYS.renderer, version: "template_renderer_v1" },
+    renderer: { componentKey: ESTIMATE_COMPONENT_KEYS.renderer, version: ESTIMATE_COMPONENT_VERSIONS.renderer },
   },
 });
 const dataset = await registerValidationDataset(sql, {

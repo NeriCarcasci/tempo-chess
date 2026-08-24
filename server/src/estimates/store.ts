@@ -58,6 +58,26 @@ export interface RegisteredEstimateVersions {
   phaseVersionId: string;
 }
 
+/**
+ * The version each component registers under.
+ *
+ * Exported because gates need to name a role's version when they compose a
+ * recipe, and they were naming it with a string literal. That is a copy of a
+ * constant, and it drifted the moment one of these was bumped: the journey gate
+ * asked for `finding_rules_v1` and `template_renderer_v1` for as long as the
+ * policies had been at v2, so a gate meant to prove the journey works instead
+ * failed on its own stale spelling. A reader changing a version should not have
+ * to know which gates mention it.
+ */
+export const ESTIMATE_COMPONENT_VERSIONS = {
+  estimator: ESTIMATOR_POLICY.version,
+  alignment: ALIGNMENT_POLICY.version,
+  findingRules: FINDING_POLICY.version,
+  correction: "benjamini_hochberg_v1",
+  renderer: "template_renderer_v2",
+  phase: PHASE_CLASSIFIER_VERSION,
+} as const;
+
 /** Register the components this epic's output is attributed to. */
 export async function registerEstimateComponents(sql: Sql): Promise<RegisteredEstimateVersions> {
   const catalogue: [string, string, string, string, string][] = [
@@ -153,7 +173,7 @@ export async function registerEstimateComponents(sql: Sql): Promise<RegisteredEs
   });
   const correction = await registerComponentVersion(sql, {
     componentKey: ESTIMATE_COMPONENT_KEYS.correction,
-    version: "benjamini_hochberg_v1",
+    version: ESTIMATE_COMPONENT_VERSIONS.correction,
     implementationSha256: hash("correction", { q: FINDING_POLICY.falseDiscoveryRate }),
     configuration: { falseDiscoveryRate: FINDING_POLICY.falseDiscoveryRate },
     deterministic: true,
@@ -164,7 +184,7 @@ export async function registerEstimateComponents(sql: Sql): Promise<RegisteredEs
     // sample, the location and one example moment into the sentence. A new
     // version rather than an edit: an explanation stored last month has to keep
     // pointing at the renderer that actually produced it.
-    version: "template_renderer_v2",
+    version: ESTIMATE_COMPONENT_VERSIONS.renderer,
     implementationSha256: hash("renderer", { templates: "v2" }),
     configuration: { templates: "v2", model: null },
     deterministic: true,

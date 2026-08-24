@@ -144,8 +144,19 @@ try {
   // token verification, actor identity, cross-subject authorization, cache and
   // log hygiene — not about the beta gate, which has its own check. Without
   // this the whole section reads 403 and proves nothing it is named for.
+  //
+  // Approved over the admin connection rather than the gate's own, which runs
+  // as `forma_api` and deliberately holds no grant on `state`: an approval is
+  // an operator action and the API cannot perform one on itself. That missing
+  // grant is a thing the least-privilege gates assert, so borrowing it here
+  // would quietly weaken them.
   await get(`/v1/gate/subjects/${ACTOR}`, { authorization: `Bearer ${await token()}` });
-  await sql`update app.access_requests set state = 'approved' where user_id = ${ACTOR}::uuid`;
+  const operator = postgres(harness.db.adminUrl, { max: 1, prepare: false, onnotice: () => {} });
+  try {
+    await operator`update app.access_requests set state = 'approved' where user_id = ${ACTOR}::uuid`;
+  } finally {
+    await operator.end({ timeout: 5 });
+  }
 
   await report.check("a valid token reaches the handler", async () => {
     const response = await get(`/v1/gate/subjects/${ACTOR}`, {
