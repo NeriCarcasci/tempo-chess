@@ -46,6 +46,12 @@ const report = new GateReport("Journey gate: linked account to drill");
  * Real NDJSON over real HTTP: the adapter's parsing, its `since` cursor and its
  * ascending sort are part of what this gate is proving, and a stubbed fetch
  * would prove none of them.
+ *
+ * `moves` is SAN because that is what Lichess puts on this endpoint. It used to
+ * be UCI here, which stopped matching the day the adapter was corrected to
+ * replay SAN — every game then failed to parse, was dropped before it could
+ * even be counted as a rejection, and the sync reported nothing accepted. A
+ * fixture that claims to be the shape a provider sends has to actually be it.
  */
 const PLAYED_AT = Date.UTC(2026, 6, 1, 12, 0, 0);
 const GAMES = [
@@ -58,7 +64,7 @@ const GAMES = [
     lastMoveAt: PLAYED_AT + 300_000,
     status: "resign",
     winner: "black",
-    moves: "e2e4 e7e5 g1f3 b8c6 f1c4 g8f6 f3g5 d7d5 e4d5 c6d4",
+    moves: "e4 e5 Nf3 Nc6 Bc4 Nf6 Ng5 d5 exd5 Nd4",
     clock: { initial: 300, increment: 0 },
     players: {
       white: { user: { name: "ncarcasc" }, rating: 1500, ratingDiff: -8 },
@@ -74,7 +80,7 @@ const GAMES = [
     lastMoveAt: PLAYED_AT + 3_900_000,
     status: "mate",
     winner: "white",
-    moves: "d2d4 d7d5 c2c4 e7e6 b1c3 g8f6 c1g5 f8e7 e2e3 e8g8",
+    moves: "d4 d5 c4 e6 Nc3 Nf6 Bg5 Be7 e3 O-O",
     clock: { initial: 300, increment: 0 },
     players: {
       white: { user: { name: "ncarcasc" }, rating: 1492, ratingDiff: 9 },
