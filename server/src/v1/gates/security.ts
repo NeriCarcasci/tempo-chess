@@ -138,6 +138,15 @@ try {
     assert.equal((await body(response)).code, "AUTH_REQUIRED");
   });
 
+  // The kernel auto-provisions an account on first authenticated request and
+  // then refuses it, because a new account is not approved and closed beta is
+  // enforced before any route logic runs. This gate is about the auth kernel —
+  // token verification, actor identity, cross-subject authorization, cache and
+  // log hygiene — not about the beta gate, which has its own check. Without
+  // this the whole section reads 403 and proves nothing it is named for.
+  await get(`/v1/gate/subjects/${ACTOR}`, { authorization: `Bearer ${await token()}` });
+  await sql`update app.access_requests set state = 'approved' where user_id = ${ACTOR}::uuid`;
+
   await report.check("a valid token reaches the handler", async () => {
     const response = await get(`/v1/gate/subjects/${ACTOR}`, {
       authorization: `Bearer ${await token()}`,

@@ -110,7 +110,12 @@
     "concepts:performance": "tsx src/analysis/concepts/gates/performance.ts",
     "concepts:shadow": "tsx src/analysis/concepts/gates/shadow.ts",
     "concepts:gate": "tsx src/analysis/concepts/gates/gate.ts",
-    "concepts:backfill": "tsx src/analysis/concepts/backfill.ts"
+    "concepts:backfill": "tsx src/analysis/concepts/backfill.ts",
+    "ci:unit": "npm run security:unit && npm run platform:unit && npm run e05:unit && npm run v1:unit && npm run identity:unit && npm run positions:unit && npm run artifacts:unit && npm run sync:unit && npm run sync:pagination && npm run ingest:test && npm run backfill:unit && npm run engine:unit && npm run analysis:unit && npm run models:unit && npm run rating:unit && npm run rating:analyse && npm run rating:calibration && npm run estimates:unit && npm run onboarding:unit && npm run goals:unit && npm run practice:unit && npm run entitlements:unit && npm run public:unit && npm run ops:unit && npm run openings:test && npm run benchmark:test",
+    "ci:artifacts": "npm run v1:openapi:check && npm run deploy:check",
+    "ci:containment": "npm run security:migration && npm run security:forbidden-scope && npm run pipeline:test",
+    "ci:database": "npm run v1:migration && npm run v1:integration && npm run v1:security && npm run engine:migration && npm run engine:integration && npm run models:migration && npm run models:integration && npm run models:security && npm run estimates:migration && npm run estimates:integration && npm run estimates:security && npm run onboarding:migration && npm run onboarding:security && npm run goals:migration && npm run practice:migration && npm run entitlements:migration && npm run public:migration && npm run public:security && npm run public:integration && npm run openings:integration",
+    "ci:offline": "npm run typecheck && npm run build && npm run ci:unit && npm run ci:artifacts && npm run ci:containment"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.0.0",

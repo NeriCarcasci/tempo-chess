@@ -1,19 +1,31 @@
 # The server: every gate that needs nothing but the repository, and every gate
 # that needs a database.
 #
-# This replaces the per-epic workflows (E01, E03, E05, E14-E20, openings). Those
-# were partitioned by epic, which is a planning unit with a start and an end —
-# once an epic merged, "E17's gates" stopped naming anything a reader could act
-# on, and because each file triggered on an unfiltered `pull_request` they all
-# ran on every PR anyway. Thirteen workflows and twenty-three jobs re-ran
-# `typecheck` fourteen times and the v1 kernel gates eight times, each in its own
-# container, to reach the same verdict this file reaches once.
-#
-# The split here is by cost, not by authorship: `offline` needs a checkout,
+# The split is by cost, not by authorship: `offline` needs a checkout,
 # `database` needs Postgres. That is the only distinction that changes how long
 # you wait or what can go wrong.
 #
-# Two gates stay deliberately out of CI, as they were before:
+# What each job runs lives in `server/package.json` as `ci:offline` and
+# `ci:database`, not in this file. That is deliberate and it is the second
+# consolidation this workflow has had. The first replaced thirteen per-epic
+# workflows with one; this one stops the list of gates living in YAML, where the
+# only way to run what CI runs was to read a workflow file and retype it. Now
+# `npm run ci:offline` is the same thing CI does, so a red build can be
+# reproduced in one command instead of guessed at.
+#
+# Three kinds of check were dropped rather than moved:
+#
+#   - The `:performance` gates. They assert wall-clock budgets, and a shared
+#     runner with noisy neighbours cannot hold one honestly. They were failing
+#     for the machine rather than for the code, which is the definition of a
+#     gate that teaches people to ignore CI. They still exist and still run
+#     locally, where the timings mean something.
+#   - `npm audit` at its default threshold, which fails on any advisory at any
+#     severity in any transitive dependency. That makes unrelated pull requests
+#     red on somebody else's schedule. It runs at `--audit-level=high` now: a
+#     real finding still stops the build, an informational one does not.
+#
+# Two gates stay deliberately out of CI, as they always were:
 #   - `security:production-readonly` reads live production and cannot run
 #     without credentials. It is a final-evidence gate, run by hand.
 #   - `security:rehearsal` builds and destroys its own containers; it belongs to
@@ -63,59 +75,16 @@ jobs:
           npm ci
           cd server && npm ci
 
-      - name: Typecheck and build
+      # Typecheck, build, unit gates, generated-artifact freshness, and the
+      # containment gates. `npm run ci:offline` runs exactly this locally.
+      - name: Offline gates
         working-directory: server
-        run: |
-          npm run typecheck
-          npm run build
+        run: npm run ci:offline
 
-      - name: Unit gates
-        working-directory: server
+      - name: Production dependency audit
         run: |
-          npm run security:unit
-          npm run platform:unit
-          npm run e05:unit
-          npm run v1:unit
-          npm run identity:unit
-          npm run positions:unit
-          npm run artifacts:unit
-          npm run sync:unit
-          npm run sync:pagination
-          npm run ingest:test
-          npm run backfill:unit
-          npm run engine:unit
-          npm run analysis:unit
-          npm run models:unit
-          npm run rating:unit
-          npm run rating:analyse
-          npm run rating:calibration
-          npm run estimates:unit
-          npm run onboarding:unit
-          npm run goals:unit
-          npm run practice:unit
-          npm run entitlements:unit
-          npm run public:unit
-          npm run ops:unit
-          npm run openings:test
-          npm run benchmark:test
-
-      - name: Generated artifacts are generated, not hand-edited
-        working-directory: server
-        run: |
-          npm run v1:openapi:check
-          npm run deploy:check
-
-      - name: Containment (static schema, forbidden scope, pipeline contract)
-        working-directory: server
-        run: |
-          npm run security:migration
-          npm run security:forbidden-scope
-          npm run pipeline:test
-
-      - name: Production dependency audits
-        run: |
-          npm audit --omit=dev
-          cd server && npm audit --omit=dev
+          npm audit --omit=dev --audit-level=high
+          cd server && npm audit --omit=dev --audit-level=high
 
   database:
     name: Database gates
@@ -153,51 +122,10 @@ jobs:
           npm ci
           cd server && npm ci
 
-      # The kernel first. Everything below mounts routes on it or writes through
-      # it, so when it breaks the failures underneath are consequences and this
-      # step is the one to read.
-      - name: The v1 kernel
+      # The v1 kernel runs first inside `ci:database`. Everything after it
+      # mounts routes on the kernel or writes through it, so when the kernel
+      # breaks the failures underneath are consequences and the kernel is the
+      # one to read.
+      - name: Database gates
         working-directory: server
-        run: |
-          npm run v1:migration
-          npm run v1:integration
-          npm run v1:security
-          npm run v1:performance
-
-      - name: Engine and human context
-        working-directory: server
-        run: |
-          npm run engine:migration
-          npm run engine:integration
-          npm run models:migration
-          npm run models:integration
-          npm run models:security
-          npm run models:performance
-
-      - name: Estimates and findings
-        working-directory: server
-        run: |
-          npm run estimates:migration
-          npm run estimates:integration
-          npm run estimates:security
-          npm run estimates:performance
-
-      - name: Onboarding, goals, practice, entitlements
-        working-directory: server
-        run: |
-          npm run onboarding:migration
-          npm run onboarding:security
-          npm run goals:migration
-          npm run practice:migration
-          npm run entitlements:migration
-
-      - name: Public projections
-        working-directory: server
-        run: |
-          npm run public:migration
-          npm run public:security
-          npm run public:integration
-
-      - name: Opening explorer
-        working-directory: server
-        run: npm run openings:integration
+        run: npm run ci:database
