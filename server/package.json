@@ -42,6 +42,7 @@
     "e05:unit": "tsx src/platform/topology.test.ts",
     "deploy:render": "tsx src/platform/deploy/render.ts",
     "deploy:check": "tsx src/platform/deploy/render.ts --check",
+    "deploy:ship": "tsx src/platform/deploy/ship.ts",
     "identity:unit": "tsx src/identity/identity.test.ts",
     "identity:reconcile": "tsx src/identity/reconcile.ts",
     "artifacts:unit": "tsx src/artifacts/artifacts.test.ts",
