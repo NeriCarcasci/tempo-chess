@@ -23,7 +23,20 @@ import { parseSan } from "chessops/san";
 import { makeUci } from "chessops/util";
 import type { ProviderGameInput } from "./contract.js";
 
-export const LICHESS_API = process.env.LICHESS_API_URL ?? "https://lichess.org";
+/**
+ * Where the Lichess adapter fetches from.
+ *
+ * Read per call, not captured at module load. It was a `const`, which meant the
+ * override only applied if this module happened to be imported after the
+ * variable was set — and the journey gate sets it after its own static imports
+ * have already pulled this file in. So a gate written to serve its own NDJSON
+ * over loopback was calling the public API instead, getting nothing back for a
+ * username that only exists in its fixture, and failing every run on an empty
+ * sync. A function has no load order to get wrong.
+ */
+export function lichessApi(): string {
+  return process.env.LICHESS_API_URL ?? "https://lichess.org";
+}
 
 /**
  * How Forma identifies itself to a provider.
@@ -214,7 +227,7 @@ export const fetchLichessPage: ProviderFetch = async ({ username, since, limit }
   if (since) params.set("since", String(Number(since) + 1));
 
   const response = await fetch(
-    `${LICHESS_API}/api/games/user/${encodeURIComponent(username)}?${params}`,
+    `${lichessApi()}/api/games/user/${encodeURIComponent(username)}?${params}`,
     { headers: { Accept: "application/x-ndjson", "User-Agent": SYNC_USER_AGENT } },
   );
   // A 404 is never "you have no games" — an account with none answers 200 with
@@ -274,7 +287,7 @@ export const fetchLichessPage: ProviderFetch = async ({ username, since, limit }
 async function lichessAccountExists(username: string): Promise<boolean> {
   let response: Response;
   try {
-    response = await fetch(`${LICHESS_API}/api/user/${encodeURIComponent(username)}`, {
+    response = await fetch(`${lichessApi()}/api/user/${encodeURIComponent(username)}`, {
       headers: { Accept: "application/json", "User-Agent": SYNC_USER_AGENT },
     });
   } catch {

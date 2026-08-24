@@ -8,7 +8,22 @@ import {
   type Speed,
 } from "./types.js";
 
-const LICHESS_API = "https://lichess.org";
+/**
+ * Where the adapter fetches from.
+ *
+ * Overridable so a gate can point it at a loopback server and prove the real
+ * parsing, the real `since` cursor and the real ascending sort against NDJSON
+ * it controls. It was a bare constant, and the journey gate had been setting
+ * `LICHESS_API_URL` at a value nothing read — so a gate written to be hermetic
+ * was quietly calling the public API, getting nothing back for a username that
+ * is not its fixture, and failing on every run.
+ *
+ * Read per call rather than captured at import: the gate sets the variable
+ * after this module may already have loaded.
+ */
+function lichessApi(): string {
+  return process.env.LICHESS_API_URL ?? "https://lichess.org";
+}
 
 interface LichessPlayer {
   user?: { name?: string; id?: string };
@@ -165,7 +180,7 @@ export function normalizeLichessGame(
     white: numberOrNull(game.accuracy?.white ?? game.players.white.analysis?.accuracy),
     black: numberOrNull(game.accuracy?.black ?? game.players.black.analysis?.accuracy),
   };
-  const sourceUrl = `${LICHESS_API}/${game.id}`;
+  const sourceUrl = `${lichessApi()}/${game.id}`;
   const playedAt = game.createdAt == null ? null : new Date(game.createdAt);
   const result = !game.winner ? "draw" : game.winner === color ? "win" : "loss";
   const timeControl = game.clock?.initial != null && game.clock?.increment != null
@@ -225,7 +240,7 @@ export async function* fetchLichessGames(username: string, opts: LichessFetchOpt
   });
   if (opts.max) params.set("max", String(opts.max));
   if (opts.since) params.set("since", String(opts.since));
-  const res = await fetch(`${LICHESS_API}/api/games/user/${encodeURIComponent(username)}?${params}`, {
+  const res = await fetch(`${lichessApi()}/api/games/user/${encodeURIComponent(username)}?${params}`, {
     headers: { Accept: "application/x-ndjson", ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}) },
   });
   if (!res.ok) throw new Error(`Lichess API ${res.status} for "${username}"`);
