@@ -203,6 +203,17 @@ export async function storeEvaluation(
     if (!row) return null;
 
     for (const candidate of dedupeCandidates(result.candidates)) {
+      // The `pv` column is `jsonb not null` with a shape check, so a line that
+      // is not an array is refused by the database with a constraint name and
+      // nothing else — no column value, no candidate, no position. That is a
+      // hard failure to place from a log. Say what arrived instead.
+      if (!Array.isArray(candidate.pv)) {
+        throw new Error(
+          `engine candidate ${candidate.rank} for ${request.corePositionId} has a ` +
+            `${typeof candidate.pv} principal variation, not an array: ` +
+            JSON.stringify(candidate.pv),
+        );
+      }
       const value = expectedScore({
         scoreCp: candidate.evalCp ?? null,
         mateIn: candidate.mate ?? null,
