@@ -196,7 +196,20 @@ export const MOMENT_POLICY = {
 /** The method's identity. Everything above is hashed into it. */
 export const RATING_METHOD = {
   key: "game_rating",
-  version: "1",
+  /**
+   * Two, because what the method computes changed.
+   *
+   * The hash below covers the policy constants, which is most of the method but
+   * not all of it: the likelihood extraction is code, and code cannot be hashed
+   * into a version automatically. When its behaviour changes materially the
+   * version has to be moved by hand, and this is one of those times. Plies whose
+   * move the model did not rank used to be discarded and are now estimated from
+   * a bound, which changes the strength estimate on most club games.
+   *
+   * Moving it is also what lets a game already rated under version one be rated
+   * again, since every key in this feature carries the method hash.
+   */
+  version: "2",
 } as const;
 
 export function ratingMethodHash(): string {
