@@ -262,8 +262,17 @@
     justify-items: start;
   }
 
-  .rate-replay { display: grid; gap: 0.6rem; }
+  .rate-replay { display: grid; gap: 0.6rem; width: 100%; min-width: 0; }
 
+  /* Self-contained on purpose.
+     
+     This board first borrowed the marketing hero's `.hb-*` rules, which was a
+     mistake twice over: the square colours live in custom properties declared
+     on a `.hb` wrapper this markup does not have, so every square resolved to
+     nothing and the board rendered white, and the grid relied on a positioned
+     ancestor it also did not have, so sixty-four cells laid themselves out
+     across the page and pushed the whole document sideways. Inheriting a
+     component's look means inheriting its container too. */
   .rate-replay .hb-board {
     position: relative;
     width: 100%;
@@ -272,6 +281,21 @@
     overflow: hidden;
     box-shadow: var(--shadow-soft);
   }
+
+  .rate-replay .hb-grid {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+  }
+
+  /* The product's board tokens, which respect a player's chosen board. */
+  .rate-replay .hb-sq { background: var(--color-board-light); }
+  .rate-replay .hb-sq.is-dark { background: var(--color-board-dark); }
+
+  .rate-replay .hb-slot { position: absolute; width: 12.5%; height: 12.5%; display: block; }
+  .rate-replay .hb-piece { width: 100%; height: 100%; display: block; }
 
   .rate-replay-move {
     font-family: var(--font-mono);
@@ -371,7 +395,7 @@
 
   /* The board on a finished rating. Capped and centred rather than stretched:
      a chessboard the width of a results panel is a chessboard nobody reads. */
-  .rate-replay-wrap { max-width: 24rem; }
+  .rate-replay-wrap { max-width: 24rem; margin-inline: auto; }
 
   .rate-step {
     border: none;
