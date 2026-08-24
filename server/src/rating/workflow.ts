@@ -144,7 +144,31 @@ export async function inflightRatings(sql: Sql): Promise<number> {
   return Number(row?.count ?? 0);
 }
 
+/** The game somebody asked about, read back by the engine and the assembler. */
+export interface Submission {
+  pgn: string;
+  whiteRating: number | null;
+  blackRating: number | null;
+}
+
+export async function readSubmission(sql: Sql, gameKey: string): Promise<Submission | null> {
+  const [row] = await sql<{ pgn: string; white_rating: number | null; black_rating: number | null }[]>`
+    select pgn, white_rating, black_rating from analysis.game_rating_submissions
+    where game_key = ${gameKey}`;
+  return row
+    ? { pgn: row.pgn, whiteRating: row.white_rating, blackRating: row.black_rating }
+    : null;
+}
+
 export async function startRating(sql: Sql, request: RatingRequest): Promise<{ workflowId: string }> {
+  // The game goes in a table and the work item carries a key. A work item
+  // payload is capped at four kilobytes, because the ledger routes work rather
+  // than carrying cargo, and a real annotated export is bigger than that.
+  await sql`
+    insert into analysis.game_rating_submissions (game_key, pgn, white_rating, black_rating)
+    values (${request.gameKey}, ${request.pgn}, ${request.whiteRating}, ${request.blackRating})
+    on conflict (game_key) do nothing`;
+
   try {
     const workflow = await sql.begin(async (tx) =>
       insertWorkflow(tx as unknown as Sql, {
@@ -159,13 +183,7 @@ export async function startRating(sql: Sql, request: RatingRequest): Promise<{ w
             // One rating per game and method, however many people paste it.
             idempotencyKey: `rating:${PREPARE_TASK}:${request.gameKey}:${ratingMethodHash()}`,
             inputRef: `gameRating:${request.gameKey}`,
-            payload: {
-              gameKey: request.gameKey,
-              pgn: request.pgn,
-              whiteRating: request.whiteRating,
-              blackRating: request.blackRating,
-              ownerProfileId: request.ownerProfileId,
-            },
+            payload: { gameKey: request.gameKey, ownerProfileId: request.ownerProfileId },
             timeoutSeconds: 900,
           },
         ],
@@ -187,15 +205,14 @@ export async function startRating(sql: Sql, request: RatingRequest): Promise<{ w
 
 interface PreparePayload {
   gameKey: string;
-  pgn: string;
-  whiteRating: number | null;
-  blackRating: number | null;
-  ownerProfileId: string;
+  ownerProfileId: string | null;
 }
 
 export async function prepareRating(context: WorkContext, sql: Sql): Promise<WorkResult> {
   const payload = context.item.payload as unknown as PreparePayload;
-  const game = parsePgn(payload.pgn);
+  const submission = await readSubmission(sql, payload.gameKey);
+  if (!submission) throw new Error("the submitted game is missing");
+  const game = parsePgn(submission.pgn);
   if (game.moves.length === 0) throw new Error(game.warning ?? "that did not parse as a game");
   const moves = game.moves.slice(0, ANALYSIS_BUDGET.maxPlies);
 
@@ -230,8 +247,8 @@ export async function prepareRating(context: WorkContext, sql: Sql): Promise<Wor
       game_key, method_hash, workflow_id, plan, deep, pgn, white_rating, black_rating
     ) values (
       ${payload.gameKey}, ${ratingMethodHash()}, ${context.item.workflowId},
-      ${jsonParam(plan)}, ${jsonParam(deep)}, ${payload.pgn},
-      ${payload.whiteRating}, ${payload.blackRating}
+      ${jsonParam(plan)}, ${jsonParam(deep)}, ${submission.pgn},
+      ${submission.whiteRating}, ${submission.blackRating}
     )
     on conflict (game_key, method_hash) do nothing`;
 

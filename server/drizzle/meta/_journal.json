@@ -330,6 +330,13 @@
       "when": 1787839200000,
       "tag": "0044_game_rating_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1787925600000,
+      "tag": "0045_game_rating_submissions",
+      "breakpoints": true
     }
   ]
 }
