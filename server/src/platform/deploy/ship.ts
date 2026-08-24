@@ -63,11 +63,16 @@ if (!revision) {
   process.exit(2);
 }
 
+/** Re-check what is serving without paying for another build. */
+const verifyOnly = process.argv.includes("--verify-only");
+
 const tag = `${REPO}/forma:${revision}`;
 const services = DEPLOYMENTS.filter(servesBaseImage);
 
-console.log(`building ${tag}`);
-gcloud(["builds", "submit", "--region", REGION, "--tag", tag], true);
+if (!verifyOnly) {
+  console.log(`building ${tag}`);
+  gcloud(["builds", "submit", "--region", REGION, "--tag", tag], true);
+}
 
 // The digest, not the tag. A tag can be moved; a digest is the thing that was
 // tested, which is the promotion plan's own rule.
@@ -78,7 +83,7 @@ const digest = gcloud(
 console.log(`digest ${digest}`);
 console.log("");
 
-for (const service of services) {
+for (const service of verifyOnly ? [] : services) {
   console.log(`  ${service.name}`);
   gcloud(["run", "deploy", service.name, "--region", REGION, "--image", digest], true);
   // Always, not only when a tag pin is suspected: the cost is one call and the
@@ -101,13 +106,17 @@ for (const service of services) {
       "--format=value(status.traffic.filter(\"percent=100\").extract(\"revisionName\"))",
     ],
     true,
-  );
+  )
+    // gcloud renders a filtered extract as a nested list, so `[['name']]`
+    // reaches us where a bare revision name was meant.
+    .replace(/[[\]']/g, "")
+    .trim();
   const image = gcloud(
     [
       "run",
       "revisions",
       "describe",
-      serving.trim(),
+      serving,
       "--region",
       REGION,
       "--format=value(spec.containers[0].image)",
@@ -116,7 +125,7 @@ for (const service of services) {
   );
   const ok = image.trim() === digest;
   if (!ok) drifted += 1;
-  console.log(`    ${ok ? "ok  " : "DRIFT"} ${service.name.padEnd(18)} ${serving.trim()}`);
+  console.log(`    ${ok ? "ok  " : "DRIFT"} ${service.name.padEnd(18)} ${serving}`);
 }
 
 if (drifted > 0) {
