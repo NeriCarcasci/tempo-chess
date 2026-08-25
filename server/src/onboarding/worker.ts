@@ -450,10 +450,17 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
     pendingAnalysisCount(tx, run.subject_id),
   );
   if (pending > 0) {
+    // Two minutes between looks, rather than the ledger's default backoff.
+    // This is a wait, not a failure, and the ledger has no other way to express
+    // one -- so the interval is the thing that decides how much dead time sits
+    // between the last game finishing and the report starting. Two minutes is
+    // short enough not to be felt and long enough that a run analysing for the
+    // better part of an hour does not spend its attempts in the first ten.
     throw new WorkFailure(
       "transient",
       "analysis_pending",
       `${pending} of this subject's games have not been analysed yet`,
+      120,
     );
   }
 

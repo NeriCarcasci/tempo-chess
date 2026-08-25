@@ -29,6 +29,7 @@
 
 import type { Sql } from "postgres";
 import { createWorkflow, type CreateWorkflowInput } from "../ops/ledger.js";
+import { MAX_MAX_ATTEMPTS } from "../ops/contract.js";
 import { ACCOUNT_SYNC_TASK } from "../sync/worker.js";
 import { COVERAGE_POLICY } from "./contract.js";
 import type { CohortDefinition } from "../analysis/contract.js";
@@ -151,6 +152,23 @@ export async function planOnboardingWork(
       // Every sync first. A snapshot frozen while a sync is still landing games
       // is a baseline about a partial archive, which reads as a worse player.
       dependsOn: accounts.map((_, index) => index),
+      /**
+       * This step waits, and waiting costs an attempt.
+       *
+       * `prepareExamination` holds the run until every game has been analysed,
+       * and the only way the ledger lets an item wait is to fail transiently:
+       * the attempt is counted at claim, so five refusals is all the patience
+       * the default allows. On the run that found this, the archive synced in
+       * ninety seconds, materialization took eight minutes, and prepare
+       * exhausted its five attempts and dead-lettered **three seconds before
+       * the first analysis workflow was planned** -- taking report, examine and
+       * advance with it as `dependency_failed`.
+       *
+       * The ceiling and the backoff below buy fifty minutes of waiting, which
+       * is the right order for a first report and still bounded: a run whose
+       * analysis never arrives fails rather than waiting for ever.
+       */
+      maxAttempts: MAX_MAX_ATTEMPTS,
     },
     {
       taskType: EXAMINATION_REPORT_TASK,
