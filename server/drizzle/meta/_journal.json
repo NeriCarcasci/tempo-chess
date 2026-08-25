@@ -337,6 +337,13 @@
       "when": 1787925600000,
       "tag": "0045_game_rating_submissions",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1787929200000,
+      "tag": "0046_the_report_can_read_the_opening_book",
+      "breakpoints": true
     }
   ]
 }
