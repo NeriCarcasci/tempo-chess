@@ -7,7 +7,7 @@ import { buildSubjectReport } from "../estimates/worker.js";
 import { currentRecipeFor } from "../analysis/validation.js";
 import { planRun } from "../analysis/runs.js";
 import { freezeSubjectSnapshot, registerCohortVersion } from "../analysis/snapshots.js";
-import { pendingAnalysisCount } from "../analysis/planner.js";
+import { pendingMaterializationCount, snapshotAnalysisPending } from "../analysis/planner.js";
 import { registerHandler, type WorkContext, type WorkResult } from "../ops/handlers.js";
 import { WorkFailure } from "../ops/retry.js";
 import { withActor } from "../db/actor.js";
@@ -427,39 +427,33 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
     };
   }
 
-  // Wait for the games to be looked at. Freezing a snapshot over games nothing
-  // has analysed produces a report saying the person is a beginner at
-  // everything, which is not a truthful "we do not know yet" — it is a wrong
-  // answer with a confident face. A transient failure is how an item waits:
-  // the ledger backs it off and the ops sweep does the work in between.
-  //
-  // **Bound to the actor, and that is what makes the count real.** It read the
-  // unbound connection, and `chess.subject_games` is RLS-protected: with no
-  // `private.current_actor_id()` set, every row of every subject is invisible,
-  // so the count came back 0 no matter how many games were waiting. The wait
-  // above could therefore never fire. On the run that found this, the sync
-  // landed 333 games at 20:17:17 and this step froze the snapshot 47 seconds
-  // later with none of them analysed — then the report built on that empty
-  // snapshot threw, five times, and took the two steps after it down with it.
-  //
-  // The same mistake is documented immediately below for the *writes* in this
-  // function, which were refused by their own policy until they were wrapped.
-  // The read was left outside, and a read denied by RLS does not fail — it
-  // returns nothing, which here is indistinguishable from good news.
+  /*
+   * Wait for the games to be *rebuilt*, not analysed.
+   *
+   * Freezing a snapshot needs a published materialization per game, because
+   * `freezeSubjectSnapshot` joins one -- but it needs nothing to have been
+   * through the engine. Waiting for analysis here was what forced the entire
+   * archive to be analysed: with no snapshot in existence there was nothing to
+   * scope the sweep to, so it swept every game the subject owned, and this step
+   * then waited for all of it. Three hundred and thirty three games were
+   * analysed so that a report could read two hundred.
+   *
+   * Freezing first inverts it. The snapshot names the cohort, the sweep plans
+   * analysis only for games a snapshot wants, and the report waits for those.
+   * The games outside the cohort are never in anybody's way.
+   *
+   * Bound to the actor for the same reason the writes below are: RLS hides
+   * `chess.subject_games` entirely from an unbound connection, so an unbound
+   * count is zero however many games are waiting.
+   */
   const pending = await withActor(sql, ownerProfileId, (tx) =>
-    pendingAnalysisCount(tx, run.subject_id),
+    pendingMaterializationCount(tx, run.subject_id),
   );
   if (pending > 0) {
-    // Two minutes between looks, rather than the ledger's default backoff.
-    // This is a wait, not a failure, and the ledger has no other way to express
-    // one -- so the interval is the thing that decides how much dead time sits
-    // between the last game finishing and the report starting. Two minutes is
-    // short enough not to be felt and long enough that a run analysing for the
-    // better part of an hour does not spend its attempts in the first ten.
     throw new WorkFailure(
       "transient",
-      "analysis_pending",
-      `${pending} of this subject's games have not been analysed yet`,
+      "materialization_pending",
+      `${pending} of this subject's games have not been rebuilt yet`,
       120,
     );
   }
@@ -608,8 +602,19 @@ export async function buildExaminationReport(
     throw new WorkFailure("invalid_input", "invalid_payload", "the payload names no run");
   }
 
-  const [run] = await sql<{ examination_run_id: string | null; status: string }[]>`
-    select examination_run_id, status from coaching.onboarding_runs where id = ${runId}
+  const [workflow] = await sql<{ owner_profile_id: string | null }[]>`
+    select owner_profile_id from ops.workflows where id = ${context.item.workflowId}
+  `;
+  if (!workflow?.owner_profile_id) {
+    throw new WorkFailure("invalid_input", "unowned_workflow", "the workflow names no owner");
+  }
+  const ownerProfileId = workflow.owner_profile_id;
+
+  const [run] = await sql<
+    { examination_run_id: string | null; status: string; subject_data_snapshot_id: string | null }[]
+  >`
+    select examination_run_id, status, subject_data_snapshot_id
+    from coaching.onboarding_runs where id = ${runId}
   `;
   if (!run) throw new WorkFailure("invalid_input", "unknown_run", "no such onboarding run");
   if (run.status !== "active") {
@@ -621,6 +626,30 @@ export async function buildExaminationReport(
       "run_not_prepared",
       "the onboarding run has no analysis run to report on",
     );
+  }
+
+  /*
+   * The engine wait lives here now.
+   *
+   * `prepare` freezes the snapshot as soon as the games are rebuilt, so by the
+   * time this runs the cohort is named and the sweep is analysing exactly it.
+   * This is the step that cannot proceed on half-read evidence: a report over a
+   * snapshot whose games have not been through the engine says the player is a
+   * beginner at everything, which is not a truthful "we do not know yet" -- it
+   * is a wrong answer with a confident face.
+   */
+  if (run.subject_data_snapshot_id) {
+    const waiting = await withActor(sql, ownerProfileId, (tx) =>
+      snapshotAnalysisPending(tx, run.subject_data_snapshot_id!),
+    );
+    if (waiting > 0) {
+      throw new WorkFailure(
+        "transient",
+        "analysis_pending",
+        `${waiting} of this report's games have not been analysed yet`,
+        120,
+      );
+    }
   }
 
   return buildSubjectReport(

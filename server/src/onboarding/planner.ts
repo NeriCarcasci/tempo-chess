@@ -177,6 +177,10 @@ export async function planOnboardingWork(
       idempotencyKey: `onboarding:${input.runId}:report`,
       queue: "analysis" as const,
       dependsOn: [prepareIndex],
+      // The engine wait moved here when the snapshot started being frozen
+      // first, so this is the step that now spends attempts waiting. Same
+      // ceiling and the same reasoning as prepare above.
+      maxAttempts: MAX_MAX_ATTEMPTS,
     },
     {
       taskType: EXAMINATION_TASK,

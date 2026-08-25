@@ -69,6 +69,19 @@ export async function planPendingGameAnalyses(
     where sg.status = 'included'
       and sg.latest_replay_revision_id is not null
       and s.owner_user_id is not null
+      -- Only games some frozen snapshot actually reads.
+      --
+      -- This swept every game the subject owned, and a baseline reads the
+      -- cohort's newest two hundred. On the archive that measured it, three
+      -- hundred and thirty three games were analysed so a report could read two
+      -- hundred: a third of the engine time, the transitions, the concepts and
+      -- the practical context all spent on games nothing would ever open. The
+      -- work is not wasted for ever -- a later snapshot that includes them
+      -- plans them then -- but it is not work the first report should wait on.
+      and exists (
+        select 1 from analysis.subject_data_snapshot_games sdg
+        where sdg.subject_game_id = sg.id
+      )
       and (${input.subjectId ?? null}::uuid is null or sg.subject_id = ${input.subjectId ?? null}::uuid)
       and not exists (
         select 1 from analysis.runs r
@@ -161,6 +174,66 @@ export async function pendingAnalysisCount(sql: Sql, subjectId: string): Promise
  * has not been turned into positions cannot be screened, so planning its
  * analysis would only produce an item that fails.
  */
+/**
+ * How many of a subject's games have not been turned into positions yet.
+ *
+ * `prepare` waits on this rather than on analysis. Freezing a snapshot needs a
+ * published materialization per game -- `freezeSubjectSnapshot` joins one -- but
+ * it does not need a single move to have been through the engine. Waiting for
+ * analysis before freezing was what forced the whole archive to be analysed:
+ * with no snapshot in existence there was nothing to scope the sweep to, so it
+ * swept everything, and the run then waited for all of it.
+ *
+ * Freezing first inverts that. The snapshot names the cohort, the sweep plans
+ * analysis for the cohort, and the report waits for the cohort -- so the games
+ * outside it are never in anybody's way.
+ */
+export async function pendingMaterializationCount(sql: Sql, subjectId: string): Promise<number> {
+  const [row] = await sql<{ count: string }[]>`
+    select count(*)::text as count
+    from chess.subject_games sg
+    where sg.subject_id = ${subjectId}
+      and sg.status = 'included'
+      and sg.latest_replay_revision_id is not null
+      and not exists (
+        select 1 from chess.materialization_runs m
+        where m.replay_revision_id = sg.latest_replay_revision_id
+          and m.state = 'published'
+      )
+      -- A revision whose materialization has permanently failed will never
+      -- produce one, and blocking on it would trade a partial baseline for no
+      -- baseline at all.
+      and not exists (
+        select 1 from chess.materialization_runs m
+        where m.replay_revision_id = sg.latest_replay_revision_id
+          and m.state = 'failed'
+      )
+  `;
+  return Number(row?.count ?? 0);
+}
+
+/**
+ * How many of a snapshot's games still have no successful analysis.
+ *
+ * Scoped to the snapshot rather than to the subject, which is the whole point
+ * of freezing first: the report waits for the cohort it will actually read and
+ * not for every game the archive happens to contain.
+ */
+export async function snapshotAnalysisPending(sql: Sql, snapshotId: string): Promise<number> {
+  const [row] = await sql<{ count: string }[]>`
+    select count(*)::text as count
+    from analysis.subject_data_snapshot_games sdg
+    where sdg.snapshot_id = ${snapshotId}
+      and not exists (
+        select 1 from analysis.runs r
+        where r.subject_game_id = sdg.subject_game_id
+          and r.run_type = 'game_analysis'
+          and r.status = 'succeeded'
+      )
+  `;
+  return Number(row?.count ?? 0);
+}
+
 export async function planPendingMaterializations(
   sql: Sql,
   input: PlanPendingInput = {},
