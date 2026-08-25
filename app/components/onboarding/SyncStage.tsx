@@ -105,9 +105,18 @@ function useWorkflows(): { workflows: Workflow[]; error: unknown } {
     };
     void read();
     const timer = setInterval(() => void read(), WEIGH_MS);
+    // Ask immediately on tab return, exactly as `usePoll` does. Reads are
+    // skipped while hidden, so without this the person who comes back to check
+    // on the run stares at a bar up to a poll's width out of date -- the one
+    // moment the screen is being looked at is the one it was stalest.
+    const onVisible = (): void => {
+      if (document.visibilityState === "visible") void read();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 

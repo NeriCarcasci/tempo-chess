@@ -80,10 +80,18 @@ export async function ensureIdentity(actorId: string): Promise<string> {
 /**
  * Ask for the subject's estimates to be recomputed because its evidence changed.
  *
- * Enqueued inside the caller's transaction, so the workflow is committed with
- * the membership change or not at all: a link that exists without a
- * recalculation, or a recalculation for a link that rolled back, are both
- * states the ledger should never hold.
+ * **Currently a no-op, deliberately.** `subject_recalculate` has no handler on
+ * any deployment -- `ops/bootstrap.ts` registers nothing for it -- so every
+ * enqueue dead-lettered as `unsupported/no_handler` within a minute, once per
+ * link or unlink. Four dead workflows per onboarding, each reading as a failure
+ * in every audit of the ledger, for work that cannot happen. Creating work
+ * nothing can do is worse than not creating it: the intent is preserved here,
+ * and the enqueue comes back the day a handler exists.
+ *
+ * When it does: enqueue inside the caller's transaction, so the workflow is
+ * committed with the membership change or not at all -- a link that exists
+ * without a recalculation, or a recalculation for a link that rolled back, are
+ * both states the ledger should never hold.
  *
  * The idempotency key is the membership row and the transition, which is stable
  * per side effect: retrying the same request enqueues nothing, while linking,
@@ -258,7 +266,9 @@ export async function linkAccount(
         values (${subject.id}, ${created.id}, 'owner_declared', now())
         returning id
       `;
-      await requestRecalculation(tx, actorId, subject.id, membership.id, "opened");
+      // Recalculation deliberately not enqueued: no handler exists yet. See
+      // `requestRecalculation`.
+      void requestRecalculation;
     }
     return {
       existed: false,
@@ -300,7 +310,8 @@ export async function disconnectAccount(actorId: string, accountId: string): Pro
       returning id, subject_id
     `;
     for (const membership of closed) {
-      await requestRecalculation(tx, actorId, membership.subject_id, membership.id, "closed");
+      // Same as linking: no handler exists yet, so no work is created.
+      void requestRecalculation;
     }
     return true;
   });
