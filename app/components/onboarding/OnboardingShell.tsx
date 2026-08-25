@@ -18,6 +18,7 @@ export function OnboardingShell({
   title,
   sub,
   wide = false,
+  split,
   headingRef,
   children,
 }: {
@@ -25,10 +26,27 @@ export function OnboardingShell({
   sub?: ReactNode;
   /** For the report, which is a document rather than a form. */
   wide?: boolean;
+  /**
+   * A second panel beside the form, on the accent ground.
+   *
+   * Only the connect screen passes one, and only because that screen has
+   * something worth drawing: where the games come from. The card grows a
+   * column rather than the panel floating beside it, so the two halves share
+   * one radius and one shadow and read as a single object. Under 860px the
+   * column is dropped entirely rather than stacked — a decorative panel above
+   * a form is a screenful of scrolling before the first field.
+   */
+  split?: ReactNode;
   /** So a screen that swaps under the reader can move focus to the new title. */
   headingRef?: RefObject<HTMLHeadingElement | null>;
   children: ReactNode;
 }) {
+  const className = split
+    ? "auth-card auth-card-split"
+    : wide
+      ? "auth-card auth-card-wide"
+      : "auth-card";
+
   return (
     <main className="auth-shell">
       <a className="skip-link" href="#onboarding-main">
@@ -37,19 +55,18 @@ export function OnboardingShell({
       {/* `tabIndex={-1}` so the skip link actually moves focus. Without it the
           URL gains a fragment and focus stays where it was, which is the
           failure mode that makes skip links look like they work. */}
-      <div
-        className={wide ? "auth-card auth-card-wide" : "auth-card"}
-        id="onboarding-main"
-        tabIndex={-1}
-      >
-        <Link to="/" className="auth-brand" aria-label="Forma home">
-          <BrandLock size={24} />
-        </Link>
-        <h1 ref={headingRef} tabIndex={headingRef ? -1 : undefined}>
-          {title}
-        </h1>
-        {sub ? <p className="auth-sub">{sub}</p> : null}
-        {children}
+      <div className={className} id="onboarding-main" tabIndex={-1}>
+        <div className="auth-card-body">
+          <Link to="/" className="auth-brand" aria-label="Forma home">
+            <BrandLock size={24} />
+          </Link>
+          <h1 ref={headingRef} tabIndex={headingRef ? -1 : undefined}>
+            {title}
+          </h1>
+          {sub ? <p className="auth-sub">{sub}</p> : null}
+          {children}
+        </div>
+        {split}
       </div>
     </main>
   );

@@ -9,17 +9,13 @@ import { listWorkflows } from "../../lib/onboarding/api";
 import { waitLabel, workflowStageLabel } from "../../lib/onboarding/copy";
 import {
   boardsBelongHere,
-  currentSection,
   emptyTracker,
-  emptyWeights,
   etaLabel,
   observe,
-  overallPercent,
+  PHASE_LABEL,
+  readJourney,
   remainingAt,
-  SYNC_SECTIONS,
-  weighSections,
-  type SectionId,
-  type SectionWeights,
+  type Journey,
 } from "../../lib/onboarding/sync";
 import type { Workflow } from "../../lib/v1/types";
 
@@ -123,59 +119,48 @@ function useWorkflows(): { workflows: Workflow[]; error: unknown } {
 // ---------------------------------------------------------------------------
 
 /**
- * A console system update rather than one 0–100 sweep.
+ * One bar, because there is one thing worth measuring.
  *
- * Every segment carries its own measurement, so all three are readable at once:
- * importing full, analysing part way, writing not started. Splitting the work
- * up is also what keeps the figures honest — the examination fans out into a
- * workflow per game, and one continuous percentage over the lot of it walks
- * backwards every time a batch of them is planned.
+ * Three segments were tried and could not be made coherent: the phases do not
+ * have denominators at the same time, so the early ones showed confident
+ * percentages of a total about to grow by four orders of magnitude, and the
+ * later ones sat frozen behind a ratchet. See `sync.ts` for the full account.
+ *
+ * What this draws instead is the analysis, which is nearly all of the wall
+ * clock and the only part with a stable denominator — and it draws nothing at
+ * all where there is nothing to measure, which is what the stripe is for.
  */
-function SegmentedBar({
-  active,
-  fractions,
-  percent,
-}: {
-  active: SectionId;
-  fractions: Record<SectionId, number | null>;
-  /** The whole examination as one figure, for assistive technology. */
-  percent: number | null;
-}) {
+function JourneyBar({ journey, fraction }: { journey: Journey; fraction: number | null }) {
+  const unknown = fraction === null;
+  const percent = unknown ? null : Math.round(fraction * 100);
+
   return (
-    <div
-      className="sync-bar"
-      role="progressbar"
-      aria-label="Examination progress"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={percent ?? undefined}
-    >
-      {SYNC_SECTIONS.map((section) => {
-        const fraction = fractions[section.id];
-        // Indeterminate only where there is genuinely no denominator yet, and
-        // only for the section running now: an empty track further down the bar
-        // is the truth about a section that has not started.
-        const unknown = fraction === null && section.id === active;
-        return (
-          <div
-            key={section.id}
-            className={`sync-seg${section.id === active ? " is-active" : ""}${
-              fraction !== null && fraction >= 1 ? " is-done" : ""
-            }`}
-          >
-            <p className="cap sync-seg-label">{section.label}</p>
-            <div className="sync-seg-track">
-              <span
-                className={unknown ? "sync-seg-fill is-unknown" : "sync-seg-fill"}
-                style={unknown ? undefined : { width: `${Math.round((fraction ?? 0) * 100)}%` }}
-              />
-            </div>
-            <p className="sync-seg-figure">
-              {fraction === null ? "—" : `${Math.round(fraction * 100)}%`}
-            </p>
-          </div>
-        );
-      })}
+    <div className="sync-bar-one">
+      <div className="sync-bar-head">
+        <p className="cap sync-bar-phase">{PHASE_LABEL[journey.phase]}</p>
+        {/* The count is the concrete version of the same fact, and the one a
+            person actually feels. A percentage of an abstract work unit means
+            little; "412 of 4,317 games" means exactly what it says. */}
+        {journey.games.total > 0 ? (
+          <p className="sync-bar-count">
+            {journey.games.done.toLocaleString()} of {journey.games.total.toLocaleString()} games
+          </p>
+        ) : null}
+        <p className="sync-bar-figure">{percent === null ? "—" : `${percent}%`}</p>
+      </div>
+      <div
+        className="sync-bar-track"
+        role="progressbar"
+        aria-label="Examination progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent ?? undefined}
+      >
+        <span
+          className={unknown ? "sync-bar-fill is-unknown" : "sync-bar-fill"}
+          style={unknown ? undefined : { width: `${percent}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -296,6 +281,45 @@ function ReplayBoard({
 // The screen
 // ---------------------------------------------------------------------------
 
+/**
+ * The frame every onboarding screen shares.
+ *
+ * Exported because `/onboarding` renders its other states — the journey
+ * stopped, the diagnostic, no account connected — and they were using the old
+ * centred `auth-card` with a seven-step stage trail across the top. That put
+ * two different products on one route: a full-bleed progress screen while the
+ * work ran, and a small card listing CONNECTING / IMPORTING / ANALYSING the
+ * moment it stopped. The trail is gone and this is the one frame, so a failure
+ * arrives on the same screen the wait was on rather than replacing it.
+ */
+export function SyncShell({
+  title,
+  sub,
+  children,
+}: {
+  title: string;
+  sub: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <main className="sync-stage">
+      <a className="skip-link" href="#sync-main">
+        Skip to content
+      </a>
+      <div className="sync-inner" id="sync-main" tabIndex={-1}>
+        <header className="sync-head">
+          <Link to="/" className="auth-brand" aria-label="Forma home">
+            <BrandLock size={24} />
+          </Link>
+          <h1>{title}</h1>
+          <p className="sync-sub">{sub}</p>
+        </header>
+        {children}
+      </div>
+    </main>
+  );
+}
+
 export function SyncStage({
   runStage,
   workflow,
@@ -314,30 +338,36 @@ export function SyncStage({
   const still = useReducedMotion();
   const { workflows, error: weighError } = useWorkflows();
 
-  const weights: SectionWeights = useMemo(
-    () => (workflows.length === 0 ? emptyWeights() : weighSections(workflows)),
-    [workflows],
-  );
-  const section = currentSection(weights, runStage);
+  const journey = useMemo(() => readJourney(workflows, runStage), [workflows, runStage]);
 
   const [tracker, setTracker] = useState(emptyTracker);
   // Folded in when a reading lands, not on every render: a sample taken over no
   // elapsed work is a rate of infinity, and two of them in a row would put a
   // fabricated estimate on screen inside a second.
   useEffect(() => {
-    setTracker((current) => observe(current, { at: Date.now(), weights }));
-  }, [weights]);
+    setTracker((current) => observe(current, { at: Date.now(), journey }));
+  }, [journey]);
 
   const [games, setGames] = useState<RecentGame[]>([]);
   const [attempt, setAttempt] = useState(0);
-  const wanted = boardsBelongHere(weights, section);
+  const wanted = boardsBelongHere();
 
-  // Asked for once there are analysed games to ask about. It retries a couple
-  // of times: the first request can land in the gap between the first analysis
-  // workflow appearing and the first game being readable, and one empty answer
-  // should not cost the boards for the rest of a run that lasts minutes.
+  /*
+   * Asked for from the first moment, and kept asking while the import runs.
+   *
+   * The boards are the most responsive true thing this screen has: they are the
+   * player's own games, replaying, and a game is readable as soon as a sync
+   * commits the page it arrived on. Holding them back until analysis had weight
+   * left the screen empty through the whole download.
+   *
+   * The attempt ceiling stays for the settled part of the run, where an empty
+   * answer means there is genuinely nothing to draw. It does not apply while
+   * importing, because there the right reading of an empty answer is "not yet"
+   * rather than "never" — the games are on their way.
+   */
+  const stillArriving = journey.phase === "importing";
   useEffect(() => {
-    if (!wanted || games.length > 0 || attempt >= GAME_ATTEMPTS) return;
+    if (!wanted || games.length > 0 || (!stillArriving && attempt >= GAME_ATTEMPTS)) return;
     let cancelled = false;
     const run = async (): Promise<void> => {
       const found = await fetchRecentGames(BOARDS * 2);
@@ -350,7 +380,7 @@ export function SyncStage({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [wanted, attempt, games.length]);
+  }, [wanted, attempt, games.length, stillArriving]);
 
   // The caption belongs to whoever knows what is happening, per the rule in
   // `copy.ts`, so it is the server's own words twice over before it is ours:
@@ -360,36 +390,20 @@ export function SyncStage({
   const detail =
     workflowStageLabel(workflow?.progress.stage ?? null) ??
     (waitReason === undefined ? null : waitLabel(waitReason)) ??
-    SYNC_SECTIONS.find((entry) => entry.id === section)!.detail;
+    PHASE_LABEL[journey.phase];
   const eta = etaLabel(remainingAt(tracker, Date.now()));
   const showBoards = wanted && games.length > 0;
 
   return (
-    <main className="sync-stage">
-      <a className="skip-link" href="#sync-main">
-        Skip to content
-      </a>
-      <div className="sync-inner" id="sync-main" tabIndex={-1}>
-        <header className="sync-head">
-          <Link to="/" className="auth-brand" aria-label="Forma home">
-            <BrandLock size={24} />
-          </Link>
-          {/* The outcome, not the activity. The line under the bar is the
-              server's own name for the task running right now, and a heading
-              that also said "reading your games" would be the same sentence
-              twice at two sizes. */}
-          <h1>Building your first report</h1>
-          <p className="sync-sub">
-            Forma is reading every game you have played. This takes a few minutes, and it carries
-            on whether or not this tab is open.
-          </p>
-        </header>
+    <SyncShell
+      /* The outcome, not the activity. The line under the bar is the server's
+         own name for the task running right now, and a heading that also said
+         "reading your games" would be the same sentence twice at two sizes. */
+      title="Building your first report"
+      sub="Forma is reading every game you have played. This takes a few minutes, and it carries on whether or not this tab is open."
+    >
 
-        <SegmentedBar
-          active={section}
-          fractions={tracker.fractions}
-          percent={overallPercent(weights)}
-        />
+        <JourneyBar journey={journey} fraction={tracker.fraction} />
 
         {/* Polite and atomic: the task and the estimate change together, and
             announcing them separately would interrupt somebody mid-sentence
@@ -414,7 +428,6 @@ export function SyncStage({
             </div>
           </section>
         ) : null}
-      </div>
-    </main>
+    </SyncShell>
   );
 }

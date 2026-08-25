@@ -1,10 +1,8 @@
 import { useEffect } from "react";
 import { Link, redirect, useLoaderData, useNavigate } from "react-router";
 import type { Route } from "./+types/onboarding";
-import { OnboardingShell } from "../components/onboarding/OnboardingShell";
-import { StageTrail } from "../components/onboarding/StageTrail";
 import { JourneyFailure } from "../components/onboarding/JourneyFailure";
-import { SyncStage } from "../components/onboarding/SyncStage";
+import { SyncStage, SyncShell } from "../components/onboarding/SyncStage";
 import { EmptyState, ProblemNote } from "../components/v1/Honesty";
 import { RouteError } from "../components/RouteError";
 import { getMe, getOnboarding, getWorkflow, startRun } from "../lib/onboarding/api";
@@ -98,11 +96,19 @@ export default function Onboarding() {
     if (destination.kind === "report") void navigate("/report", { replace: true });
   }, [destination.kind, navigate]);
 
-  // The wait is the whole screen, and everything else is a message. They are
-  // different kinds of thing and they get different shells: minutes of work
-  // reported through a three-pixel bar inside a 26rem card was the complaint
-  // this replaced, and a two-sentence failure blown up to fill a monitor would
-  // be the same mistake pointed the other way.
+  /*
+   * One shell for every state on this route.
+   *
+   * The wait and the messages used to get different ones: a full-bleed progress
+   * screen while the work ran, and a centred 26rem card with a seven-step stage
+   * trail across the top the moment it stopped. That reads as two different
+   * products on one URL, and the trail was the older device the bar had already
+   * replaced — it sat there naming CONNECTING / IMPORTING / ANALYSING beside a
+   * failure nobody could act on.
+   *
+   * So a message now arrives on the screen the wait was on, and only the part
+   * under the heading changes.
+   */
   if (destination.kind === "wait") {
     return (
       <SyncStage
@@ -115,15 +121,13 @@ export default function Onboarding() {
   }
 
   return (
-    <OnboardingShell
+    <SyncShell
       title="Reading your games"
       sub="This takes a few minutes. You can close the tab — it carries on without you."
     >
-      <StageTrail stage={state.stage} />
-
-      {/* Polite and atomic: the label and the stage change together every few
-          seconds, and announcing them piecemeal would interrupt somebody
-          mid-sentence with half a status. */}
+      {/* Polite and atomic: the message and the state change together, and
+          announcing them piecemeal would interrupt somebody mid-sentence with
+          half a status. */}
       <div className="onboarding-body" aria-live="polite" aria-atomic="true">
         {error ? <ProblemNote error={error} /> : null}
 
@@ -195,6 +199,6 @@ export default function Onboarding() {
           />
         ) : null}
       </div>
-    </OnboardingShell>
+    </SyncShell>
   );
 }

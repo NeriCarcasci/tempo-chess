@@ -1,60 +1,34 @@
 /**
  * What the sync screen knows, as pure functions.
  *
- * The screen shows three named sections filling up, and every one of them fills
- * from a real numerator over a real denominator. That is harder than it sounds,
- * because the examination is not one workflow:
+ * ## Why this is one bar and not three
  *
- *   * `initial_examination` holds five items — the account sync, then prepare,
- *     report, examine, advance;
- *   * `game_import` workflows hold one item per game to rebuild;
- *   * a `game_analysis` workflow exists **per game**, and its items carry the
- *     weights the planner set precisely so that progress reflects work rather
- *     than counting items of wildly different size (screening 80, deep 12,
- *     transitions 4, practical context 4).
+ * It was three: importing, analysing, writing, each filling from its own
+ * weight. Every version of that was incoherent on screen, and the reason is
+ * structural rather than a bug that could be patched out. The three phases do
+ * not have denominators at the same time. The examination is five work items
+ * until `prepare` runs, and then it is five items plus one analysis workflow
+ * *per game* — so the total work jumps from 5 units to tens of thousands in a
+ * single poll. Before that jump the early phases show confident percentages of
+ * a denominator about to be revealed as a rounding error; after it they freeze,
+ * because a bar that walks backwards has to be ratcheted.
  *
- * So the honest picture is the weights of all of them, bucketed by kind. There
- * is no endpoint that exposes work items — `server/src/v1/routes/workflows.ts`
- * refuses one on purpose — so bucketing happens at workflow granularity, which
- * is as fine as the API goes.
+ * That produced, in order: an import stuck at 0%, a "Writing" bar a quarter
+ * full before a game had been read, a highlight on a phase with no work in it,
+ * and a countdown that said "under a minute" for the better part of an hour.
  *
- * Two things are estimates rather than facts, and both are ratcheted before a
- * person sees them: the denominators grow as the workflow discovers work, so a
- * raw fraction walks backwards and a raw countdown counts upward. Neither is
- * allowed to.
+ * So the screen now measures the one thing that is stable, dominant and
+ * countable: **the games**. Analysis is one workflow per game and the
+ * overwhelming majority of the wall clock. Its denominator is known as soon as
+ * the run is planned and grows only in whole games. The other two phases are
+ * named in the caption rather than given bars of their own, because neither is
+ * measurable while it happens — the import is one work item per account, and
+ * the write-up is three.
+ *
+ * The rule that survives from the old model is the one that mattered: a fill is
+ * real completed work over real total work, and where there is no denominator
+ * there is no number, only a stripe that says "working".
  */
-
-// ---------------------------------------------------------------------------
-// Sections
-// ---------------------------------------------------------------------------
-
-/**
- * The three parts of the examination, in the order they happen.
- *
- * Three, not the two the bar strictly needs. Writing the report is real work at
- * the end, and a bar that stopped at "Analysing" would sit full and
- * finished-looking for the whole of it — the same lie as a bar stuck at zero,
- * told at the other end.
- */
-export const SYNC_SECTIONS = [
-  {
-    id: "importing",
-    label: "Importing",
-    detail: "Reading your archive and rebuilding every position in it.",
-  },
-  {
-    id: "analysing",
-    label: "Analysing",
-    detail: "Every move you played, through the engine, one game at a time.",
-  },
-  {
-    id: "reporting",
-    label: "Writing",
-    detail: "Turning what the engine found into something worth reading.",
-  },
-] as const;
-
-export type SectionId = (typeof SYNC_SECTIONS)[number]["id"];
 
 /** The part of a workflow this screen reads. Widened so tests need no fixtures. */
 export interface WorkflowLike {
@@ -63,104 +37,135 @@ export interface WorkflowLike {
   progress: { completedWeight: number; totalWeight: number; stage: string | null };
 }
 
-const KIND_SECTION: Record<string, SectionId> = {
-  account_sync: "importing",
-  game_import: "importing",
-  game_analysis: "analysing",
-  subject_estimation: "reporting",
-};
+/**
+ * The steps that are actually *writing*: report, examine, advance.
+ *
+ * `server/src/onboarding/planner.ts` plans one sync item per syncable account
+ * and then four more — prepare, report, examine, advance. Three of those four
+ * are the write-up. `coaching_onboarding_prepare` is not: it freezes the
+ * snapshot and plans the analysis run, which is the last act of ingestion and
+ * the step every game workflow waits on. Counting it as writing is what put
+ * "Writing 25%" on screen before a single game had been analysed.
+ */
+export const WRITE_UP_WEIGHT = 3;
 
 /**
- * Which section a workflow's weight belongs to, or null for one that is not
- * part of this journey at all.
+ * Work that will never finish and is not running either.
  *
- * `initial_examination` is the awkward one: its five items straddle two
- * sections, and only its aggregate weight is on the wire. `progress.stage` is
- * the task type of its oldest outstanding item, which says which side of the
- * split it is still on — and counting the whole thing as writing would show the
- * report a fifth written while the archive was still downloading.
+ * Cancelled is the obvious case. `failed` belongs with it: linking an account
+ * enqueues a `subject_estimation` workflow whose task no deployment registers a
+ * handler for, so it dead-letters at once, once per account, while the
+ * examination beside it carries on perfectly well. Counted, those hold the
+ * journey short of finished for ever on a run that is going to succeed.
  */
-export function sectionOfWorkflow(workflow: WorkflowLike): SectionId | null {
-  if (workflow.kind === "initial_examination") {
-    return workflow.progress.stage === "provider_account_sync" ? "importing" : "reporting";
+const ABANDONED = new Set(["cancelled", "failed"]);
+
+export type Phase = "importing" | "analysing" | "writing" | "done";
+
+export const PHASE_LABEL: Record<Phase, string> = {
+  importing: "Importing",
+  analysing: "Analysing",
+  writing: "Writing",
+  done: "Done",
+};
+
+export interface Journey {
+  phase: Phase;
+  /**
+   * How far through, 0 to 1, or null while there is nothing to measure.
+   *
+   * Null is the honest answer during the import: a sync is one work item per
+   * account and an item scores only when it finishes, so any number there is
+   * the unit being bigger than anything that has happened yet.
+   */
+  fraction: number | null;
+  /** Games whose analysis has finished, against games planned. */
+  games: { done: number; total: number };
+  /** Analysis work units, which is what the fraction is measured on. */
+  weight: { done: number; total: number };
+}
+
+const bare = (phase: Phase, fraction: number | null = null): Journey => ({
+  phase,
+  fraction,
+  games: { done: 0, total: 0 },
+  weight: { done: 0, total: 0 },
+});
+
+/**
+ * Where the examination has got to, from the workflows it has produced.
+ *
+ * The phase is read from what exists rather than from what the run calls
+ * itself. The run starts reporting `analysing` the moment its sync item
+ * completes, which is before a single analysis workflow has been planned, so
+ * believing it lit a phase with no work in it while the archive was still
+ * arriving. Its stage is consulted only in the opening seconds, when no
+ * workflow has been read at all and there is genuinely nothing else to go on.
+ */
+export function readJourney(workflows: readonly WorkflowLike[], runStage: string): Journey {
+  const live = workflows.filter((workflow) => !ABANDONED.has(workflow.state));
+  const games = live.filter((workflow) => workflow.kind === "game_analysis");
+  const examination = live.find((workflow) => workflow.kind === "initial_examination") ?? null;
+
+  // The write-up is whatever the examination has completed beyond its ingestion
+  // share: `totalWeight - 3` is the syncs plus prepare, and the three after it
+  // are report, examine and advance.
+  const ingestion = examination
+    ? Math.max(0, examination.progress.totalWeight - WRITE_UP_WEIGHT)
+    : 0;
+  const writeTotal = examination
+    ? Math.min(examination.progress.totalWeight, WRITE_UP_WEIGHT)
+    : 0;
+  const writeDone = examination
+    ? Math.max(0, examination.progress.completedWeight - ingestion)
+    : 0;
+
+  if (games.length === 0) {
+    // Nothing has been planned to analyse yet. Either the archive is still
+    // coming in, or it arrived with nothing worth reading in it and the run
+    // went straight to its write-up.
+    if (examination === null) {
+      return bare(
+        runStage === "linking" || runStage === "syncing" || runStage === "not_started"
+          ? "importing"
+          : "analysing",
+      );
+    }
+    if (writeTotal > 0 && examination.progress.completedWeight > ingestion) {
+      return bare(writeDone >= writeTotal ? "done" : "writing", writeDone / writeTotal);
+    }
+    return bare("importing");
   }
-  return KIND_SECTION[workflow.kind] ?? null;
-}
 
-export interface Weight {
-  completed: number;
-  total: number;
-}
+  let weightDone = 0;
+  let weightTotal = 0;
+  let gamesDone = 0;
+  for (const workflow of games) {
+    weightDone += workflow.progress.completedWeight;
+    weightTotal += workflow.progress.totalWeight;
+    if (workflow.state === "succeeded") gamesDone += 1;
+  }
+  const counted = { done: gamesDone, total: games.length };
+  const weight = { done: weightDone, total: weightTotal };
 
-export type SectionWeights = Record<SectionId, Weight>;
+  if (weightTotal > 0 && weightDone < weightTotal) {
+    return { phase: "analysing", fraction: weightDone / weightTotal, games: counted, weight };
+  }
 
-export function emptyWeights(): SectionWeights {
+  // Every game is read. What is left is the write-up: three items, so not
+  // something to draw a smooth bar from, but short, and saying so beats a full
+  // bar sitting there while the report is written.
   return {
-    importing: { completed: 0, total: 0 },
-    analysing: { completed: 0, total: 0 },
-    reporting: { completed: 0, total: 0 },
+    phase: writeTotal > 0 && writeDone >= writeTotal ? "done" : "writing",
+    fraction: writeTotal === 0 ? 1 : writeDone / writeTotal,
+    games: counted,
+    weight,
   };
 }
 
-export function weighSections(workflows: readonly WorkflowLike[]): SectionWeights {
-  const weights = emptyWeights();
-  for (const workflow of workflows) {
-    // Cancelled work is neither done nor outstanding, and leaving it in the
-    // denominator would hold every section short of full for ever.
-    if (workflow.state === "cancelled") continue;
-    const section = sectionOfWorkflow(workflow);
-    if (section === null) continue;
-    weights[section].completed += workflow.progress.completedWeight;
-    weights[section].total += workflow.progress.totalWeight;
-  }
-  return weights;
-}
-
-/** A section's own fill, or null while it has no denominator. */
-export function fractionOf(weight: Weight): number | null {
-  if (weight.total <= 0) return null;
-  return Math.min(1, Math.max(0, weight.completed / weight.total));
-}
-
-/** The whole examination as one figure, for assistive technology. */
-export function overallPercent(weights: SectionWeights): number | null {
-  let completed = 0;
-  let total = 0;
-  for (const section of SYNC_SECTIONS) {
-    completed += weights[section.id].completed;
-    total += weights[section.id].total;
-  }
-  if (total <= 0) return null;
-  return Math.round((completed / total) * 100);
-}
-
-const outstanding = (weight: Weight): boolean =>
-  weight.total > 0 && weight.completed < weight.total;
-
-/**
- * Which section to name and highlight.
- *
- * Engine work outstanding beats every other signal. The examination workflow
- * reaches its report step early and then waits for exactly that work, so its
- * own task type would put the bar on "Writing" while a hundred games were still
- * queued. Before any analysis has been planned there is nothing to weigh, and
- * the run's own stage is the only thing left to go on.
- *
- * The stage decides *which* section is current and never how full one is.
- */
-export function currentSection(weights: SectionWeights, runStage: string): SectionId {
-  if (outstanding(weights.analysing)) return "analysing";
-  if (weights.analysing.total === 0) {
-    return runStage === "linking" || runStage === "syncing" || runStage === "not_started"
-      ? "importing"
-      : "analysing";
-  }
-  return "reporting";
-}
-
-/** Boards are worth showing once there are analysed games to show. */
-export function boardsBelongHere(weights: SectionWeights, current: SectionId): boolean {
-  return current !== "importing" || weights.analysing.total > 0;
+/** Boards are worth showing as soon as there are games to show. */
+export function boardsBelongHere(): boolean {
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,10 +176,9 @@ export function boardsBelongHere(weights: SectionWeights, current: SectionId): b
 const MIN_SPAN_MS = 8_000;
 /** Roughly a minute of polling, so a slow patch pulls the rate down. */
 const SAMPLE_LIMIT = 10;
-
 interface Sample {
   at: number;
-  completed: number;
+  done: number;
 }
 
 interface Held {
@@ -182,94 +186,91 @@ interface Held {
   at: number;
 }
 
-/**
- * Everything the screen remembers between polls.
- *
- * One value, so the component keeps a single piece of state and the whole thing
- * stays testable without a browser.
- */
 export interface SyncTracker {
-  /** The furthest each section has been drawn. Never falls back. */
-  fractions: Record<SectionId, number | null>;
-  /** Samples of total completed weight, oldest first. */
+  /** The furthest the bar has been drawn. Never falls back except on a replan. */
+  fraction: number | null;
+  /** Samples of completed analysis weight, oldest first. */
   samples: Sample[];
   /** The last time-remaining shown, and when it was worked out. */
   held: Held | null;
+  /** The denominator those samples were measured against. */
+  total: number;
 }
 
 export function emptyTracker(): SyncTracker {
-  return {
-    fractions: { importing: null, analysing: null, reporting: null },
-    samples: [],
-    held: null,
-  };
+  return { fraction: null, samples: [], held: null, total: 0 };
 }
 
-function throughputRemaining(samples: Sample[], weights: SectionWeights): number | null {
+function throughputRemaining(samples: Sample[], total: number): number | null {
   if (samples.length < 2) return null;
   const first = samples[0]!;
   const last = samples[samples.length - 1]!;
   const span = last.at - first.at;
-  const done = last.completed - first.completed;
+  const done = last.done - first.done;
   // No span, or no movement, is not a rate. Saying "working it out" is the
   // honest reading of both, and inventing one from a single sample is how a
   // first paint ends up promising four seconds.
   if (span < MIN_SPAN_MS || done <= 0) return null;
-
-  let completed = 0;
-  let total = 0;
-  for (const section of SYNC_SECTIONS) {
-    completed += weights[section.id].completed;
-    total += weights[section.id].total;
-  }
-  const left = total - completed;
+  const left = total - last.done;
   if (left <= 0) return 0;
   return (left / done) * span;
 }
 
 /**
- * The new time remaining, which is never longer than the old one.
+ * The time remaining, recomputed from the rate rather than ratcheted.
  *
- * The previous figure is first aged by the time that has actually passed, so
- * holding it is not the same as freezing it. A fresh estimate only ever
- * replaces it downwards: work discovered mid-run pushes the true estimate up,
- * and a countdown that counts up reads as broken however true it is. When there
- * is no fresh estimate at all the aged figure carries on, because dropping back
- * to "working it out" after having said a number takes information away.
+ * This used to only ever fall, on the reasoning that a countdown which counts
+ * up reads as broken. That reasoning is right when the job is a known quantity
+ * and badly wrong here, because it is not: the analysis run is planned in
+ * batches, so early on the estimate is measured against a fraction of the work
+ * and is *far* too low. Locked to falling, it promised "under a minute" and
+ * then sat there for the better part of an hour while the real total grew ten
+ * times over. Being stuck and wrong is worse than moving and right.
+ *
+ * So a freshly measured rate always wins. Between measurements the previous
+ * figure is aged by the time that has actually passed, which is what makes it
+ * tick down rather than freeze, and the labels are coarse enough that ordinary
+ * variation in throughput never shows as jitter.
  */
 function holdDown(previous: Held | null, fresh: number | null, at: number): Held | null {
-  const aged =
-    previous === null ? null : { ms: Math.max(0, previous.ms - (at - previous.at)), at };
-  if (fresh === null) return aged;
-  if (aged === null) return { ms: fresh, at };
-  return { ms: Math.min(aged.ms, fresh), at };
+  if (fresh !== null) return { ms: fresh, at };
+  if (previous === null) return null;
+  return { ms: Math.max(0, previous.ms - (at - previous.at)), at };
 }
 
-/** Fold one reading of the workflow list into the tracker. */
+/** Fold one reading of the journey into the tracker. */
 export function observe(
   tracker: SyncTracker,
-  reading: { at: number; weights: SectionWeights },
+  reading: { at: number; journey: Journey },
 ): SyncTracker {
-  const fractions = { ...tracker.fractions };
-  let completed = 0;
-  for (const section of SYNC_SECTIONS) {
-    const weight = reading.weights[section.id];
-    completed += weight.completed;
-    const raw = fractionOf(weight);
-    // The denominator grows every time the workflow discovers work — a sync of
-    // 300 games becomes 300 analysis workflows — so the raw fraction dips. Each
-    // section holds its high-water mark instead: a bar that walks backwards
-    // reads as a bug whatever the arithmetic says.
-    if (raw !== null) {
-      fractions[section.id] = Math.max(fractions[section.id] ?? 0, raw);
-    }
-  }
+  const { journey } = reading;
+  const total = journey.weight.total;
 
-  const samples = tracker.samples.concat({ at: reading.at, completed }).slice(-SAMPLE_LIMIT);
+  /*
+   * The bar holds its high-water mark, always.
+   *
+   * The analysis run is planned in batches — fifty games at a time, not the
+   * whole archive at once — so the denominator grows in steps all the way
+   * through and the raw fraction drops every time a batch lands. Letting the
+   * fill follow that would have it slide backwards repeatedly on a run that is
+   * going perfectly well, which reads as a bug whatever the arithmetic says.
+   *
+   * The cost is that the fill pauses while a batch is absorbed. That is exactly
+   * why the games count sits beside it: a raw tally cannot regress, so it keeps
+   * moving through the moments the bar has to wait.
+   */
+  const fraction =
+    journey.fraction === null
+      ? tracker.fraction
+      : Math.max(tracker.fraction ?? 0, journey.fraction);
+
+  const samples = tracker.samples.concat({ at: reading.at, done: journey.weight.done }).slice(-SAMPLE_LIMIT);
+
   return {
-    fractions,
+    fraction,
     samples,
-    held: holdDown(tracker.held, throughputRemaining(samples, reading.weights), reading.at),
+    total: Math.max(tracker.total, total),
+    held: holdDown(tracker.held, throughputRemaining(samples, total), reading.at),
   };
 }
 

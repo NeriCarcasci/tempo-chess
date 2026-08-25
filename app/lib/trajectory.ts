@@ -482,49 +482,6 @@ export function medianIntervalPaths(
     );
 }
 
-/**
- * How wide the middle half is at each bin, as one mark per bin.
- *
- * This register replaces the cost lane the figure carried against the legacy
- * tables, and it is the better question anyway. The median cannot move — an
- * archive is half wins and half losses — so the centre of this distribution
- * says nothing and its *width* says everything: a game where the middle half of
- * your archive spans four points is still anyone's, and one where it spans
- * eighty is decided. "Your games are decided in the opening" is a claim about
- * this row, and the phase cards already state it in numbers; this draws it.
- *
- * The thresholds are in expected-score points and stated rather than tuned: a
- * quarter of the scale apart is a game visibly going two ways, and half the
- * scale apart is a distribution with winning and losing games in it and little
- * in between.
- */
-export const SPREAD_OPENING_UP = 0.25;
-export const SPREAD_DECIDED = 0.5;
-
-export interface SpreadCell {
-  key: string;
-  spread: number;
-  games: number;
-  phase: string;
-  /** The same three-step ramp the openings sheet uses, on this measure. */
-  heat: "holds" | "shaky" | "tears";
-}
-
-export function spreadCells(cone: Cone): SpreadCell[] {
-  return cone.points.map((point) => ({
-    key: `${point.phase}-${point.binOrdinal}`,
-    spread: point.spread,
-    games: point.games,
-    phase: point.phase,
-    heat:
-      point.spread >= SPREAD_DECIDED
-        ? "tears"
-        : point.spread >= SPREAD_OPENING_UP
-          ? "shaky"
-          : "holds",
-  }));
-}
-
 /** The median, as an open path. One point becomes a short flat tick. */
 export function medianPath(points: readonly ConePoint[], box: PlotBox): string {
   if (points.length === 0) return "";

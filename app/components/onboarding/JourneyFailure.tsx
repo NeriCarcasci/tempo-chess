@@ -30,8 +30,24 @@ export function JourneyFailure({
     : workflowFailed
       ? {
           title: "Reading your games stopped",
+          // Names no step, because at this point we do not know which one.
+          //
+          // It used to say "The import did not finish, so there is nothing to
+          // analyse yet" -- a specific claim about a specific step, printed for
+          // *any* workflow failure. On the run that prompted this it was wrong
+          // twice over: the import had finished, 333 games were already read,
+          // and the engine was working through them while the screen said
+          // there was nothing to analyse. What had actually failed was the step
+          // that writes the report, several stages later.
+          //
+          // The workflow's own error is a sanitized ledger code and is not
+          // written for a reader, so there is nothing here to name the step
+          // with. Saying where the work stopped would need the run to record
+          // it; until it does, the honest version says what is certainly true
+          // -- it stopped, nothing was lost, starting again is safe -- and
+          // guesses at nothing.
           detail:
-            "The import did not finish, so there is nothing to analyse yet. Your games are untouched on your chess site.",
+            "Forma stopped partway through and cannot pick up where it left off. Nothing was lost: your games are untouched on your chess site, and starting again re-reads them from there.",
           retryable: true,
         }
       : {

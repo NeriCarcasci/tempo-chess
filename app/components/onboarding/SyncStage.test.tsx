@@ -36,11 +36,16 @@ const wf = (
   completed: number,
   total: number,
   stage: string | null = null,
+  state = "running",
 ): WorkflowLike => ({
   kind,
-  state: "running",
+  state,
   progress: { completedWeight: completed, totalWeight: total, stage },
 });
+
+/** The examination: one sync, then prepare, report, examine, advance. */
+const exam = (completed: number, stage: string | null = null): WorkflowLike =>
+  wf("initial_examination", completed, 5, stage);
 
 const game = (completed: number): WorkflowLike => wf("game_analysis", completed, 100);
 
@@ -54,14 +59,16 @@ const examination = (stage: string | null): Workflow =>
 
 const draw = (node: React.ReactElement) => render(<MemoryRouter>{node}</MemoryRouter>);
 
-const segments = (container: HTMLElement) =>
-  [...container.querySelectorAll(".sync-seg")].map((segment) => ({
-    label: segment.querySelector(".sync-seg-label")!.textContent,
-    figure: segment.querySelector(".sync-seg-figure")!.textContent,
-    width: (segment.querySelector(".sync-seg-fill") as HTMLElement).style.width,
-    unknown: segment.querySelector(".sync-seg-fill")!.classList.contains("is-unknown"),
-    active: segment.classList.contains("is-active"),
-  }));
+const bar = (container: HTMLElement) => {
+  const fill = container.querySelector(".sync-bar-fill") as HTMLElement | null;
+  return {
+    phase: container.querySelector(".sync-bar-phase")?.textContent ?? null,
+    count: container.querySelector(".sync-bar-count")?.textContent ?? null,
+    figure: container.querySelector(".sync-bar-figure")?.textContent ?? null,
+    width: fill?.style.width ?? null,
+    unknown: fill?.classList.contains("is-unknown") ?? false,
+  };
+};
 
 beforeEach(() => {
   workflows = [];
@@ -70,42 +77,80 @@ beforeEach(() => {
 });
 
 describe("SyncStage", () => {
-  test("nothing weighed yet states no percentage and no countdown", async () => {
+  test("nothing weighed yet states no percentage and no countdown", () => {
     const { container } = draw(
       <SyncStage runStage="syncing" workflow={examination("provider_account_sync")} />,
     );
     expect(container.textContent).not.toContain("0%");
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBeNull();
     expect(container.textContent).toContain("Working out how long");
-    // Only the section that is running gets the travelling stripe. An empty
-    // track further down the bar is the truth about a section not yet started.
-    const drawn = segments(container);
-    expect(drawn.map((segment) => segment.unknown)).toEqual([true, false, false]);
-    expect(drawn.map((segment) => segment.figure)).toEqual(["—", "—", "—"]);
+    // A travelling stripe, not a fill, because there is genuinely nothing to
+    // measure while one indivisible work item runs.
+    expect(bar(container).unknown).toBe(true);
+    expect(bar(container).figure).toBe("—");
   });
 
-  test("every section fills from its own weight, not from which phase is live", async () => {
+  test("the bar is the analysis, measured on its own weight", async () => {
     workflows = [
-      wf("initial_examination", 1, 5, "coaching_examination_report"),
-      wf("game_import", 40, 40),
-      game(100),
-      game(100),
-      game(20),
-      game(0),
+      exam(2),
+      wf("game_analysis", 100, 100, "stockfish_screen_game", "succeeded"),
+      wf("game_analysis", 100, 100, "stockfish_screen_game", "succeeded"),
+      wf("game_analysis", 20, 100),
+      wf("game_analysis", 0, 100),
     ];
     const { container } = draw(<SyncStage runStage="analysing" workflow={examination(null)} />);
 
-    await waitFor(() => expect(segments(container)[1]!.width).not.toBe(""));
-    const drawn = segments(container);
-    expect(drawn.map((segment) => segment.label)).toEqual(["Importing", "Analysing", "Writing"]);
-    // Importing is finished, analysis is 220 of 400, and the report has done
-    // one of its five items. All three are readable at once.
-    expect(drawn.map((segment) => segment.width)).toEqual(["100%", "55%", "20%"]);
-    expect(drawn.map((segment) => segment.figure)).toEqual(["100%", "55%", "20%"]);
-    // The live section is the one with engine work outstanding.
-    expect(drawn.map((segment) => segment.active)).toEqual([false, true, false]);
-    // And the overall figure is the same weights added up: 261 of 445.
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("59");
+    await waitFor(() => expect(bar(container).width).toBe("55%"));
+    const drawn = bar(container);
+    expect(drawn.phase).toBe("Analysing");
+    expect(drawn.figure).toBe("55%");
+    // The concrete version of the same fact, and the one a person feels. It is
+    // a raw tally, so it keeps moving through the moments the bar has to wait
+    // for a newly planned batch to be absorbed.
+    expect(drawn.count).toBe("2 of 4 games");
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("55");
+  });
+
+  test("the import reads as working, not as nought per cent", async () => {
+    // A sync is one work item per account and an item scores only when it
+    // finishes, so "0%" through the whole download is not a measurement — it is
+    // the unit being bigger than anything that has happened yet.
+    workflows = [exam(0, "provider_account_sync")];
+    const { container } = draw(
+      <SyncStage runStage="syncing" workflow={examination("provider_account_sync")} />,
+    );
+    await waitFor(() => expect(bar(container).unknown).toBe(true));
+    expect(bar(container).phase).toBe("Importing");
+    expect(bar(container).figure).toBe("—");
+    expect(bar(container).width).toBe("");
+  });
+
+  test("boards are asked for while the archive is still arriving", async () => {
+    // A game is readable as soon as a sync commits the page it arrived on, and
+    // `/v1/games/recent` needs no analysis. Waiting for analysis weight left the
+    // screen with nothing on it through the whole import, which is the stretch
+    // a person is most likely to be watching.
+    workflows = [exam(0, "provider_account_sync")];
+    draw(<SyncStage runStage="syncing" workflow={examination("provider_account_sync")} />);
+    await waitFor(() => expect(asked).toBeGreaterThan(0));
+  });
+
+  test("an empty games answer during the import draws no boards and no error", async () => {
+    workflows = [exam(0, "provider_account_sync")];
+    const { container } = draw(
+      <SyncStage runStage="syncing" workflow={examination("provider_account_sync")} />,
+    );
+    await waitFor(() => expect(asked).toBeGreaterThan(0));
+    expect(container.querySelector(".sync-row")).toBeNull();
+    expect(screen.getByRole("progressbar")).toBeTruthy();
+  });
+
+  test("no examination workflow at all still draws a screen", () => {
+    // The run can report `wait` before the workflow read lands. A blank page
+    // for a poll's worth of time is the failure this whole screen is about.
+    const { container } = draw(<SyncStage runStage="linking" workflow={null} />);
+    expect(screen.getByRole("progressbar")).toBeTruthy();
+    expect(bar(container).phase).toBe("Importing");
   });
 
   test("the caption is the server's words before it is ours", () => {
@@ -136,25 +181,13 @@ describe("SyncStage", () => {
     // for a poll's worth of time is the failure this whole screen is about.
     const { container } = draw(<SyncStage runStage="linking" workflow={null} />);
     expect(screen.getByRole("progressbar")).toBeTruthy();
-    expect(container.querySelector(".sync-seg.is-active .sync-seg-label")?.textContent).toBe(
-      "Importing",
-    );
-  });
-
-  test("boards are never asked for while no game has been analysed", async () => {
-    workflows = [wf("initial_examination", 0, 5, "provider_account_sync")];
-    const { container } = draw(
-      <SyncStage runStage="syncing" workflow={examination("provider_account_sync")} />,
-    );
-    await waitFor(() => expect(segments(container)[0]!.width).toBe("0%"));
-    expect(asked).toBe(0);
-    expect(container.querySelector(".sync-row")).toBeNull();
+    expect(bar(container).phase).toBe("Importing");
   });
 
   test("a games route that answers with nothing costs the screen nothing else", async () => {
-    workflows = [game(20)];
+    workflows = [exam(2), game(20)];
     const { container } = draw(<SyncStage runStage="analysing" workflow={examination(null)} />);
-    await waitFor(() => expect(segments(container)[1]!.width).toBe("20%"));
+    await waitFor(() => expect(bar(container).width).toBe("20%"));
     // Everything that carries the wait is still here; only the evidence is not.
     expect(container.querySelector(".sync-row")).toBeNull();
     expect(screen.getByRole("progressbar")).toBeTruthy();

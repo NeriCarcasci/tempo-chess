@@ -13,7 +13,6 @@ import {
   phaseCards,
   project,
   railPath,
-  spreadCells,
 } from "../lib/trajectory";
 
 /**
@@ -74,8 +73,6 @@ const VIEW_HEIGHT = RAIL_TOP + RAIL_HEIGHT;
 const GRID = [0, 0.25, 0.75, 1];
 
 const pct = (value: number): string => `${Math.round(value * 100)}%`;
-const signed = (value: number): string =>
-  `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(Math.round(value * 100))}`;
 
 /**
  * What the figure counts, written once and rendered either behind a mark or as
@@ -132,7 +129,6 @@ export function Trajectory({
   const finding = coneFinding(cone);
   const band = bandPath(cone.points, PLOT);
   const medianInterval = medianIntervalPaths(cone.points, PLOT);
-  const spread = spreadCells(cone);
   const stops = decayStops(cone);
   const cards = phaseCards(cone, accuracy);
   const rowFinding = accuracyFinding(cards);
@@ -265,68 +261,38 @@ export function Trajectory({
           </svg>
         </div>
 
-        {/* Where the games are actually being decided.
-            The median cannot move — an archive is half wins and half losses —
-            so the width of the middle half is the measure that carries the
-            claim, and this is that width, bin by bin. */}
-        <div className="cone-spread-row">
-          <span className="cap cone-reg">spread</span>
-          <div className="cone-spread" role="img" aria-label={`How far apart the middle half of your games is, across ${spread.length} points of a game.`}>
-            {spread.map((cell) => (
-              <span key={cell.key} className="cone-spread-cell">
-                <span
-                  className="line-sq"
-                  data-heat={cell.heat}
-                  data-state="scored"
-                  title={`${Math.round(cell.spread * 100)} points apart · ${cell.games} games · ${cell.phase}`}
-                />
-              </span>
-            ))}
-          </div>
-        </div>
-
         {/*
-          The phases, as one bar under the axis rather than three boxed cards.
+          The phases, as the graph's own axis legend.
 
-          Each phase is sized to the share of the axis it actually occupies, so
-          the bar is a legend for the picture above it and not a second layout
-          competing with it. The three cards this replaces were the same width
-          whatever the phase was worth, and every one of them carried its own
-          copy of the same paragraph saying a figure is not published yet — the
-          same absence stated three times, taking more of the page than any
-          number on it.
+          Each phase is sized to the share of the axis it occupies, so this row
+          labels the picture above it rather than restating it. It replaced
+          three boxed cards that were a second layout competing with the graph:
+          equal-width panels whatever the phase was worth, each carrying a
+          heading, a figure, a reading, an evidence line and — three times over
+          — the same paragraph about a rate nobody publishes. That absence is
+          stated once now, in the figure's own caption, and the reading each
+          card made is the one sentence kept here.
+
+          `+49 points wider by the end` is gone with them. It was the figure's
+          internal unit worn as a headline: nothing outside this component
+          measures anything in points of expected-score spread, and a reader who
+          has to be taught a unit before a number means anything is reading
+          furniture. The width the band opens by is already drawn, at the only
+          scale it is true at, immediately above.
         */}
-        <ol className="cone-phases">
+        <ol className="cone-phases" aria-label="The phases of a game, across the figure">
           {cards.map((card) => (
-            <li key={card.phase} className="cone-phase" style={{ gridColumn: "auto" }}>
-              <p className="cone-phase-head">
-                <b className="cap">{card.name}</b>
-                {card.standing ? <span className="tag tag-sub">{card.standing}</span> : null}
-              </p>
-              <p className="cone-phase-figure">
-                <b>{signed(card.growth)}</b>
-                <small>points wider by the end</small>
-              </p>
-              <p className="cone-phase-reading">{card.reading}</p>
-              <p className="cone-phase-evidence">
-                {card.exit} {card.games.toLocaleString()}{" "}
-                {card.games === 1 ? "game" : "games"} · {pct(card.reachRate)} of your games reach
-                it.
-              </p>
-              {card.scopeNote ? <p className="cone-phase-evidence">{card.scopeNote}</p> : null}
-              {card.caution ? <p className="phase-caution">{card.caution}</p> : null}
+            <li key={card.phase} className="cone-phase">
+              <b className="cap">{card.name}</b>
+              <span className="cone-phase-reading">{card.reading}</span>
+              <span className="cone-phase-evidence">
+                {card.games.toLocaleString()} {card.games === 1 ? "game" : "games"} ·{" "}
+                {pct(card.reachRate)} reach it
+              </span>
+              {card.caution ? <span className="cone-phase-caution">{card.caution}</span> : null}
             </li>
           ))}
         </ol>
-
-        {/* Stated once, not once per phase. */}
-        {cards.some((card) => !card.accuracy) ? (
-          <p className="cone-phases-absent">
-            How often you take a chance in each phase is recorded against every observation and is
-            not published to this screen yet. Forma will not split the figures it does publish to
-            fill the gap.
-          </p>
-        ) : null}
       </div>
 
       <figcaption>
@@ -339,14 +305,25 @@ export function Trajectory({
             is absent rather than flat.
           </p>
         ) : null}
-        <p className="cone-note">
+        {/* A `div`, not a `p`: `FigureNote` renders a `<dialog>`, and a dialog
+            (or the heading and paragraphs inside it) is block content the HTML
+            parser will not accept inside a paragraph — it closes the `<p>`
+            early and every browser and React disagree about where.
+
+            The unpublished per-phase rate is stated here, once. It used to be
+            printed inside all three phase cards, which spent more of the page
+            on an absence than on any figure present. */}
+        <div className="cone-note">
           Expected score from your side of the board, whichever colour you had.
+          {cards.some((card) => !card.accuracy)
+            ? " How often you take a chance in each phase is recorded but not published to this screen yet, and Forma will not split the figures it does publish to fill the gap."
+            : ""}
           {printable ? null : (
             <FigureNote title="How this figure is measured">
               {DEFINITIONS}
             </FigureNote>
           )}
-        </p>
+        </div>
         {printable ? <div className="cone-note">{DEFINITIONS}</div> : null}
       </figcaption>
       <p id={descriptionId} className="sr-only">

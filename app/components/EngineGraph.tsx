@@ -396,7 +396,10 @@ export function EngineGraph({
         way is up is not reading the chart at all.
       */}
       <figcaption>
-        <p>
+        {/* A `div`, not a `p`: `FigureNote` renders a `<dialog>`, which is
+            block content the HTML parser will not accept inside a paragraph —
+            it closes the `<p>` early and disagrees with React about where. */}
+        <div>
           Positive is better for you, whichever colour you had.
           <FigureNote title="How this figure is measured">
             <p>
@@ -420,7 +423,7 @@ export function EngineGraph({
                 : ""}
             </p>
           </FigureNote>
-        </p>
+        </div>
       </figcaption>
 
       {/*

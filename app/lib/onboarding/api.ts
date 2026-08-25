@@ -108,6 +108,25 @@ export function linkAccount(input: {
 }
 
 /**
+ * Disconnect a linked account.
+ *
+ * Nothing is deleted server-side: the link is marked disconnected and its
+ * subject membership is closed, so analysis already built from those games
+ * stays explainable rather than becoming evidence with no source. That is why
+ * this is `disconnect` on the wire and not `delete`, and why the screen says
+ * "Remove" rather than promising erasure.
+ */
+export function unlinkAccount(input: {
+  accountId: string;
+  idempotencyKey: string;
+}): Promise<{ id: string; status: string }> {
+  return v1Data<{ id: string; status: string }>(`/v1/me/accounts/${input.accountId}`, {
+    method: "DELETE",
+    idempotencyKey: input.idempotencyKey,
+  });
+}
+
+/**
  * Start the examination, or resume the one already running.
  *
  * No `subjectId`: identity comes from the token and the kernel refuses a body

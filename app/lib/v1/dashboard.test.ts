@@ -16,7 +16,9 @@ import {
   groupMeasures,
   headlineFinding,
   holdingsOf,
+  movementOf,
   quotedRating,
+  readableExplanation,
   splitDimensionKey,
   splitFindings,
   suppressionText,
@@ -428,13 +430,73 @@ describe("what the hub says", () => {
     expect(report.games).toBe(200);
   });
 
-  test("no trajectory and no readable conclusion is no row at all", () => {
+  test("nothing drawn, nothing readable and nothing measured is no report at all", () => {
     // A row that cannot state its reason does not render. That is the hub's
     // rule and it applies to the thing at the top of it too.
     const empty = dashboard({
       trajectory: { state: "unavailable", snapshotId: null, includedGameCount: 0, bins: [], unreachedPhases: [] },
       findings: [finding({ id: "f1", explanation: null })],
+      estimates: [],
     });
     expect(todayReport(empty)).toBeNull();
+  });
+
+  test("measured areas alone are enough to publish the page", () => {
+    // The measures are the page's spine now. A report with seven measured
+    // areas has plenty to say even when the trajectory is missing and every
+    // finding was held back, and returning null would blank a live screen.
+    const noGraph = dashboard({
+      trajectory: { state: "unavailable", snapshotId: null, includedGameCount: 0, bins: [], unreachedPhases: [] },
+      findings: [finding({ id: "f1", explanation: null })],
+    });
+    const report = todayReport(noGraph);
+    expect(report).not.toBeNull();
+    expect(report!.measures.length).toBeGreaterThan(0);
+  });
+});
+
+describe("readableExplanation", () => {
+  const finding = (explanation: string | null) =>
+    ({ explanation } as unknown as Parameters<typeof readableExplanation>[0]);
+
+  test("holds back a sentence carrying a database key", () => {
+    // The exact text a live report showed a customer. It is stored prose from a
+    // publication written before the renderer was repaired, so no amount of
+    // correct server code removes it — only a re-run does, and until then the
+    // client must not print it.
+    expect(
+      readableExplanation(
+        finding("critical_moment_recognize_objective is costing you: 22% of your chances."),
+      ),
+    ).toBeNull();
+  });
+
+  test("passes the sentence the repaired renderer writes", () => {
+    // The moment a re-render lands this appears with no code change.
+    expect(
+      readableExplanation(
+        finding("You are losing ground on positions that decide the game. Over 1049 chances."),
+      ),
+    ).toMatch(/losing ground on positions that decide the game/);
+  });
+
+  test("an absent explanation is absent, not an empty string", () => {
+    expect(readableExplanation(finding(null))).toBeNull();
+    expect(readableExplanation(finding("   "))).toBeNull();
+  });
+});
+
+describe("movementOf", () => {
+  test("mirrors the estimator's own thresholds rather than choosing new ones", () => {
+    expect(movementOf(0)).toBe("declined");
+    expect(movementOf(0.05)).toBe("declined");
+    expect(movementOf(0.2)).toBe("slipping");
+    expect(movementOf(0.5)).toBe("unclear");
+    expect(movementOf(0.8)).toBe("gaining");
+    expect(movementOf(0.95)).toBe("improved");
+  });
+
+  test("no posterior is not a claim of no change", () => {
+    expect(movementOf(null)).toBe("unclear");
   });
 });

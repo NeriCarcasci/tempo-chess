@@ -173,11 +173,6 @@
   /* -- onboarding ------------------------------------------------------ */
   /* Layout only. Every colour, surface and elevation below comes from the
      ladder above; nothing here introduces a hue or an outline. */
-  .stage-trail {
-    display: flex; flex-wrap: wrap; gap: 0.35rem 0.85rem;
-    margin-top: 1.4rem;
-  }
-  .stage-trail li { display: inline-flex; }
 
   .onboarding-body { display: grid; gap: 1.4rem; margin-top: 1.6rem; }
   .onboarding-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.4rem; }
@@ -203,60 +198,45 @@
     max-width: 52ch; font-size: 0.95rem; line-height: 1.6; color: var(--color-ink-muted);
   }
 
-  /* The bar. Three named sections, each filling from its own completed weight
-     over its own total weight, so all three are readable at once: importing
-     full, analysing part way, writing not started. Splitting the work up is
-     also what keeps the figures honest — the examination fans out into a
-     workflow per game, and one continuous percentage over the lot of them
-     walks backwards every time a batch is planned. */
-  .sync-bar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0.75rem; }
-  .sync-seg { display: grid; gap: 0.45rem; }
-  /* Never wraps. Each segment is its own little grid, so a label that took two
-     lines in one of them would drop that segment's track below its
-     neighbours', and a bar whose three pieces sit at different heights reads
-     as a rendering fault rather than as a bar. */
-  .sync-seg-label {
-    white-space: nowrap; overflow: hidden;
-    transition: color 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* One bar, because there is one thing worth measuring.
+     Three named sections were tried and could not be made coherent: the phases
+     do not have denominators at the same time, so the early ones showed
+     confident percentages of a total about to grow by four orders of magnitude
+     and the later ones sat frozen behind a ratchet. See `lib/onboarding/sync.ts`
+     for the full account. What this draws is the analysis, which is nearly all
+     of the wall clock, and nothing at all where there is nothing to measure. */
+  .sync-bar-one { display: grid; gap: 0.55rem; }
+  .sync-bar-head {
+    display: flex; align-items: baseline; gap: 0.75rem;
   }
-  .sync-seg.is-done .sync-seg-label { color: var(--color-ink-muted); }
-  .sync-seg.is-active .sync-seg-label { color: var(--color-accent); }
-  .sync-seg-track {
-    position: relative; height: 0.6rem; overflow: hidden;
+  .sync-bar-phase { color: var(--color-accent); white-space: nowrap; }
+  /* The concrete version of the same fact, and the one a person feels. It is a
+     raw tally, so it keeps moving through the moments the fill has to wait for
+     a newly planned batch to be absorbed. */
+  .sync-bar-count {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.72rem; color: var(--color-ink-muted); white-space: nowrap;
+  }
+  .sync-bar-figure {
+    margin-left: auto;
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.78rem; letter-spacing: 0.02em; color: var(--color-ink);
+  }
+  .sync-bar-track {
+    position: relative; height: 0.7rem; overflow: hidden;
     border-radius: var(--radius-pill); background: var(--color-surface-3);
   }
-  .sync-seg-fill {
+  .sync-bar-fill {
     display: block; height: 100%; width: 0;
     border-radius: var(--radius-pill);
-    /* A section that is not the live one is the same hue at a lower value,
-       never a second colour: the bar means one thing, and the accent is what
-       it means. */
-    background: color-mix(in srgb, var(--color-accent) 44%, var(--color-surface-3));
+    background: var(--color-accent);
     transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .sync-seg.is-active .sync-seg-fill { background: var(--color-accent); }
-  .sync-seg-figure {
-    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-    font-size: 0.7rem; letter-spacing: 0.02em; color: var(--color-ink-faint);
-  }
-  .sync-seg.is-active .sync-seg-figure { color: var(--color-ink); }
-  /* Job: the section that is running says so between readings, which arrive
-     every six seconds and move in units of a whole game. It is on the live,
-     unfinished section only, so nothing loops once the work is elsewhere. */
-  .sync-seg.is-active:not(.is-done) .sync-seg-track::after {
-    content: ""; position: absolute; inset: 0;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      color-mix(in srgb, var(--color-accent) 22%, transparent),
-      transparent
-    );
-    animation: sync-sweep 2.4s ease-in-out infinite;
-  }
-  /* The live section in the short window before it has a denominator at all.
-     Same argument as `.working-indeterminate`: a 0% fill that never moves
-     reads as broken. It becomes a real width the moment one exists. */
-  .sync-seg-fill.is-unknown { width: 34%; animation: sync-travel 1.9s ease-in-out infinite; }
+  /* Job: the bar says it is working in the stretch before it has a denominator
+     at all — one indivisible work item per account, so a 0% fill that never
+     moves would read as broken. It becomes a real width the moment there is
+     one to draw. */
+  .sync-bar-fill.is-unknown { width: 34%; animation: sync-travel 1.9s ease-in-out infinite; }
   @keyframes sync-sweep {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
@@ -326,15 +306,15 @@
      runs out of room below it. Type and tracking come down rather than the
      bar losing a section. */
   @media (max-width: 520px) {
-    .sync-bar { gap: 0.5rem; }
-    .sync-seg-label { font-size: 0.58rem; letter-spacing: 0.05em; }
-    .sync-seg-figure { font-size: 0.64rem; letter-spacing: 0; }
+    .sync-bar-head { gap: 0.5rem; }
+    .sync-bar-phase { font-size: 0.58rem; letter-spacing: 0.05em; }
+    .sync-bar-count { font-size: 0.64rem; }
+    .sync-bar-figure { font-size: 0.7rem; letter-spacing: 0; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .sync-seg-label, .sync-seg-fill, .sync-sq, .sync-board-slot { transition: none; }
-    .sync-seg.is-active .sync-seg-track::after { display: none; }
-    .sync-seg-fill.is-unknown { animation: none; width: 100%; opacity: 0.45; }
+    .sync-bar-fill, .sync-sq, .sync-board-slot { transition: none; }
+    .sync-bar-fill.is-unknown { animation: none; width: 100%; opacity: 0.45; }
     /* The boards hold one position and never step; the component stops
        advancing them as well, so the still frame is the whole picture. */
     .sync-board-slot { animation: none; }
@@ -1356,6 +1336,157 @@
   }
   .today-row-go:hover { transform: translateY(-1px); }
   .today-row-go:active { transform: translateY(1px); box-shadow: var(--shadow-key-down); }
+
+  /* -- the ranked stack ----------------------------------------------------
+     Seven measures held in a meaningful order, worst-moving first. Rank is the
+     information here, so the rows carry no surface of their own and no badge:
+     what separates them is a hairline of space and the number in the gutter,
+     and what makes one matter more than the next is that it is above it.
+
+     This is the page's answer to the row of equal-width cards. Equal weight was
+     the failure — three panels saying every phase mattered the same amount, on
+     a page whose job is to say which thing to open tonight. */
+  .today-stack { margin-top: clamp(2.5rem, 6vw, 3.75rem); }
+  .today-stack > .cap {
+    display: block; margin-bottom: 0.75rem; color: var(--color-ink-faint);
+  }
+
+  .today-rank { display: grid; }
+  /* Space, not a rule. The one hairline in this component is between rows, and
+     it is the surface-2 well showing through rather than a drawn border. */
+  .today-rank-row + .today-rank-row { margin-top: 2px; }
+
+  .today-rank-head {
+    display: grid; grid-template-columns: 1.6rem minmax(0, 1fr) auto;
+    align-items: center; gap: 0.9rem; width: 100%; text-align: left;
+    padding: 0.8rem 0.9rem;
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    transition: background 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .today-rank-head:hover { background: var(--color-surface-2); }
+  .today-rank-row.is-open .today-rank-head { background: var(--color-surface-2); }
+
+  /* The rank, in the numeral face, quiet. It is a position and not a score, so
+     it never competes with the figure on the right of the same row. */
+  .today-rank-no {
+    font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700;
+    color: var(--color-ink-faint); font-variant-numeric: tabular-nums;
+  }
+  /* The concept, then the job. Two measures share the concept name — noticing
+     the position that decides a game and playing it are scored separately —
+     so without the role the stack shows one name twice and reads as a
+     duplicated row rather than as two different things. */
+  .today-rank-name {
+    min-width: 0; font-size: 0.95rem; font-weight: 620;
+    letter-spacing: -0.012em; color: var(--color-ink);
+  }
+  .today-rank-name small {
+    display: block; margin-top: 0.1rem;
+    font-size: 0.72rem; font-weight: 500; letter-spacing: 0;
+    color: var(--color-ink-faint);
+  }
+
+  /* The movement: the figure and the word it means, stacked. Never the figure
+     alone — a signed number with no certainty attached is the claim this
+     product refuses to make. */
+  .today-rank-move {
+    display: grid; justify-items: end; gap: 0.1rem; text-align: right;
+  }
+  .today-rank-move b {
+    font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700;
+    line-height: 1.1; font-variant-numeric: tabular-nums;
+  }
+  .today-rank-move small {
+    font-size: 0.66rem; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--color-ink-faint); white-space: nowrap;
+  }
+  /* Two coloured states and no more, which is DESIGN.md's rule: a result may
+     carry a semantic colour. Everything uncertain stays ink, because a colour
+     on a change Forma cannot call would be the page asserting what the
+     statistics decline to. */
+  .today-rank-move.is-declined b { color: var(--color-loss); }
+  .today-rank-move.is-slipping b { color: var(--color-mistake); }
+  .today-rank-move.is-unclear b { color: var(--color-ink-muted); }
+  .today-rank-move.is-gaining b,
+  .today-rank-move.is-improved b { color: var(--color-win); }
+
+  .today-rank-detail {
+    display: grid; gap: 0.6rem;
+    padding: 0.9rem 0.9rem 1.1rem 4.1rem; max-width: 72ch;
+  }
+  .today-rank-rate, .today-rank-change {
+    font-size: 0.88rem; line-height: 1.6; color: var(--color-ink-muted);
+  }
+  .today-rank-rate b, .today-rank-change b {
+    font-family: var(--font-mono); font-weight: 700; color: var(--color-ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .today-rank-definition, .today-rank-none {
+    font-size: 0.8rem; line-height: 1.6; color: var(--color-ink-faint);
+  }
+
+  /* The interval, on the full 0–100 scale it is a share of. Scaling it to its
+     own width would make a two-point interval and a twenty-point one look
+     identical, which is the single thing this mark exists to tell apart. */
+  .today-interval-row {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center; gap: 0.55rem; max-width: 34rem;
+  }
+  .today-interval-end {
+    font-family: var(--font-mono); font-size: 0.62rem;
+    color: var(--color-ink-faint); font-variant-numeric: tabular-nums;
+  }
+  .today-interval {
+    position: relative; display: block; height: 6px;
+    border-radius: 999px; background: var(--color-surface-2);
+  }
+  .today-interval-band {
+    position: absolute; top: 0; bottom: 0; border-radius: 999px;
+    background: color-mix(in srgb, var(--color-accent) 30%, var(--color-surface-2));
+  }
+  .today-interval-point {
+    position: absolute; top: -2px; width: 2px; height: 10px;
+    border-radius: 1px; background: var(--color-ink);
+  }
+
+  .today-stack-key {
+    margin-top: 0.9rem; max-width: 68ch;
+    font-size: 0.75rem; line-height: 1.6; color: var(--color-ink-faint);
+  }
+
+  @media (max-width: 720px) {
+    .today-rank-head { grid-template-columns: 1.3rem minmax(0, 1fr) auto; gap: 0.6rem; }
+    .today-rank-detail { padding-left: 0.9rem; }
+  }
+
+  /* -- progress ------------------------------------------------------------ */
+  .today-progress { margin-top: clamp(2.5rem, 6vw, 4rem); }
+  .today-progress .cap { margin-bottom: 0.7rem; }
+  .today-progress-card {
+    border-radius: var(--radius-panel);
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+    padding: clamp(1.25rem, 3vw, 1.75rem);
+  }
+  .today-progress-card h2 {
+    font-size: 1.05rem; font-weight: 630; letter-spacing: -0.015em;
+    color: var(--color-ink);
+  }
+  .today-progress-metrics {
+    margin-top: 1rem; display: flex; flex-direction: column; gap: 0.6rem;
+  }
+  .today-progress-metrics li {
+    display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  }
+  .today-progress-metric-key {
+    font-family: var(--font-mono); font-size: 0.78rem; color: var(--color-ink-muted);
+  }
+  .today-progress-readiness {
+    font-size: 0.78rem; color: var(--color-ink-muted); font-variant-numeric: tabular-nums;
+  }
+  .today-progress-note {
+    margin-top: 1rem; font-size: 0.82rem; line-height: 1.6; color: var(--color-ink-muted);
+  }
 
   /* The bars grow to their real value on entry, staggered left to right: the
      value is the animation, which is the one job DESIGN.md lets motion have on
@@ -3197,34 +3328,16 @@
     stroke-width: 2; stroke-linejoin: round;
   }
   /* The median's interval: the same ink as the line, kept light enough that
-     the line stays the figure and the ribbon qualifies it. */
+     the line stays the figure and the ribbon qualifies it.
+     A touch above the band's own 13%, never past it — the interval is a
+     secondary reading (how precisely the median is known) sitting inside a
+     primary one (how wide the middle half is), and at the 34% this carried
+     before, a second bin-by-bin-noisy layer outweighed the band it was meant
+     to qualify: two competing textures instead of one shape with a footnote. */
   .cone-median-interval {
-    fill: color-mix(in srgb, var(--color-accent) 34%, var(--color-surface));
-    stroke: color-mix(in srgb, var(--color-accent) 34%, var(--color-surface));
+    fill: color-mix(in srgb, var(--color-accent) 20%, var(--color-surface));
+    stroke: color-mix(in srgb, var(--color-accent) 20%, var(--color-surface));
     stroke-width: 1.5; stroke-linejoin: round;
-  }
-  /* The spread register, on the openings sheet's own three-step ramp so a
-     reader who has learned that ramp anywhere in the product reads this row
-     without being taught it again. */
-  /* `display: contents` so the label and the lane become items of the frame's
-     own two-column grid, the way the axis and the plot already are. Wrapped in
-     a div with its own padding instead, the lane sat in the content column and
-     the label fell out of the gutter. */
-  .cone-spread-row { display: contents; }
-  .cone-reg {
-    grid-column: 1; align-self: center; justify-self: end;
-    color: var(--color-ink-faint);
-  }
-  .cone-spread {
-    grid-column: 2;
-    display: flex; gap: 0; align-items: stretch;
-    padding: 4px; border-radius: var(--radius-control);
-    background: var(--color-surface-2);
-  }
-  .cone-spread-cell { flex: 1 1 0; min-width: 0; display: flex; justify-content: center; }
-  .cone-spread .line-sq {
-    width: 100%; max-width: 1.35rem; height: auto; aspect-ratio: 1;
-    margin: 0 1px; border-radius: 5px;
   }
   .cone-median {
     stroke: var(--color-ink); stroke-width: 1.5;
@@ -3262,36 +3375,31 @@
      the axis it holds. `--phase-columns` is set by the component from the same
      spans the dividers are drawn at, so the bar and the picture cannot drift.
      It sits in the content column, like the plot, not in the gutter. */
+  /* The axis legend. Not cards: no surface, no padding, no box — each phase is
+     a label sitting under the stretch of curve it names, separated from its
+     neighbours by the divider already drawn in the graph above. A panel here
+     would be a second layout competing with the figure it exists to annotate,
+     which is exactly what the three cards it replaced were. */
   .cone-phases {
-    grid-column: 2; display: grid; gap: 2px;
+    grid-column: 2; display: grid; gap: 0 1.5rem;
     grid-template-columns: var(--phase-columns, repeat(3, 1fr));
-    margin-top: 0.7rem;
+    margin-top: 0.55rem;
   }
   .cone-phase {
-    display: grid; gap: 0.3rem; align-content: start;
-    padding: 0.75rem 0.85rem; border-radius: var(--radius-control);
-    background: var(--color-surface-2); min-width: 0;
+    display: grid; gap: 0.2rem; align-content: start; min-width: 0;
+    padding-right: 0.5rem;
   }
-  .cone-phase-head { display: flex; align-items: center; gap: 0.45rem; }
-  .cone-phase-head b { color: var(--color-ink-muted); }
-  .cone-phase-figure { display: flex; align-items: baseline; gap: 0.35rem; min-width: 0; }
-  .cone-phase-figure b {
-    font-family: var(--font-mono); font-size: 1.05rem; font-weight: 700;
-    color: var(--color-ink); font-variant-numeric: tabular-nums;
-  }
-  .cone-phase-figure small { font-size: 0.68rem; color: var(--color-ink-faint); }
+  .cone-phase > b { color: var(--color-ink-faint); }
   .cone-phase-reading {
-    font-size: 0.8rem; line-height: 1.45; color: var(--color-ink);
+    font-size: 0.82rem; line-height: 1.4; color: var(--color-ink);
+    text-wrap: balance;
   }
   .cone-phase-evidence {
     font-family: var(--font-mono); font-size: 0.66rem; color: var(--color-ink-faint);
     font-variant-numeric: tabular-nums;
   }
-  /* One absence, stated once. It was three copies of this paragraph, one per
-     card, which took more of the page than every figure on it put together. */
-  .cone-phases-absent {
-    grid-column: 2; margin-top: 0.6rem; max-width: 68ch;
-    font-size: 0.75rem; line-height: 1.6; color: var(--color-ink-faint);
+  .cone-phase-caution {
+    font-size: 0.7rem; line-height: 1.45; color: var(--color-ink-muted);
   }
 
   .phase-card {
@@ -3326,8 +3434,12 @@
     .cone-frame { grid-template-columns: 2.6rem minmax(0, 1fr); }
     .cone-plot { aspect-ratio: 1.35; }
     /* Structural, as DESIGN.md requires: three narrow columns of prose is not
-       a layout, so the cards stack and give up their alignment to the graph. */
+       a layout, so the cards stack and give up their alignment to the graph.
+       Stacked, the legend needs its row gap back — the column layout sets
+       `gap: 0 1.5rem`, and in one column that is three phases with nothing
+       between them. */
     .phase-cards, .cone-phases { grid-template-columns: minmax(0, 1fr); }
+    .cone-phases { gap: 0.9rem; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -3875,5 +3987,286 @@
   @media (prefers-reduced-motion: reduce) {
     .today-median { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; }
     .today-lane-brace i { animation: none; }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* `/welcome`: the split connect card.                                  */
+/*                                                                      */
+/* Two halves of one object, not a card beside a picture: they share a  */
+/* radius, a shadow and a grid, so the seam between them is a change of */
+/* ground rather than an edge. The left half is the form on white; the  */
+/* right is the accent panel that draws where the games come from.      */
+/*                                                                      */
+/* The accent block is allowed here for the same reason the Scale band  */
+/* is on the landing page: everything around it is warm paper and       */
+/* white, so a change of ground is what separates it, and it is the     */
+/* brand accent rather than a fourth decorative hue.                    */
+/* ------------------------------------------------------------------ */
+@layer components {
+  /* A fixed height, and that is the point.
+     The card used to be sized by whatever the left column happened to hold, so
+     opening the add slot grew it from 412px to 790px and the whole thing jumped
+     under the cursor that opened it — with the panel beside it stretching to
+     match. A stable frame means the only thing that moves when you press the
+     plus is the slot you pressed. The left column takes the overflow, which is
+     the right place for it: the form is the part with variable content. */
+  .auth-card-split {
+    width: min(58rem, 100%);
+    height: min(34rem, calc(100dvh - 4rem));
+    padding: 0;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    border-radius: var(--radius-xl);
+  }
+  .auth-card-body {
+    padding: clamp(1.75rem, 4vw, 2.5rem); min-width: 0;
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+  /* The scrollbar is a scrollbar, not a piece of chrome: it appears only when
+     the column genuinely overflows, and it never draws a track. */
+  .auth-card-body::-webkit-scrollbar { width: 6px; }
+  .auth-card-body::-webkit-scrollbar-thumb {
+    border-radius: 999px; background: var(--color-surface-3);
+  }
+  .auth-card-body::-webkit-scrollbar-track { background: transparent; }
+
+  /* -- the accent half ------------------------------------------------ */
+  .connect-aside {
+    position: relative; display: grid; place-items: center;
+    padding: clamp(1.5rem, 3.5vw, 2.5rem);
+    background: var(--color-accent); color: var(--color-accent-ink);
+    /* One soft wash off the top left, so the panel has a light source rather
+       than reading as a flat swatch of paint. */
+    background-image: radial-gradient(
+      120% 90% at 18% 8%,
+      color-mix(in srgb, #ffffff 18%, transparent),
+      transparent 62%
+    );
+  }
+  .connect-figure { position: relative; width: 100%; max-width: 22rem; height: 17rem; }
+
+  .connect-wires { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* The wire reaching down to the mark. A clip-path wipe from the top, not a
+     stroke-dashoffset draw: the stroke is already spending its dash array on
+     the flow, and two animations fighting over `stroke-dasharray` is a wire
+     that stutters at the handover. Wiping leaves the dashes alone and reveals
+     them already travelling, which is what the draw was reaching for. */
+  .connect-wire { animation: connect-reach 700ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  @keyframes connect-reach {
+    from { clip-path: inset(0 0 100% 0); }
+    to { clip-path: inset(0 0 0 0); }
+  }
+  .connect-wires path {
+    fill: none;
+    stroke: color-mix(in srgb, var(--color-accent-ink) 62%, transparent);
+    stroke-width: 2; vector-effect: non-scaling-stroke;
+    stroke-dasharray: 3 7; stroke-linecap: round;
+  }
+  /* Flowing dashes, and the job is the one the landing page gives them: games
+     moving from a platform into Forma. On the accent ground the stroke takes
+     the accent ink rather than the accent. */
+  .connect-wires path.is-flowing { animation: connect-flow 3.2s linear infinite; }
+  /* A Chess.com account links and cannot be read yet, so its wire connects and
+     stays still. Drawing games pouring out of it would be the picture telling a
+     lie the copy is careful not to tell. */
+  .connect-wires path.is-still {
+    stroke: color-mix(in srgb, var(--color-accent-ink) 34%, transparent);
+  }
+  @keyframes connect-flow { to { stroke-dashoffset: -20; } }
+
+  /* Opaque, and above the wires, so each wire is masked exactly where it meets
+     its tile instead of stopping short of one. */
+  /* The node arriving. A reveal, so 600ms and the exponential ease-out, never a
+     bounce. `both` holds the final state, so a node is fully legible whether or
+     not the animation ever ran. */
+  .connect-node {
+    animation: connect-arrive 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    position: absolute; z-index: 1; top: 23%; transform: translate(-50%, -50%);
+    display: flex; align-items: center; gap: 0.55rem;
+    padding: 0.5rem 0.85rem 0.5rem 0.55rem;
+    white-space: nowrap; border-radius: var(--radius-pill);
+    background: var(--color-surface); color: var(--color-ink);
+    box-shadow: 0 10px 24px rgb(90 30 10 / 0.22), 0 2px 6px rgb(90 30 10 / 0.16);
+  }
+  .connect-node-mark {
+    display: grid; width: 1.7rem; height: 1.7rem; flex: 0 0 auto; place-items: center;
+    border-radius: 8px; background: var(--color-bg); color: var(--color-ink);
+  }
+  .connect-node-text { display: grid; gap: 0.05rem; }
+  .connect-node-text b {
+    font-size: 0.78rem; font-weight: 800; letter-spacing: -0.02em; color: var(--color-ink);
+  }
+  .connect-node-text i {
+    font-style: normal; font-family: var(--font-mono);
+    font-size: 0.58rem; color: var(--color-ink-faint);
+  }
+
+  /* The mark the two feeds arrive at. Light on the accent, which is the
+     inversion of the landing page core and the right way round here: there the
+     mark is the only warm thing on white, here it is the only bright thing on
+     orange. */
+  /* Alone in the middle of the panel until something feeds it, then it settles
+     to the foot where the wires arrive. Transform only, so the move costs no
+     layout and nothing under it shifts, and it rides the same ease as the wire
+     that pulls it down. */
+  .connect-core {
+    position: absolute; z-index: 2; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    display: grid; width: 5rem; height: 5rem; place-items: center;
+    border-radius: 20px;
+    background: var(--color-accent-ink); color: var(--color-accent);
+    box-shadow: 0 16px 36px rgb(90 30 10 / 0.3), 0 3px 10px rgb(90 30 10 / 0.2);
+    transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .connect-figure.has-feeds .connect-core { transform: translate(-50%, 84%); }
+
+  @keyframes connect-arrive {
+    from { opacity: 0; transform: translate(-50%, calc(-50% - 10px)); }
+    to { opacity: 1; transform: translate(-50%, -50%); }
+  }
+
+  /* -- the accounts section ------------------------------------------- */
+  .connect-accounts { margin-top: 1.5rem; display: grid; gap: 0.55rem; }
+  .connect-accounts > .cap { color: var(--color-ink-faint); }
+  .connect-rows { display: grid; gap: 0.5rem; }
+
+  .connect-row {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center; gap: 0.65rem;
+    border-radius: var(--radius-control);
+    padding: 0.7rem 0.85rem;
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+  }
+  /* The remove control is quiet until the row is approached, so a connected
+     account reads as a status at rest and as something you can act on when you
+     reach for it. It never leaves the layout, so nothing reflows on hover --
+     it is the opacity that changes, not the grid. */
+  .connect-row-remove { display: grid; }
+  .connect-row-remove .connect-x {
+    opacity: 0; transition: opacity 150ms ease, background 150ms ease, color 150ms ease;
+  }
+  .connect-row:hover .connect-row-remove .connect-x,
+  .connect-row-remove .connect-x:focus-visible { opacity: 1; }
+  /* Touch has no hover, so there the control is simply always there. */
+  @media (hover: none) {
+    .connect-row-remove .connect-x { opacity: 1; }
+  }
+  .connect-row-mark { display: grid; place-items: center; flex: 0 0 auto; }
+  .connect-row-text { display: grid; gap: 0.1rem; min-width: 0; }
+  .connect-row-text strong {
+    font-size: 0.9rem; font-weight: 640; letter-spacing: -0.012em; color: var(--color-ink);
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .connect-row-text small { font-size: 0.72rem; color: var(--color-ink-faint); }
+  /* The word as well as the colour, per DESIGN.md: a state never rides on hue
+     alone, and a green tick with no label is a hue with a shape. */
+  .connect-row-state {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em;
+    color: var(--color-win); white-space: nowrap;
+  }
+
+  /* -- the empty slot -------------------------------------------------- */
+  /* The one drawn line on this card that earns itself. A dashed edge says
+     "nothing here yet" faster than any surface or amount of space, and it is
+     the device `.account-empty` already uses. */
+  .connect-plus {
+    width: 100%;
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    border: 1px dashed var(--color-line-strong);
+    border-radius: var(--radius-control);
+    padding: 0.75rem 0.85rem;
+    background: transparent; color: var(--color-ink-muted);
+    font-size: 0.85rem; font-weight: 620;
+    transition: background 150ms cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 150ms ease, color 150ms ease;
+  }
+  .connect-plus:hover {
+    background: var(--color-surface-2);
+    border-color: var(--color-accent);
+    color: var(--color-ink);
+  }
+  .connect-plus:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  .connect-plus-icon {
+    display: grid; place-items: center; width: 1.4rem; height: 1.4rem;
+    border-radius: 999px;
+    background: var(--color-accent-wash); color: var(--color-accent);
+  }
+
+  /* -- the open slot --------------------------------------------------- */
+  /* The form replaces the plus in the same slot rather than opening beneath
+     it, which is what makes "one at a time" a shape on screen and not only a
+     rule in the code. */
+  .connect-add {
+    display: grid; gap: 0.7rem;
+    border-radius: var(--radius-control);
+    padding: 0.85rem;
+    background: var(--color-surface-2);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 22%, transparent);
+    animation: connect-open 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  /* At zero state the form is not a slot that opened inside a list, it is the
+     card's whole content. A well and a ring around it would be a container
+     drawn around the only thing on screen. */
+  .connect-add.is-bare {
+    padding: 0; background: transparent; box-shadow: none; animation: none;
+  }
+  @keyframes connect-open {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: none; }
+  }
+  .connect-add-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  }
+  .connect-add-head .cap { color: var(--color-accent); }
+  .connect-x {
+    display: grid; place-items: center; width: 1.6rem; height: 1.6rem; flex: 0 0 auto;
+    border-radius: 999px; background: transparent; color: var(--color-ink-faint);
+    transition: background 150ms ease, color 150ms ease;
+  }
+  .connect-x:hover { background: var(--color-surface-3); color: var(--color-ink); }
+  .connect-x:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+
+  .connect-field { display: grid; gap: 0.35rem; }
+  .connect-field span { font-size: 0.72rem; font-weight: 700; color: var(--color-ink-muted); }
+  .connect-field input {
+    height: 2.7rem; border: 0; border-radius: var(--radius-control);
+    background: var(--color-surface); color: var(--color-ink);
+    padding: 0 0.85rem; font-size: 0.9rem; box-shadow: var(--shadow-flat);
+  }
+  .connect-field input:focus { outline: 0; box-shadow: 0 0 0 2px var(--color-accent); }
+  .connect-field input::placeholder { color: var(--color-ink-faint); }
+  .connect-add-go { width: 100%; }
+
+  /* The candidate, inside the slot being filled rather than as a card under
+     the whole form. */
+  .connect-candidate {
+    display: grid; grid-template-columns: auto minmax(0, 1fr);
+    align-items: center; gap: 0.65rem;
+    border-radius: var(--radius-control); padding: 0.6rem 0.75rem;
+    background: var(--color-surface); box-shadow: var(--shadow-flat);
+  }
+
+  .connect-say:empty { display: none; }
+  .connect-start { margin-top: 0.9rem; display: grid; gap: 0.5rem; justify-items: stretch; }
+  .connect-start .primary-button { width: 100%; }
+  .connect-start .tag-note { text-align: center; }
+  .connect-start .primary-button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* Structural, as DESIGN.md requires. The panel is dropped rather than
+     stacked: a decorative half above a form is a screenful of scrolling before
+     the first field. */
+  @media (max-width: 860px) {
+    .auth-card-split { grid-template-columns: minmax(0, 1fr); width: min(30rem, 100%); }
+    .connect-aside { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .connect-wires path.is-flowing { animation: none; }
+    .connect-wire, .connect-node { animation: none; }
+    .connect-core { transition: none; }
+    .connect-add { animation: none; }
   }
 }

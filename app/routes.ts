@@ -94,6 +94,7 @@ const productSurface = [
   route("dev/foundation", "routes/__foundation.tsx"),
   route("dev/rating", "routes/__preview-rating.tsx"),
   route("dev/sounds", "routes/__preview-sounds.tsx"),
+  route("dev/today", "routes/__preview-today.tsx"),
   route("game/:id", "routes/game.tsx"),
 
   // --- admin ------------------------------------------------------------

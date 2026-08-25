@@ -370,7 +370,7 @@ describe("the trajectory", () => {
     const cards = [...container.querySelectorAll(".cone-phase")];
     expect(cards).toHaveLength(3);
     expect(cards[2]!.textContent).toContain("48 games");
-    expect(cards[2]!.textContent).toContain("24% of your games reach it");
+    expect(cards[2]!.textContent).toContain("24% reach it");
   });
 
   test("the picture states its finding in words, not just in a shape", () => {
@@ -382,8 +382,9 @@ describe("the trajectory", () => {
   test("a per-phase rate nobody publishes is named as absent, never derived", () => {
     // The evidence is phase-tagged in the database and no route returns it.
     // Splitting the published estimates here would invent a measurement.
+    // Stated once in the figure's caption now, rather than once per phase.
     const text = shown();
-    expect(text).toContain("is not published to this screen yet");
+    expect(text).toContain("not published to this screen yet");
   });
 
   test("no trajectory is a sentence rather than a missing section", () => {

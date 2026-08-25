@@ -12,7 +12,6 @@ import {
 } from "../components/v1/Honesty";
 import { CoveragePanel } from "../components/onboarding/CoveragePanel";
 import { JourneyFailure } from "../components/onboarding/JourneyFailure";
-import { StageTrail } from "../components/onboarding/StageTrail";
 import { WithheldNote } from "../components/onboarding/WithheldNote";
 import { ProblemError } from "../lib/v1/problem";
 import { FAILURE_REASONS } from "../lib/onboarding/copy";
@@ -198,7 +197,6 @@ export default function Foundation() {
 
       <Row title="The journey" note="Where a run is now. The trail never marks a stage complete: the server derives the stage from evidence and can legitimately move it backwards.">
         <div className="w-full">
-          <StageTrail stage="analysing" />
         </div>
       </Row>
 

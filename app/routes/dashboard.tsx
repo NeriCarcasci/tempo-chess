@@ -10,6 +10,7 @@ import { getOnboarding, getWorkflow } from "../lib/onboarding/api";
 import { nextScreen, type Destination } from "../lib/onboarding/nextScreen";
 import { fetchRecentGames, type RecentGame } from "../lib/v1/games";
 import { getDashboard, todayReport, type TodayReport } from "../lib/v1/dashboard";
+import { activeGoal, getGoalProgress, listGoals, type GoalProgress, type GoalView } from "../lib/v1/goals";
 import {
   explorerEmptyReason,
   getOpeningExplorer,
@@ -31,7 +32,8 @@ import {
  *   * `GET /v1/dashboard`, for what the published report concludes;
  *   * `GET /v1/openings/explorer` per colour, for the shape and the lead;
  *   * `GET /v1/games/recent`, for the last game;
- *   * `GET /v1/onboarding` plus its sync workflow, for where the run stands.
+ *   * `GET /v1/onboarding` plus its sync workflow, for where the run stands;
+ *   * `GET /v1/goals` plus `GET /v1/goals/{id}/progress`, for the active goal.
  *
  * No call carries a username. The subject is resolved from the access token on
  * the server, which is what stops a client naming somebody else's games.
@@ -59,6 +61,10 @@ interface TodayData {
   run: Destination | null;
   /** What the published report concludes, or null when nothing is published. */
   report: TodayReport | null;
+  /** The goal this account is actively working, or null with none set. */
+  goal: GoalView | null;
+  /** That goal's progress, or null when nothing has been measured on it yet. */
+  goalProgress: GoalProgress | null;
 }
 
 export function meta() {
@@ -115,6 +121,26 @@ async function readReport(): Promise<TodayReport | null> {
   }
 }
 
+/**
+ * The goal this account is working, and what has been measured on it.
+ *
+ * `/v1/goals` has no active-goal filter, so the whole list is read and the
+ * active one picked here. Nothing here is a claim about the player yet — the
+ * ordinary state, for an account that has never set one, is `goal: null`, and
+ * the page has to say that rather than nothing at all.
+ */
+async function readGoal(): Promise<{ goal: GoalView | null; progress: GoalProgress | null }> {
+  try {
+    const goal = activeGoal(await listGoals());
+    if (!goal) return { goal: null, progress: null };
+    const progress = await getGoalProgress(goal.goalId);
+    return { goal, progress };
+  } catch (error) {
+    if (error instanceof Response) throw error; // a 401 redirect must land
+    return { goal: null, progress: null };
+  }
+}
+
 export async function clientLoader(): Promise<TodayData> {
   const session = await requireSession();
 
@@ -131,12 +157,13 @@ export async function clientLoader(): Promise<TodayData> {
    * a pooled graph cannot. `walkable` is the whole adapter: the v1 graph and
    * the legacy one differ only in a loss field the tear sheet never reads.
    */
-  const [white, black, recent, run, report] = await Promise.all([
+  const [white, black, recent, run, report, { goal, progress }] = await Promise.all([
     getOpeningExplorer({ color: "white" }),
     getOpeningExplorer({ color: "black" }),
     fetchRecentGames(1),
     readRun(),
     readReport(),
+    readGoal(),
   ]);
 
   const sheet = deriveTearSheet(
@@ -167,6 +194,8 @@ export async function clientLoader(): Promise<TodayData> {
     lastGame: recent[0] ?? null,
     run,
     report,
+    goal,
+    goalProgress: progress,
   };
   setCached(cacheKey, data);
   return data;

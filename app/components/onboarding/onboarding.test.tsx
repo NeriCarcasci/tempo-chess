@@ -2,7 +2,6 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { CoveragePanel } from "./CoveragePanel";
 import { JourneyFailure } from "./JourneyFailure";
-import { StageTrail } from "./StageTrail";
 import { WithheldNote } from "./WithheldNote";
 import { FAILURE_REASONS } from "../../lib/onboarding/copy";
 import type { OnboardingCoverage } from "../../lib/v1/types";
@@ -10,9 +9,8 @@ import type { OnboardingCoverage } from "../../lib/v1/types";
 /**
  * The onboarding components, tested at the points where they would otherwise
  * quietly stop telling the truth: a null count rendered as zero, a withheld
- * item rendered as absent, a workflow's internals rendered at a reader, and a
- * progress trail claiming a stage is finished when the server can still move
- * it backwards.
+ * item rendered as absent, and a workflow's internals rendered at a
+ * reader.
  */
 
 const coverage = (over: Partial<OnboardingCoverage> = {}): OnboardingCoverage =>
@@ -114,10 +112,18 @@ describe("JourneyFailure", () => {
     }
   });
 
-  test("a dead workflow is its own branch, not a generic error", () => {
+  test("a dead workflow is its own branch, and names no step it cannot know", () => {
     const { container } = render(<JourneyFailure reason={null} workflowFailed />);
-    expect(container.textContent).toContain("did not finish");
+    // Its own branch, distinct from the generic one.
+    expect(container.querySelector("strong")?.textContent).toBe("Reading your games stopped");
+    // Still says the reassuring, certainly-true part.
     expect(container.textContent).toContain("untouched");
+    // But not which step stopped. This copy is printed for a failure anywhere
+    // in the examination, and it used to blame the import every time — on a run
+    // where the import had finished, the games were read, and the engine was
+    // working through them, it told the reader there was nothing to analyse.
+    expect(container.textContent).not.toContain("import");
+    expect(container.textContent).not.toContain("nothing to analyse");
   });
 
   test("whatever way forward the caller offers is always shown", () => {
@@ -162,27 +168,3 @@ describe("WithheldNote", () => {
   });
 });
 
-describe("StageTrail", () => {
-  test("the trail has no memory", () => {
-    // `stage` is derived from evidence and legitimately moves backwards, so a
-    // stage must never be marked finished.
-    const first = render(<StageTrail stage="diagnostic" />);
-    const currentFirst = first.container.querySelectorAll(".tag-accent");
-    expect(currentFirst.length).toBe(1);
-    expect(currentFirst[0]?.textContent).toBe("Examining");
-    first.unmount();
-
-    const second = render(<StageTrail stage="analysing" />);
-    const currentSecond = second.container.querySelectorAll(".tag-accent");
-    expect(currentSecond.length).toBe(1);
-    expect(currentSecond[0]?.textContent).toBe("Analysing");
-    // Nothing anywhere claims the earlier stage is done.
-    expect(second.container.textContent).not.toContain("✓");
-    expect(second.container.querySelector(".tag-win")).toBeNull();
-  });
-
-  test("an unknown stage marks nothing rather than guessing", () => {
-    const { container } = render(<StageTrail stage="not_started" />);
-    expect(container.querySelectorAll(".tag-accent").length).toBe(0);
-  });
-});

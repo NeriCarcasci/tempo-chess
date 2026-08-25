@@ -293,6 +293,169 @@ export function widestSample(groups: readonly MeasureGroup[]): number | null {
 }
 
 // ---------------------------------------------------------------------------
+// Which way a measure is going
+// ---------------------------------------------------------------------------
+
+/**
+ * The thresholds the estimator itself publishes findings at.
+ *
+ * `server/src/estimates/contract.ts` calls a change an early signal at a
+ * posterior of 0.8 and established at 0.95. They are restated here rather than
+ * chosen: a screen that drew its own line for "real" would be a second opinion
+ * with no version behind it, and the two would drift the first time the policy
+ * moved. If the server's numbers change, these are wrong and should follow.
+ */
+export const EARLY_PROBABILITY = 0.8;
+export const ESTABLISHED_PROBABILITY = 0.95;
+
+/**
+ * The same two thresholds, mirrored for a change going the other way.
+ *
+ * Written out rather than computed as `1 - EARLY_PROBABILITY`: in binary
+ * floating point that expression is 0.19999999999999996, so a posterior of
+ * exactly 0.2 falls through the comparison it is meant to satisfy and a
+ * measure on the boundary is silently reported as no clear change. The
+ * relationship is stated here instead of evaluated.
+ */
+export const SLIPPING_PROBABILITY = 0.2;
+export const DECLINED_PROBABILITY = 0.05;
+
+/**
+ * What may be said about a measure's movement.
+ *
+ * The decline states are the mirror of the improvement ones — a posterior of
+ * 0.05 that a player improved is the same evidence as 0.95 that they did not —
+ * and they exist here because the *findings* vocabulary has no decline type at
+ * all. It can publish `early_improvement_signal` and `established_improvement`
+ * and nothing in the other direction, so a report built only from findings can
+ * report every gain and no loss. PRODUCT.md's first principle is that the
+ * unflattering numbers are the ones that earn trust, and its anti-reference is
+ * a product that hides a losing record. Reading the posterior directly is what
+ * lets this page say a thing got worse.
+ */
+export type Movement = "declined" | "slipping" | "unclear" | "gaining" | "improved";
+
+export function movementOf(improvementProbability: number | null): Movement {
+  if (improvementProbability === null) return "unclear";
+  if (improvementProbability <= DECLINED_PROBABILITY) return "declined";
+  if (improvementProbability <= SLIPPING_PROBABILITY) return "slipping";
+  if (improvementProbability >= ESTABLISHED_PROBABILITY) return "improved";
+  if (improvementProbability >= EARLY_PROBABILITY) return "gaining";
+  return "unclear";
+}
+
+/** How a movement is said out loud. Never a bare direction: the certainty is the claim. */
+export const MOVEMENT_COPY: Record<Movement, { label: string; tone: string }> = {
+  declined: { label: "Gone backwards", tone: "is-declined" },
+  slipping: { label: "Slipping", tone: "is-slipping" },
+  unclear: { label: "No clear change", tone: "is-unclear" },
+  gaining: { label: "Early gain", tone: "is-gaining" },
+  improved: { label: "Improved", tone: "is-improved" },
+};
+
+export interface Measure {
+  baseKey: string;
+  /** The catalogue's own name. Never the wire's `displayName`, never a key. */
+  name: string;
+  /**
+   * Which job this measure is, when the concept covers more than one.
+   *
+   * Load-bearing rather than decorative. `critical_moment` is measured twice —
+   * once for noticing the position and once for playing it — and both rows
+   * carry the concept name "Positions that decide the game". Without the role
+   * the stack shows the same name twice with different numbers beside it, which
+   * reads as a duplicate row rather than as two different things.
+   */
+  role: string | null;
+  definition: string | null;
+  /** The standing rate over everything read, or null with no figure. */
+  rate: number | null;
+  intervalLow: number | null;
+  intervalHigh: number | null;
+  /** Chances behind the standing rate. */
+  sample: number;
+  coverageStatus: string;
+  unavailableReason: string | null;
+  /**
+   * The same player against their own earlier games, or null when the report
+   * carries only one window.
+   *
+   * `delta` and `improvementProbability` are read off the recent row rather
+   * than derived from the two estimates: the estimator discounts old evidence
+   * on a half-life and starts from a prior, so `recent - baseline` is not the
+   * number it computed and a reader who subtracts the two figures on screen
+   * would get a third answer.
+   */
+  change: {
+    from: number;
+    to: number;
+    delta: number;
+    improvementProbability: number | null;
+    movement: Movement;
+    /** Chances behind the recent window. */
+    sample: number;
+  } | null;
+}
+
+/**
+ * Every measure, ordered by how far it has moved against the player.
+ *
+ * **Not ordered by rate, and that is the whole point.** The seven rates are
+ * over different tasks — taking a free piece is not the same job as finding the
+ * only move that holds — so 4% on one and 84% on another are not two ends of a
+ * ranking, they are two unrelated facts. A page that sorted them would be
+ * telling somebody their worst area was whichever concept happened to be
+ * hardest, which is a claim about the catalogue rather than about them.
+ *
+ * What *is* comparable across concepts is a player against their own earlier
+ * self, which is precisely the frame `personal_current` exists to provide. So
+ * the stack is ranked by the posterior that the change was an improvement,
+ * lowest first: the things going most clearly wrong lead, and a measure with no
+ * second window sorts to the end rather than being ranked on a number it does
+ * not have.
+ */
+export function measures(dashboard: Dashboard): Measure[] {
+  return groupMeasures(dashboard.estimates)
+    .map((group): Measure => {
+      const { headline, recent, baseline } = group;
+      const change =
+        recent && baseline && recent.estimate !== null && baseline.estimate !== null
+          ? {
+              from: baseline.estimate,
+              to: recent.estimate,
+              // The estimator's own delta when it sent one. Falling back to the
+              // difference is a last resort and is still the same direction.
+              delta: recent.delta ?? recent.estimate - baseline.estimate,
+              improvementProbability: recent.improvementProbability,
+              movement: movementOf(recent.improvementProbability),
+              sample: recent.rawSampleSize,
+            }
+          : null;
+      return {
+        baseKey: group.baseKey,
+        name: group.name,
+        role: headline.copy?.roleLabel ?? null,
+        definition: group.definition,
+        rate: headline.estimate,
+        intervalLow: headline.intervalLow,
+        intervalHigh: headline.intervalHigh,
+        sample: headline.rawSampleSize,
+        coverageStatus: headline.coverageStatus,
+        unavailableReason: headline.unavailableReason,
+        change,
+      };
+    })
+    .sort((a, b) => {
+      // No second window is not "no change": it is a measure this report cannot
+      // rank, so it goes last rather than being sorted as though it held still.
+      const left = a.change?.improvementProbability ?? Number.POSITIVE_INFINITY;
+      const right = b.change?.improvementProbability ?? Number.POSITIVE_INFINITY;
+      if (left !== right) return left - right;
+      return a.name.localeCompare(b.name);
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Findings
 // ---------------------------------------------------------------------------
 
@@ -364,6 +527,30 @@ export function headlineFinding(findings: readonly Finding[]): Finding | null {
     (finding) => finding.findingType !== "insufficient_evidence",
   );
   return candidates[0] ?? null;
+}
+
+/**
+ * A sentence with a database identifier in it, which is not a sentence.
+ *
+ * `rendered_explanations` is written once, at publication, and kept forever. A
+ * report published before `server/src/estimates/render.ts` was repaired carries
+ * text like "critical_moment_recognize_objective is costing you", and no amount
+ * of correct code fixes a row that was already written — only re-running the
+ * analysis does. Until that happens the product would go on showing a column
+ * name to the person it is about.
+ *
+ * So the client refuses it. A lower-underscore-lower run is a key in every
+ * catalogue this build knows and appears in no English the renderer writes. The
+ * guard is deliberately narrow: it holds back the exact failure that shipped
+ * and nothing else, and the moment a re-render lands the good sentence passes
+ * it without anybody changing this file.
+ */
+const IDENTIFIER = /[a-z]+_[a-z]+/;
+
+export function readableExplanation(finding: Finding | null): string | null {
+  const text = finding?.explanation?.trim();
+  if (!text) return null;
+  return IDENTIFIER.test(text) ? null : text;
 }
 
 // ---------------------------------------------------------------------------
@@ -460,6 +647,25 @@ export interface TodayReport {
   conclusions: number;
   games: number;
   rating: QuotedRating | null;
+  /**
+   * Every measure, worst-moving first. This is the page's spine.
+   *
+   * Read from the estimates rather than the findings on purpose. An estimate
+   * resolves its name from the catalogue when the dashboard is read, so it is
+   * correct in any build; a finding carries prose frozen at publication time,
+   * which is why a report published before the renderer was repaired still
+   * prints a database key on screen. The estimates cannot go stale that way.
+   */
+  measures: Measure[];
+  /**
+   * When this report was published.
+   *
+   * On the page, next to the game count, because the two together are the only
+   * honest reading of every figure here: a report is a frozen cohort, not a
+   * live count, and an archive that has grown since says nothing about a number
+   * measured before it did.
+   */
+  publishedAt: string;
 }
 
 export function todayReport(dashboard: Dashboard): TodayReport | null {
@@ -467,20 +673,26 @@ export function todayReport(dashboard: Dashboard): TodayReport | null {
   const holdings = holdingsOf(dashboard);
   const finding = headlineFinding(dashboard.findings);
 
-  // With no trajectory and no readable finding there is no claim to make, and a
-  // row that cannot state its reason does not render. That is the hub's own
-  // rule and it applies to the thing at the top of it as much as to the list.
-  if (cone === null && finding === null) return null;
+  // Nothing to draw, nothing to read out and nothing measured is a report with
+  // no claim in it, and a row that cannot state its reason does not render.
+  // That is the hub's own rule, applied to the thing at the top of it as much
+  // as to the list. The measures join the test because they are now the page's
+  // spine: a report with seven measured areas has plenty to say even when the
+  // trajectory is absent and every finding was held back.
+  const ranked = measures(dashboard);
+  if (cone === null && finding === null && ranked.length === 0) return null;
 
   const reading = cone === null ? null : coneFinding(cone);
   return {
     headline: reading?.headline ?? "Forma has finished reading your games.",
     detail: reading?.detail ?? "",
-    finding: finding?.explanation ?? null,
+    finding: readableExplanation(finding),
     cone,
     measured: holdings.measured,
     conclusions: holdings.conclusions,
     games: holdings.trajectoryGames,
     rating: quotedRating(dashboard.ratingProfile),
+    measures: ranked,
+    publishedAt: dashboard.publishedAt,
   };
 }

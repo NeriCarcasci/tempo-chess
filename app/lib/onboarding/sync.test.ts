@@ -1,26 +1,27 @@
 import { describe, expect, test } from "vitest";
 import {
-  currentSection,
   emptyTracker,
   etaLabel,
-  fractionOf,
   observe,
-  overallPercent,
+  readJourney,
   remainingAt,
-  sectionOfWorkflow,
-  weighSections,
   type SyncTracker,
   type WorkflowLike,
 } from "./sync";
 
 /**
- * The bar's two claims, tested where they would quietly become lies.
+ * The bar's claims, tested where they would quietly become lies.
  *
- * The first is that a section's fill is a measurement: real completed weight
- * over real total weight, and never a stand-in for which phase is running. The
- * second is that neither the fill nor the countdown may go backwards — which is
- * the natural behaviour of both, because the examination keeps discovering work
- * and the denominators keep growing.
+ * The fill is a measurement — real completed work over real total work — and
+ * never a stand-in for which phase is running. It does not walk backwards, and
+ * the countdown does not count up on ordinary progress. Both of those are the
+ * natural behaviour of the raw numbers, because the examination keeps
+ * discovering work.
+ *
+ * The exception took longest to find and has its own case below: when the
+ * discovered work is orders of magnitude larger than what came before, holding
+ * the old estimate is not stability, it is a screen that says "under a minute
+ * left" for an hour.
  */
 
 const wf = (
@@ -35,167 +36,194 @@ const wf = (
 });
 
 /** One game's analysis: screening 80, deep 12, transitions 4, context 4. */
-const game = (completed: number): WorkflowLike => wf("game_analysis", completed, 100);
+const game = (completed: number, state = "running"): WorkflowLike =>
+  wf("game_analysis", completed, 100, { state });
+
+/** The examination: one sync, then prepare, report, examine, advance. */
+const exam = (completed: number, stage: string | null = null): WorkflowLike =>
+  wf("initial_examination", completed, 5, { stage });
 
 const poll = (tracker: SyncTracker, at: number, workflows: WorkflowLike[]): SyncTracker =>
-  observe(tracker, { at, weights: weighSections(workflows) });
+  observe(tracker, { at, journey: readJourney(workflows, "analysing") });
 
-describe("sectionOfWorkflow", () => {
-  test("a workflow per game is analysis weight", () => {
-    expect(sectionOfWorkflow(game(0))).toBe("analysing");
-    expect(sectionOfWorkflow(wf("game_import", 0, 40))).toBe("importing");
+describe("readJourney", () => {
+  test("the archive still arriving has no number, only a phase", () => {
+    // A sync is one work item per account and an item scores only when it
+    // finishes, so any percentage here is the unit being bigger than anything
+    // that has happened yet. The screen this replaced printed "0%" through the
+    // whole download and read as stuck.
+    const journey = readJourney([exam(0, "provider_account_sync")], "syncing");
+    expect(journey.phase).toBe("importing");
+    expect(journey.fraction).toBeNull();
   });
 
-  test("the examination workflow moves from importing to writing with its own task", () => {
-    // Its five items straddle two sections and only the aggregate weight is on
-    // the wire, so the oldest outstanding task decides which side it is on.
-    // Counting the whole thing as writing would show the report a fifth
-    // written while the archive was still downloading.
-    expect(sectionOfWorkflow(wf("initial_examination", 0, 5, { stage: "provider_account_sync" }))).toBe(
-      "importing",
+  test("the run calling itself analysing does not make it so", () => {
+    // The run reports `analysing` the moment its sync item completes, which is
+    // before prepare has planned a single game. Believing it lit a phase with
+    // no work in it while the archive was still being rebuilt.
+    const journey = readJourney([exam(1, "coaching_onboarding_prepare")], "analysing");
+    expect(journey.phase).toBe("importing");
+    expect(journey.fraction).toBeNull();
+  });
+
+  test("analysis is measured on its own weight, across every game", () => {
+    const journey = readJourney(
+      [exam(2), game(100, "succeeded"), game(100, "succeeded"), game(20), game(0)],
+      "analysing",
     );
-    expect(
-      sectionOfWorkflow(wf("initial_examination", 1, 5, { stage: "coaching_examination_report" })),
-    ).toBe("reporting");
+    expect(journey.phase).toBe("analysing");
+    expect(journey.fraction).toBeCloseTo(0.55);
+    expect(journey.games).toEqual({ done: 2, total: 4 });
+    expect(journey.weight).toEqual({ done: 220, total: 400 });
   });
 
-  test("a workflow that is nothing to do with this journey is not counted", () => {
-    expect(sectionOfWorkflow(wf("position_evaluation", 0, 1))).toBeNull();
-    expect(sectionOfWorkflow(wf("some_new_kind", 0, 1))).toBeNull();
-  });
-});
-
-describe("weighSections", () => {
-  test("a section's fill is its own weight, not a phase", () => {
-    const weights = weighSections([game(100), game(100), game(20), game(0)]);
-    expect(weights.analysing).toEqual({ completed: 220, total: 400 });
-    expect(fractionOf(weights.analysing)).toBeCloseTo(0.55);
+  test("prepare finishing is not the write-up starting", () => {
+    // `coaching_onboarding_prepare` freezes the snapshot and plans the
+    // analysis: the last act of ingestion. Counting it as writing put
+    // "Writing 25%" on screen before a single game had been analysed.
+    const journey = readJourney([exam(2, "coaching_examination_report"), game(0)], "analysing");
+    expect(journey.phase).toBe("analysing");
+    expect(journey.fraction).toBe(0);
   });
 
-  test("cancelled work leaves both sides of the fraction", () => {
-    // Left in the denominator it would hold the section short of full for ever.
-    const weights = weighSections([game(100), wf("game_analysis", 0, 100, { state: "cancelled" })]);
-    expect(fractionOf(weights.analysing)).toBe(1);
+  test("every game read leaves the write-up, measured on its three steps", () => {
+    const journey = readJourney(
+      [exam(3, "coaching_baseline_examination"), game(100, "succeeded")],
+      "analysing",
+    );
+    expect(journey.phase).toBe("writing");
+    expect(journey.fraction).toBeCloseTo(1 / 3);
   });
 
-  test("a section nobody has planned work for has no fraction, not a zero", () => {
-    expect(fractionOf(weighSections([]).analysing)).toBeNull();
+  test("the whole examination finished reads as done", () => {
+    const journey = readJourney([exam(5), game(100, "succeeded")], "analysing");
+    expect(journey.phase).toBe("done");
+    expect(journey.fraction).toBe(1);
   });
 
-  test("the overall figure is every section's weight together", () => {
-    const weights = weighSections([
-      wf("game_import", 40, 40),
-      game(100),
-      game(0),
-      wf("initial_examination", 1, 5, { stage: "coaching_examination_report" }),
-    ]);
-    // 141 of 245.
-    expect(overallPercent(weights)).toBe(58);
-    expect(overallPercent(weighSections([]))).toBeNull();
-  });
-});
-
-describe("currentSection", () => {
-  test("engine work outstanding beats every other signal", () => {
-    // The examination workflow reaches its report step early and then waits for
-    // exactly this work, so believing its task type would put the bar on
-    // "Writing" while a hundred games were still queued.
-    const weights = weighSections([
-      game(100),
-      game(0),
-      wf("initial_examination", 2, 5, { stage: "coaching_examination_report" }),
-    ]);
-    expect(currentSection(weights, "analysing")).toBe("analysing");
+  test("a dead-lettered side workflow is not part of the journey", () => {
+    // Linking an account enqueues a `subject_estimation` workflow no deployment
+    // has a handler for, so it dies at once while the examination carries on.
+    // Counted, it would hold the journey short of finished for ever.
+    const journey = readJourney(
+      [
+        exam(5),
+        game(100, "succeeded"),
+        wf("subject_estimation", 0, 1, { state: "failed" }),
+        wf("subject_estimation", 0, 1, { state: "failed" }),
+      ],
+      "analysing",
+    );
+    expect(journey.phase).toBe("done");
   });
 
-  test("before any analysis is planned, the run's stage is all there is", () => {
-    const weights = weighSections([
-      wf("initial_examination", 0, 5, { stage: "provider_account_sync" }),
-    ]);
-    expect(currentSection(weights, "syncing")).toBe("importing");
-    expect(currentSection(weights, "not_started")).toBe("importing");
-    // Past the sync with nothing weighed yet: analysis is what happens next,
-    // and naming it beats naming the section that is already over.
-    expect(currentSection(weights, "analysing")).toBe("analysing");
+  test("nothing read yet falls back to the run's own stage", () => {
+    expect(readJourney([], "syncing").phase).toBe("importing");
+    expect(readJourney([], "not_started").phase).toBe("importing");
+    expect(readJourney([], "analysing").phase).toBe("analysing");
   });
 
-  test("every game analysed means the report is what is left", () => {
-    const weights = weighSections([game(100), game(100)]);
-    expect(currentSection(weights, "analysing")).toBe("reporting");
+  test("an archive with nothing worth reading goes straight to the write-up", () => {
+    // Prepare succeeded and planned no analysis, so there is no game workflow
+    // to wait for and the run is already writing.
+    const journey = readJourney([exam(3, "coaching_baseline_examination")], "analysing");
+    expect(journey.phase).toBe("writing");
+    expect(journey.games.total).toBe(0);
   });
 });
 
-describe("the section fill", () => {
-  test("discovering more work never sends a fill backwards", () => {
-    let tracker = poll(emptyTracker(), 0, [game(60)]);
-    expect(tracker.fractions.analysing).toBeCloseTo(0.6);
+describe("the fill", () => {
+  test("a batch of new work never sends the fill backwards", () => {
+    // The analysis run is planned in batches rather than all at once, so the
+    // denominator grows in steps the whole way through and the raw fraction
+    // drops every time one lands.
+    let tracker = poll(emptyTracker(), 0, [exam(2), game(60)]);
+    expect(tracker.fraction).toBeCloseTo(0.6);
 
-    // Five more games are planned. The raw fraction is now 0.1, and a bar that
-    // jumped from 60% back to 10% reads as a bug.
-    tracker = poll(tracker, 6_000, [game(60), game(0), game(0), game(0), game(0), game(0)]);
-    expect(tracker.fractions.analysing).toBeCloseTo(0.6);
+    tracker = poll(tracker, 6_000, [exam(2), game(60), game(0)]);
+    expect(tracker.fraction).toBeCloseTo(0.6);
+
+    // Even a tenfold replan leaves the bar where it was. It pauses rather than
+    // sliding back; the games count beside it is what keeps moving.
+    tracker = poll(tracker, 12_000, [exam(2), game(60), ...Array.from({ length: 9 }, () => game(0))]);
+    expect(tracker.fraction).toBeCloseTo(0.6);
   });
 
-  test("a section with no work planned yet stays without a fraction", () => {
-    const tracker = poll(emptyTracker(), 0, [
-      wf("initial_examination", 0, 5, { stage: "provider_account_sync" }),
-    ]);
-    expect(tracker.fractions.analysing).toBeNull();
-    expect(tracker.fractions.importing).toBe(0);
+  test("nothing planned to analyse leaves the fill absent, not zero", () => {
+    const tracker = poll(emptyTracker(), 0, [exam(0, "provider_account_sync")]);
+    expect(tracker.fraction).toBeNull();
+  });
+
+  test("the games count is a raw tally, so it moves when the bar cannot", () => {
+    const journey = readJourney(
+      [exam(2), game(100, "succeeded"), game(100, "succeeded"), game(5)],
+      "analysing",
+    );
+    expect(journey.games).toEqual({ done: 2, total: 3 });
   });
 });
 
 describe("the estimate", () => {
   test("one reading is not a rate", () => {
-    const tracker = poll(emptyTracker(), 0, [game(10)]);
+    const tracker = poll(emptyTracker(), 0, [exam(2), game(10)]);
     expect(remainingAt(tracker, 0)).toBeNull();
   });
 
   test("two readings too close together are not a rate either", () => {
-    let tracker = poll(emptyTracker(), 0, [game(0)]);
-    tracker = poll(tracker, 1_000, [game(40)]);
+    let tracker = poll(emptyTracker(), 0, [exam(2), game(0)]);
+    tracker = poll(tracker, 1_000, [exam(2), game(40)]);
     // 40 units in a second extrapolates to a promise of 1.5 seconds, which is
     // the fabricated number this whole file exists to keep off the screen.
     expect(remainingAt(tracker, 1_000)).toBeNull();
   });
 
   test("a measured rate becomes a time", () => {
-    let tracker = poll(emptyTracker(), 0, [game(0)]);
-    tracker = poll(tracker, 60_000, [game(50)]);
+    let tracker = poll(emptyTracker(), 0, [exam(2), game(0)]);
+    tracker = poll(tracker, 60_000, [exam(2), game(50)]);
     // Half the work in a minute, so about a minute left.
     expect(remainingAt(tracker, 60_000)).toBeCloseTo(60_000, -3);
     expect(etaLabel(remainingAt(tracker, 60_000))).toBe("About a minute left");
   });
 
   test("it counts down between readings rather than freezing", () => {
-    let tracker = poll(emptyTracker(), 0, [game(0)]);
-    tracker = poll(tracker, 60_000, [game(50)]);
+    let tracker = poll(emptyTracker(), 0, [exam(2), game(0)]);
+    tracker = poll(tracker, 60_000, [exam(2), game(50)]);
     expect(remainingAt(tracker, 90_000)!).toBeLessThan(remainingAt(tracker, 60_000)!);
   });
 
-  test("work discovered mid-run never turns the countdown upward", () => {
-    let tracker = poll(emptyTracker(), 0, [game(0)]);
-    tracker = poll(tracker, 60_000, [game(50)]);
-    const before = remainingAt(tracker, 60_000)!;
+  test("a batch of new work corrects the countdown upward", () => {
+    /*
+     * The bug this pins is the one that said "under a minute left" for the
+     * better part of an hour.
+     *
+     * The estimate used to only ever fall. Early on it measured a handful of
+     * games, found them nearly done and promised a minute — and then the next
+     * batch multiplied the real total. The old figure had been measured against
+     * a fraction of the job, and the ratchet would not let go of it. Being
+     * stuck and wrong is worse than moving and right.
+     */
+    let tracker = poll(emptyTracker(), 0, [exam(2), game(0)]);
+    tracker = poll(tracker, 60_000, [exam(2), game(90)]);
+    const promised = remainingAt(tracker, 60_000)!;
+    expect(etaLabel(promised)).toBe("Under a minute left");
 
-    // Nine more games are planned. The true estimate is now far longer, and a
-    // countdown that counts up reads as broken however true it is.
-    const many = [game(60), ...Array.from({ length: 9 }, () => game(0))];
-    tracker = poll(tracker, 120_000, many);
-    expect(remainingAt(tracker, 120_000)!).toBeLessThanOrEqual(before);
+    // Ninety-nine more games are planned. The honest answer is now far longer.
+    const many = [exam(2), game(90), ...Array.from({ length: 99 }, () => game(0))];
+    let grown = poll(tracker, 120_000, many);
+    grown = poll(grown, 180_000, [exam(2), game(90), ...Array.from({ length: 99 }, () => game(10))]);
+    expect(remainingAt(grown, 180_000)!).toBeGreaterThan(promised);
   });
 });
 
 describe("etaLabel", () => {
   test("no evidence says so in words rather than showing a number", () => {
     expect(etaLabel(null)).not.toMatch(/\d/);
-    expect(etaLabel(null)).toContain("how long");
   });
 
-  test("the buckets are coarse and never claim it is finished", () => {
-    expect(etaLabel(0)).toBe("Under a minute left");
-    expect(etaLabel(30_000)).toBe("Under a minute left");
-    expect(etaLabel(4 * 60_000)).toBe("About 4 minutes left");
-    expect(etaLabel(3 * 3_600_000)).not.toMatch(/\d/);
+  test("it never counts in seconds", () => {
+    expect(etaLabel(20_000)).toBe("Under a minute left");
+    expect(etaLabel(65_000)).toBe("About a minute left");
+    expect(etaLabel(9 * 60_000)).toBe("About 9 minutes left");
+    expect(etaLabel(3 * 3_600_000)).toBe("Over an hour left");
   });
 });
