@@ -10,7 +10,7 @@ import {
   type WorkerIdentity,
 } from "./ledger.js";
 import { handlerFor, type WorkContext } from "./handlers.js";
-import { logSafeError } from "../security/redaction.js";
+import { logSafeError, redactError } from "../security/redaction.js";
 
 /**
  * Run one claimed work item.
@@ -113,10 +113,23 @@ export async function runClaimed(
     // whether a retry could work. `transient` is the safe reading: the attempt
     // ceiling still stops it, and the alternative silently abandons work on the
     // first unexpected exception.
+    // The detail is the redacted throw site, not `null`.
+    //
+    // A `WorkFailure` names itself; anything else used to record the code
+    // `handler_error` and nothing more, so an item that exhausted five attempts
+    // left behind no trace of what threw. The only record was one
+    // `console.error` per attempt, which is gone the moment a log buffer rolls
+    // -- and on a dead item that is precisely when somebody comes looking.
+    //
+    // `redactError` is already the safe form: an error's name, its class and
+    // the throw site, never its message, its cause's message, or anything a
+    // provider or a payload put in it. That is exactly what an operator needs
+    // to find the line and nothing a reader would ever see -- the detail is not
+    // rendered on any screen.
     const failure =
       error instanceof WorkFailure
         ? error
-        : new WorkFailure("transient", "handler_error", null, null);
+        : new WorkFailure("transient", "handler_error", redactError(error), null);
     if (!(error instanceof WorkFailure)) logSafeError("work handler failed", error);
 
     const result = await failWorkItem({

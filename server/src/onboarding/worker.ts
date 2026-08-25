@@ -432,7 +432,23 @@ export async function prepareExamination(context: WorkContext, sql: Sql): Promis
   // everything, which is not a truthful "we do not know yet" — it is a wrong
   // answer with a confident face. A transient failure is how an item waits:
   // the ledger backs it off and the ops sweep does the work in between.
-  const pending = await pendingAnalysisCount(sql, run.subject_id);
+  //
+  // **Bound to the actor, and that is what makes the count real.** It read the
+  // unbound connection, and `chess.subject_games` is RLS-protected: with no
+  // `private.current_actor_id()` set, every row of every subject is invisible,
+  // so the count came back 0 no matter how many games were waiting. The wait
+  // above could therefore never fire. On the run that found this, the sync
+  // landed 333 games at 20:17:17 and this step froze the snapshot 47 seconds
+  // later with none of them analysed — then the report built on that empty
+  // snapshot threw, five times, and took the two steps after it down with it.
+  //
+  // The same mistake is documented immediately below for the *writes* in this
+  // function, which were refused by their own policy until they were wrapped.
+  // The read was left outside, and a read denied by RLS does not fail — it
+  // returns nothing, which here is indistinguishable from good news.
+  const pending = await withActor(sql, ownerProfileId, (tx) =>
+    pendingAnalysisCount(tx, run.subject_id),
+  );
   if (pending > 0) {
     throw new WorkFailure(
       "transient",

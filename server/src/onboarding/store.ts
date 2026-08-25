@@ -48,6 +48,27 @@ export interface LoadedRun {
  * One query. The stage is then derived rather than read: a worker that crashed
  * between finishing its work and writing the stage would otherwise leave the
  * user staring at a spinner for work that is done.
+ *
+ * ## Why `sync_complete` counts items and not the workflow
+ *
+ * `sync_workflow_id` names the whole `initial_examination` workflow — sync,
+ * prepare, report, examine, advance — and this read used to be
+ * `w.state = 'succeeded'`. That is only true once the *entire* examination has
+ * finished, so `syncComplete` was false for the whole journey, and everything
+ * downstream of it inherited the lie: `deriveStage` returned `syncing` from the
+ * first move to the last, `nextAction` said "importing your games" while the
+ * engine was working through two hundred games, the stage trail held IMPORTING
+ * lit right through analysis, and a failure at *any* step was reported to the
+ * reader as the import not having finished. One wrong join, told four ways.
+ *
+ * It is the same confusion the sync screen's own progress bar had, one layer
+ * down: the five-step examination read as though it were the account sync,
+ * because the column it is stored in is named after one.
+ *
+ * A run with no sync items at all is complete rather than pending. An account
+ * on a provider with no adapter has nothing planned for it (see `planner.ts`),
+ * and waiting on work that will never be created is how such an account would
+ * hang the journey for ever.
  */
 export async function loadRun(
   sql: Queryable,
@@ -71,7 +92,13 @@ export async function loadRun(
              select 1 from app.subject_account_memberships m
              where m.subject_id = r.subject_id
            ) as has_linked_account,
-           (w.state = 'succeeded') as sync_complete,
+           -- The sync items, not the workflow holding them. See the note above.
+           not exists (
+             select 1 from ops.work_items i
+             where i.workflow_id = r.sync_workflow_id
+               and i.task_type = 'provider_account_sync'
+               and i.status <> 'succeeded'
+           ) as sync_complete,
            (ar.status = 'succeeded') as analysis_complete,
            coalesce(ds.status = 'completed', false) as diagnostic_complete,
            ds.id as diagnostic_session_id,
