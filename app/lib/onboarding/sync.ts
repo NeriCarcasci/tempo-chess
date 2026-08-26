@@ -194,16 +194,20 @@ export function boardsBelongHere(): boolean {
  *   * **Studying** — one `game_analysis` workflow per game.
  *   * **Writing** — the last three items on the examination workflow.
  *
- * ## Why a step can show a count and no bar
+ * ## Why every step here counts and none of them fills
  *
- * This is the rule that makes four segments honest where three were not. A step
- * draws a fraction only once its denominator has stopped moving. The import has
- * no denominator at all — a provider does not say how large an archive is
- * before it sends it — so it counts up and never fills. Rebuilding has one, but
- * it *grows* while the import is still landing games, so its bar is held back
- * until reading is done and only its count moves before then. A fill that walks
- * backwards reads as a bug however correct the arithmetic is; a tally that only
- * rises cannot.
+ * Because a snapshot cannot tell you whether a denominator has settled, and
+ * three of the four never have. The import has none at all — a provider does not
+ * say how large an archive is before it sends it. Rebuilding and studying both
+ * have one that *grows*: the sweep plans fifty games a minute, so each new batch
+ * enlarges the total and the raw fraction drops. Measured against a real run,
+ * rebuilding read 89% and then 74% a minute later, on a run going perfectly
+ * well. A fill that walks backwards reads as a bug however correct the
+ * arithmetic is; a tally that only rises cannot.
+ *
+ * So this function returns counts and no fractions at all, and the one bar the
+ * product draws is attached in `useJourney`, from the ratchet that has always
+ * guarded exactly this. See `observe`.
  */
 export type StepKey = "import" | "rebuild" | "analyse" | "write";
 export type StepState = "waiting" | "running" | "done";
@@ -213,7 +217,13 @@ export interface Step {
   /** What this step is, in the product's voice. */
   label: string;
   state: StepState;
-  /** 0 to 1, or null when this step has no settled denominator to draw. */
+  /**
+   * A fill, or null.
+   *
+   * Always null from `readSteps` itself: a fraction here would be measured
+   * against a denominator that grows. `useJourney` attaches the ratcheted one
+   * to the studying step, which is the only place a bar is honest.
+   */
   fraction: number | null;
   /** The concrete tally, or null when there is nothing true to count yet. */
   detail: string | null;
@@ -296,8 +306,8 @@ export function readSteps(workflows: readonly WorkflowLike[], runStage: string):
       key: "import",
       label: STEP_LABEL.import,
       state: state("import"),
-      // Never a fraction. A provider does not say how large an archive is
-      // before it sends it, so any bar here is a guess wearing a measurement.
+      // A provider does not say how large an archive is before it sends it, so
+      // any bar here is a guess wearing a measurement.
       fraction: null,
       // The rebuild queue is the only live count of games that have landed:
       // the sweep plans one item per game as it finds them. It lags the sync by
@@ -308,17 +318,21 @@ export function readSteps(workflows: readonly WorkflowLike[], runStage: string):
       key: "rebuild",
       label: STEP_LABEL.rebuild,
       state: state("rebuild"),
-      // Held back until reading is done, because until then this denominator
-      // grows every time the sweep finds more games and the fill would slide
-      // backwards on a run going perfectly well.
-      fraction: importDone && rebuildTotal > 0 ? rebuiltWeight / rebuildTotal : null,
+      // This denominator grows every time the sweep plans another batch, which
+      // it keeps doing long after the import is finished — so the fill would
+      // slide backwards on a run going perfectly well. The tally does not: both
+      // its numbers only ever rise.
+      fraction: null,
       detail: rebuildTotal > 0 ? outOf(Math.min(rebuiltWeight, rebuildTotal), rebuildTotal) : null,
     },
     {
       key: "analyse",
       label: STEP_LABEL.analyse,
       state: state("analyse"),
-      fraction: weightTotal > 0 ? Math.min(1, weightDone / weightTotal) : null,
+      // Attached by `useJourney` from the ratchet, for the same reason as the
+      // rebuild above: the snapshot is planned in batches, so the raw fraction
+      // drops every time one lands.
+      fraction: null,
       detail: analyses.length > 0 ? outOf(analysed, analyses.length) : null,
     },
     {

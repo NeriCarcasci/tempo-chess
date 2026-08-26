@@ -113,14 +113,33 @@ export function useJourney(runStage: string, enabled = true): JourneyReading {
     setTracker((current) => observe(current, { at: Date.now(), journey }));
   }, [journey]);
 
-  const step = currentStep(steps);
   const remaining = remainingAt(tracker, Date.now());
+
+  /*
+   * The one bar the product draws, attached here rather than in `readSteps`.
+   *
+   * A snapshot of the workflow list cannot tell you whether a denominator has
+   * settled, and the analysis one has not: the sweep plans fifty games a minute,
+   * so every batch that lands enlarges the total and the raw fraction drops.
+   * Measured against a real run, the same arithmetic took the rebuild step from
+   * 89% to 74% a minute later, on a run going perfectly well.
+   *
+   * `observe` has ratcheted exactly this since the single bar existed, so the
+   * fill comes from the tracker's high-water mark and from nowhere else. The
+   * cost is that it pauses while a batch is absorbed, which is why the step's
+   * own tally sits beside it: a raw count cannot regress, so it keeps moving
+   * through the moments the bar has to wait.
+   */
+  const drawn = steps.map((entry) =>
+    entry.key === "analyse" ? { ...entry, fraction: tracker.fraction } : entry,
+  );
+  const step = currentStep(drawn);
 
   return {
     journey,
-    steps,
+    steps: drawn,
     step,
-    stepNumber: step ? steps.indexOf(step) + 1 : 0,
+    stepNumber: step ? drawn.indexOf(step) + 1 : 0,
     fraction: tracker.fraction,
     // Only while studying, and only once there is enough evidence for a figure.
     // "Working out how long this will take" was being shown for minutes beside

@@ -256,21 +256,30 @@ describe("readSteps", () => {
     expect(step.detail).toBe("120 games");
   });
 
-  test("rebuilding shows its tally while the archive is still arriving, and no fill", () => {
-    // The denominator grows every time the sweep finds more games. A fill would
-    // slide backwards on a run going perfectly well; a tally cannot.
-    const steps = readSteps([exam(0, "provider_account_sync"), rebuild(40, 120)], "syncing");
-    const step = at(steps, "rebuild");
-    expect(step.fraction).toBeNull();
-    expect(step.detail).toBe("40 of 120 games");
+  test("rebuilding shows its tally and never a fill, before or after the import ends", () => {
+    // Measured against a real run: with five batches planned the raw fraction
+    // read 89%, and one sweep later — a sixth batch, nothing undone — it read
+    // 74%. The sweep keeps enlarging the denominator long after the sync has
+    // finished, so there is no moment at which this bar becomes safe. Both
+    // numbers in the tally only ever rise.
+    const arriving = readSteps([exam(0, "provider_account_sync"), rebuild(40, 120)], "syncing");
+    expect(at(arriving, "rebuild").fraction).toBeNull();
+    expect(at(arriving, "rebuild").detail).toBe("40 of 120 games");
+
+    const after = readSteps([exam(1, "chess_materialize_replay"), rebuild(60, 120)], "analysing");
+    expect(at(after, "import").state).toBe("done");
+    expect(at(after, "rebuild").state).toBe("running");
+    expect(at(after, "rebuild").fraction).toBeNull();
   });
 
-  test("once reading is done the rebuild denominator is settled, so it fills", () => {
-    const steps = readSteps([exam(1, "chess_materialize_replay"), rebuild(60, 120)], "analysing");
-    expect(at(steps, "import").state).toBe("done");
-    const step = at(steps, "rebuild");
-    expect(step.state).toBe("running");
-    expect(step.fraction).toBeCloseTo(0.5);
+  test("no step carries a fill, because a snapshot cannot know a total has settled", () => {
+    // The one bar the product draws is attached in `useJourney`, from the
+    // ratchet. A pure reading of one poll has no way to produce it honestly.
+    const steps = readSteps(
+      [exam(2), rebuild(120, 120), game(100, "succeeded"), game(50)],
+      "analysing",
+    );
+    expect(steps.every((step) => step.fraction === null)).toBe(true);
   });
 
   test("prepare finishing is what proves every game was rebuilt", () => {
@@ -281,14 +290,12 @@ describe("readSteps", () => {
     expect(at(steps, "analyse").state).toBe("running");
   });
 
-  test("studying counts games and fills from their weight", () => {
+  test("studying counts whole games", () => {
     const steps = readSteps(
       [exam(2), rebuild(120, 120), game(100, "succeeded"), game(50), game(0)],
       "analysing",
     );
-    const step = at(steps, "analyse");
-    expect(step.detail).toBe("1 of 3 games");
-    expect(step.fraction).toBeCloseTo(0.5);
+    expect(at(steps, "analyse").detail).toBe("1 of 3 games");
   });
 
   test("an archive with nothing analysable still finishes its studying step", () => {
