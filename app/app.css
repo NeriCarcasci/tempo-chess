@@ -205,38 +205,65 @@
      and the later ones sat frozen behind a ratchet. See `lib/onboarding/sync.ts`
      for the full account. What this draws is the analysis, which is nearly all
      of the wall clock, and nothing at all where there is nothing to measure. */
-  .sync-bar-one { display: grid; gap: 0.55rem; }
-  .sync-bar-head {
-    display: flex; align-items: baseline; gap: 0.75rem;
+  /* -- the four steps -------------------------------------------------- */
+  /* Narrower than the shell it sits in. The tally is right-aligned against the
+     label, and across the full 64rem the two ends of one row stop reading as
+     one row — the eye has to travel a hand's width to find out how many games
+     "Studying every move" has got through. */
+  .sync-steps { display: grid; gap: 0.15rem; width: min(46rem, 100%); }
+  .sync-step {
+    display: grid; grid-template-columns: 1.6rem minmax(0, 1fr);
+    align-items: start; gap: 0.75rem;
+    border-radius: var(--radius-control); padding: 0.7rem 0.8rem;
   }
-  .sync-bar-phase { color: var(--color-accent); white-space: nowrap; }
-  /* The concrete version of the same fact, and the one a person feels. It is a
-     raw tally, so it keeps moving through the moments the fill has to wait for
-     a newly planned batch to be absorbed. */
-  .sync-bar-count {
-    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-    font-size: 0.72rem; color: var(--color-ink-muted); white-space: nowrap;
+  /* The step being worked on is lifted onto a surface rather than coloured in:
+     one place to look, and it survives with no colour at all. */
+  .sync-step.is-running { background: var(--color-surface); box-shadow: var(--shadow-soft); }
+
+  /* Shapes, not tones. A tick for done, a ring for the step running now, a flat
+     disc for one still waiting — DESIGN.md's rule that meaning never rides on
+     hue alone, so the three are told apart with the colour removed. */
+  .sync-step-mark {
+    display: grid; place-items: center;
+    width: 1.35rem; height: 1.35rem; margin-top: 0.05rem;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface-3); color: var(--color-accent-ink);
   }
-  .sync-bar-figure {
+  .sync-step.is-done .sync-step-mark { background: var(--color-accent); }
+  .sync-step.is-running .sync-step-mark {
+    background: var(--color-surface-3);
+    box-shadow: inset 0 0 0 3px var(--color-accent);
+  }
+
+  .sync-step-body { display: grid; gap: 0.4rem; min-width: 0; }
+  .sync-step-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; }
+  .sync-step-label { font-size: 0.92rem; font-weight: 600; color: var(--color-ink-faint); }
+  .sync-step.is-running .sync-step-label,
+  .sync-step.is-done .sync-step-label { color: var(--color-ink); }
+  /* The tally, in the numeral face and tabular so a rising count does not
+     shuffle the words beside it sideways. */
+  .sync-step-detail {
     margin-left: auto;
     font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-    font-size: 0.78rem; letter-spacing: 0.02em; color: var(--color-ink);
+    font-size: 0.74rem; color: var(--color-ink-muted); white-space: nowrap;
   }
-  .sync-bar-track {
-    position: relative; height: 0.7rem; overflow: hidden;
+  .sync-step-eta {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.72rem; color: var(--color-ink-faint);
+  }
+  .sync-step-track {
+    position: relative; display: block; height: 0.4rem; overflow: hidden;
     border-radius: var(--radius-pill); background: var(--color-surface-3);
   }
-  .sync-bar-fill {
+  .sync-step-fill {
     display: block; height: 100%; width: 0;
-    border-radius: var(--radius-pill);
-    background: var(--color-accent);
+    border-radius: var(--radius-pill); background: var(--color-accent);
     transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  /* Job: the bar says it is working in the stretch before it has a denominator
-     at all — one indivisible work item per account, so a 0% fill that never
-     moves would read as broken. It becomes a real width the moment there is
-     one to draw. */
-  .sync-bar-fill.is-unknown { width: 34%; animation: sync-travel 1.9s ease-in-out infinite; }
+  /* Job: says the step is working in the stretch before it has a denominator at
+     all — an import has none until it ends, so a 0% fill that never moved would
+     read as broken. It becomes a real width the moment there is one to draw. */
+  .sync-step-fill.is-unknown { width: 34%; animation: sync-travel 1.9s ease-in-out infinite; }
   @keyframes sync-sweep {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
@@ -246,15 +273,14 @@
     100% { transform: translateX(320%); }
   }
 
-  .sync-status {
-    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
-    gap: 0.4rem 1.5rem;
-  }
-  .sync-detail { font-size: 1rem; color: var(--color-ink); }
-  .sync-eta {
-    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
-    font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
-    color: var(--color-ink-faint);
+  /* A stack, not a row. It held one sentence and one estimate side by side and
+     could be a flex row pushing them apart; it now holds the four steps with a
+     caption under them, and `space-between` put that caption out to the right
+     of the list as if it were a second column. */
+  .sync-status { display: grid; justify-items: start; gap: 0.75rem; }
+  .sync-detail {
+    padding-left: 0.8rem;
+    font-size: 0.88rem; color: var(--color-ink-muted);
   }
 
   /* The games, replaying while they are read. Auto-fill rather than a fixed
@@ -301,20 +327,20 @@
     to { opacity: 1; }
   }
 
-  /* Three labels across a phone are the tightest thing on this screen:
-     "Importing" at the shared cap size fills its column exactly at 375px and
-     runs out of room below it. Type and tracking come down rather than the
-     bar losing a section. */
+  /* A step's label and its tally sit on one line and stop fitting on a phone,
+     where "Rebuilding the positions" beside "340 of 1,204 games" is wider than
+     the screen. The tally drops under the label rather than either of them
+     shrinking: both are things a person reads, and neither is decoration. */
   @media (max-width: 520px) {
-    .sync-bar-head { gap: 0.5rem; }
-    .sync-bar-phase { font-size: 0.58rem; letter-spacing: 0.05em; }
-    .sync-bar-count { font-size: 0.64rem; }
-    .sync-bar-figure { font-size: 0.7rem; letter-spacing: 0; }
+    .sync-step { grid-template-columns: 1.4rem minmax(0, 1fr); gap: 0.6rem; padding: 0.6rem 0.55rem; }
+    .sync-step-head { gap: 0.15rem; }
+    .sync-step-detail { margin-left: 0; flex-basis: 100%; }
+    .sync-step-label { font-size: 0.86rem; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .sync-bar-fill, .sync-sq, .sync-board-slot { transition: none; }
-    .sync-bar-fill.is-unknown { animation: none; width: 100%; opacity: 0.45; }
+    .sync-step-fill, .sync-sq, .sync-board-slot { transition: none; }
+    .sync-step-fill.is-unknown { animation: none; width: 100%; opacity: 0.45; }
     /* The boards hold one position and never step; the component stops
        advancing them as well, so the still frame is the whole picture. */
     .sync-board-slot { animation: none; }
@@ -4337,20 +4363,28 @@
   }
   .exam-bar-watch svg { transition: transform 130ms cubic-bezier(0.2, 0.9, 0.3, 1); }
   .exam-bar-watch:hover svg { transform: translateX(2px); }
-  .exam-bar-track {
-    position: relative; height: 0.45rem; overflow: hidden;
+  /* Four segments, one per step, so the rail says which part of the work is
+     running and how much of it is behind you. Gaps rather than a divided bar:
+     these are four different things with four different units, and drawing them
+     as one continuous fill would invite adding them up. */
+  .exam-bar-rail { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0.3rem; }
+  .exam-seg {
+    position: relative; display: block; height: 0.45rem; overflow: hidden;
     border-radius: var(--radius-pill); background: var(--color-surface-3);
   }
-  .exam-bar-fill {
+  /* Finished, and it stays finished. A step that has been done is the only
+     thing on this strip a person can be certain of. */
+  .exam-seg.is-done { background: var(--color-accent); }
+  .exam-seg-fill {
     display: block; height: 100%; width: 0;
     border-radius: var(--radius-pill); background: var(--color-accent);
     transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  /* Job: says work is happening in the stretch before there is a
-     denominator at all — one indivisible work item per account, so a 0%
-     fill that never moved would read as broken. Shares its keyframes with
-     the full-screen bar, which is the same claim at a different size. */
-  .exam-bar-fill.is-unknown { width: 34%; animation: sync-travel 1.9s ease-in-out infinite; }
+  /* Job: says work is happening in the stretch before there is a denominator at
+     all — an import has none until it ends, so a 0% fill that never moved would
+     read as broken. Shares its keyframes with the full-screen bar, which is the
+     same claim at a different size. */
+  .exam-seg-fill.is-unknown { width: 40%; animation: sync-travel 1.9s ease-in-out infinite; }
 
   /* The estimate is the first thing to go: the count beside it is a fact
      and this is a projection, so on a phone the fact keeps the room. */
@@ -4396,8 +4430,8 @@
   .today-board.is-pending { display: grid; place-items: center; }
 
   @media (prefers-reduced-motion: reduce) {
-    .exam-bar-fill { transition: none; }
-    .exam-bar-fill.is-unknown { animation: none; width: 100%; opacity: 0.45; }
+    .exam-seg-fill { transition: none; }
+    .exam-seg-fill.is-unknown { animation: none; width: 100%; opacity: 0.45; }
     .exam-bar-watch svg { transition: none; }
     .ghost-line, .ghost-board { animation: none; }
   }

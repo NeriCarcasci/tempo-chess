@@ -7,7 +7,7 @@ import { fetchRecentGames, type RecentGame } from "../../lib/v1/games";
 import { toFrames, type ReplayFrame } from "../../lib/onboarding/replay";
 import { waitLabel, workflowStageLabel } from "../../lib/onboarding/copy";
 import { useJourney } from "../../lib/onboarding/useJourney";
-import { boardsBelongHere, PHASE_LABEL, type Journey } from "../../lib/onboarding/sync";
+import { boardsBelongHere, type Step } from "../../lib/onboarding/sync";
 import type { Workflow } from "../../lib/v1/types";
 
 /**
@@ -21,13 +21,13 @@ import type { Workflow } from "../../lib/v1/types";
  * Three things carry the wait, in descending order of how much they are
  * trusted:
  *
- *   * **The bar.** Every section fills from real completed weight over real
- *     total weight, summed across the workflows that belong to it. It is a
- *     measurement, not a phase indicator: a section that is a third done is
- *     drawn a third full whether or not it is the section running now.
- *   * **The estimate.** Derived from observed throughput over that same weight,
- *     ratcheted so it never counts upward, and absent — in words — until there
- *     is enough evidence for it.
+ *   * **The steps.** Four of them, each with its own state and its own tally,
+ *     so what has finished is marked finished and what is running says which
+ *     of the four it is. A fill appears only where a denominator has settled;
+ *     everywhere else the step counts up in whole games. See `readSteps`.
+ *   * **The estimate.** Derived from observed throughput over analysis weight,
+ *     and shown under the analysis step alone — quoted beside any other step it
+ *     would be a number attached to work it did not come from.
  *   * **The games.** Real games out of the archive, replaying while they are
  *     analysed. Deliberately far slower than the processing behind them: the
  *     point is that a person sees chess, not a flicker.
@@ -60,53 +60,82 @@ function useReducedMotion(): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// The bar
+// The steps
 // ---------------------------------------------------------------------------
 
 /**
- * One bar, because there is one thing worth measuring.
+ * The four steps, each answering for itself.
  *
- * Three segments were tried and could not be made coherent: the phases do not
- * have denominators at the same time, so the early ones showed confident
- * percentages of a total about to grow by four orders of magnitude, and the
- * later ones sat frozen behind a ratchet. See `sync.ts` for the full account.
+ * One bar stood here, and it measured the analysis - nearly all of the wall
+ * clock and the only part with a stable denominator. Everything else it could
+ * only name. Watching a real first run showed what that costs: for minutes the
+ * screen said IMPORTING while the caption underneath said "Gathering what to
+ * read", a step that runs after the import and waits on something else.
+ * Nothing that had finished was marked finished, and a person cannot tell a
+ * system that is working from one that is stuck if it never says what it has
+ * done.
  *
- * What this draws instead is the analysis, which is nearly all of the wall
- * clock and the only part with a stable denominator — and it draws nothing at
- * all where there is nothing to measure, which is what the stripe is for.
+ * Three segments were tried once and could not be made coherent, and the reason
+ * is worth keeping: the phases do not have denominators at the same time, so
+ * the early ones showed confident percentages of a total about to grow by
+ * orders of magnitude. What makes four work where three did not is a rule
+ * rather than an extra segment - a step draws a fill only once its denominator
+ * has settled, and counts up in whole games until then. See `readSteps`.
+ *
+ * The state marks are shapes, not tones: a tick for done, a ring for the step
+ * running now, a flat disc for one still waiting. Colour never carries meaning
+ * on its own, here or anywhere else.
  */
-function JourneyBar({ journey, fraction }: { journey: Journey; fraction: number | null }) {
-  const unknown = fraction === null;
-  const percent = unknown ? null : Math.round(fraction * 100);
-
+function StepList({ steps, eta }: { steps: readonly Step[]; eta: string | null }) {
   return (
-    <div className="sync-bar-one">
-      <div className="sync-bar-head">
-        <p className="cap sync-bar-phase">{PHASE_LABEL[journey.phase]}</p>
-        {/* The count is the concrete version of the same fact, and the one a
-            person actually feels. A percentage of an abstract work unit means
-            little; "412 of 4,317 games" means exactly what it says. */}
-        {journey.games.total > 0 ? (
-          <p className="sync-bar-count">
-            {journey.games.done.toLocaleString()} of {journey.games.total.toLocaleString()} games
-          </p>
-        ) : null}
-        <p className="sync-bar-figure">{percent === null ? "—" : `${percent}%`}</p>
-      </div>
-      <div
-        className="sync-bar-track"
-        role="progressbar"
-        aria-label="Examination progress"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent ?? undefined}
-      >
-        <span
-          className={unknown ? "sync-bar-fill is-unknown" : "sync-bar-fill"}
-          style={unknown ? undefined : { width: `${percent}%` }}
-        />
-      </div>
-    </div>
+    <ol className="sync-steps">
+      {steps.map((step) => (
+        <li key={step.key} className={`sync-step is-${step.state}`}>
+          <span className="sync-step-mark" aria-hidden="true">
+            {step.state === "done" ? (
+              <svg viewBox="0 0 16 16" width="12" height="12" focusable="false">
+                <path
+                  d="M3.5 8.5l3 3 6-7"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            ) : null}
+          </span>
+
+          <span className="sync-step-body">
+            <span className="sync-step-head">
+              <span className="sync-step-label">{step.label}</span>
+              {step.detail ? <span className="sync-step-detail">{step.detail}</span> : null}
+            </span>
+
+            {/* Only the step running now draws a track, and only when it has
+                something true to divide by. A finished step needs no bar: the
+                tick already said everything a bar could. */}
+            {step.state === "running" ? (
+              <span className="sync-step-track">
+                <span
+                  className={step.fraction === null ? "sync-step-fill is-unknown" : "sync-step-fill"}
+                  style={
+                    step.fraction === null
+                      ? undefined
+                      : { width: `${Math.round(step.fraction * 100)}%` }
+                  }
+                />
+              </span>
+            ) : null}
+
+            {/* The estimate sits under the step it was measured from, rather
+                than floating beside the whole screen where it read as a claim
+                about all four. */}
+            {step.state === "running" && eta ? <span className="sync-step-eta">{eta}</span> : null}
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -281,7 +310,7 @@ export function SyncStage({
   error?: unknown;
 }) {
   const still = useReducedMotion();
-  const { journey, fraction, eta, error: weighError } = useJourney(runStage);
+  const { journey, steps, step, eta, error: weighError } = useJourney(runStage);
 
   const [games, setGames] = useState<RecentGame[]>([]);
   const [attempt, setAttempt] = useState(0);
@@ -317,15 +346,22 @@ export function SyncStage({
     };
   }, [wanted, attempt, games.length, stillArriving]);
 
-  // The caption belongs to whoever knows what is happening, per the rule in
-  // `copy.ts`, so it is the server's own words twice over before it is ours:
-  // the name of the task actually running, then the run's own sentence about
-  // what it is waiting for. The section's line is the last resort, so the text
-  // under the bar is never empty.
-  const detail =
+  /*
+   * The one line under the steps, and it is the server's own words first.
+   *
+   * The caption belongs to whoever knows what is happening, per the rule in
+   * `copy.ts`: the name of the task actually running, then the run's own
+   * sentence about what it is waiting for. What it must no longer do is stand
+   * in for the step, which is what made the old screen contradict itself --
+   * "IMPORTING" over "Gathering what to read", two different truths at two
+   * sizes. The steps say where the work is; this says what it is doing inside
+   * that step, and it is dropped entirely when it would only repeat the label
+   * above it.
+   */
+  const said =
     workflowStageLabel(workflow?.progress.stage ?? null) ??
-    (waitReason === undefined ? null : waitLabel(waitReason)) ??
-    PHASE_LABEL[journey.phase];
+    (waitReason === undefined ? null : waitLabel(waitReason));
+  const detail = said !== null && said !== step?.label ? said : null;
   const showBoards = wanted && games.length > 0;
 
   return (
@@ -337,15 +373,13 @@ export function SyncStage({
       sub="Forma is reading every game you have played. This takes a few minutes, and it carries on whether or not this tab is open."
     >
 
-        <JourneyBar journey={journey} fraction={fraction} />
-
-        {/* Polite and atomic: the task and the estimate change together, and
+        {/* Polite and atomic: the steps and the caption change together, and
             announcing them separately would interrupt somebody mid-sentence
             with half a status. The boards below are outside it, because a
             screen reader does not want a move every second. */}
         <div className="sync-status" aria-live="polite" aria-atomic="true">
-          <p className="sync-detail">{detail}</p>
-          <p className="sync-eta">{eta}</p>
+          <StepList steps={steps} eta={eta} />
+          {detail ? <p className="sync-detail">{detail}</p> : null}
         </div>
 
         {error || weighError ? <ProblemNote error={error ?? weighError} /> : null}

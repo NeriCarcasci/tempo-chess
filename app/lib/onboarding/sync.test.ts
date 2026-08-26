@@ -1,9 +1,11 @@
 import { describe, expect, test } from "vitest";
 import {
+  currentStep,
   emptyTracker,
   etaLabel,
   observe,
   readJourney,
+  readSteps,
   remainingAt,
   type SyncTracker,
   type WorkflowLike,
@@ -225,5 +227,96 @@ describe("etaLabel", () => {
     expect(etaLabel(65_000)).toBe("About a minute left");
     expect(etaLabel(9 * 60_000)).toBe("About 9 minutes left");
     expect(etaLabel(3 * 3_600_000)).toBe("Over an hour left");
+  });
+});
+
+describe("readSteps", () => {
+  /** A batch of materialization: one item per game the sweep has found. */
+  const rebuild = (completed: number, total: number, state = "running"): WorkflowLike =>
+    wf("game_import", completed, total, { state });
+
+  const at = (steps: ReturnType<typeof readSteps>, key: string) =>
+    steps.find((step) => step.key === key)!;
+
+  test("nothing has happened yet, so reading is the one thing running", () => {
+    const steps = readSteps([], "syncing");
+    expect(at(steps, "import").state).toBe("running");
+    expect(at(steps, "rebuild").state).toBe("waiting");
+    expect(at(steps, "analyse").state).toBe("waiting");
+    expect(at(steps, "write").state).toBe("waiting");
+  });
+
+  test("the import counts up and never draws a bar", () => {
+    // A provider does not say how large an archive is before it sends it, so a
+    // fraction here would be a guess wearing a measurement.
+    const steps = readSteps([exam(0, "provider_account_sync"), rebuild(0, 120)], "syncing");
+    const step = at(steps, "import");
+    expect(step.state).toBe("running");
+    expect(step.fraction).toBeNull();
+    expect(step.detail).toBe("120 games");
+  });
+
+  test("rebuilding shows its tally while the archive is still arriving, and no fill", () => {
+    // The denominator grows every time the sweep finds more games. A fill would
+    // slide backwards on a run going perfectly well; a tally cannot.
+    const steps = readSteps([exam(0, "provider_account_sync"), rebuild(40, 120)], "syncing");
+    const step = at(steps, "rebuild");
+    expect(step.fraction).toBeNull();
+    expect(step.detail).toBe("40 of 120 games");
+  });
+
+  test("once reading is done the rebuild denominator is settled, so it fills", () => {
+    const steps = readSteps([exam(1, "chess_materialize_replay"), rebuild(60, 120)], "analysing");
+    expect(at(steps, "import").state).toBe("done");
+    const step = at(steps, "rebuild");
+    expect(step.state).toBe("running");
+    expect(step.fraction).toBeCloseTo(0.5);
+  });
+
+  test("prepare finishing is what proves every game was rebuilt", () => {
+    // It refuses to freeze a snapshot while anything is outstanding, so its own
+    // completion is stronger evidence than counting the rebuild workflows.
+    const steps = readSteps([exam(2, "coaching_examination_report"), rebuild(120, 120)], "analysing");
+    expect(at(steps, "rebuild").state).toBe("done");
+    expect(at(steps, "analyse").state).toBe("running");
+  });
+
+  test("studying counts games and fills from their weight", () => {
+    const steps = readSteps(
+      [exam(2), rebuild(120, 120), game(100, "succeeded"), game(50), game(0)],
+      "analysing",
+    );
+    const step = at(steps, "analyse");
+    expect(step.detail).toBe("1 of 3 games");
+    expect(step.fraction).toBeCloseTo(0.5);
+  });
+
+  test("an archive with nothing analysable still finishes its studying step", () => {
+    // No game workflow was ever planned, so the only evidence that the step is
+    // over is the examination having moved past the item that waits for them.
+    const steps = readSteps([exam(3, "coaching_baseline_examination")], "analysing");
+    expect(at(steps, "analyse").state).toBe("done");
+    expect(at(steps, "write").state).toBe("running");
+  });
+
+  test("everything done leaves nothing running", () => {
+    const steps = readSteps([exam(5), rebuild(120, 120), game(100, "succeeded")], "analysing");
+    expect(steps.every((step) => step.state === "done")).toBe(true);
+    expect(currentStep(steps)).toBeNull();
+  });
+
+  test("a dead sibling workflow does not hold the journey open", () => {
+    // Linking enqueues a `subject_estimation` workflow no deployment handles,
+    // so it dead-letters at once beside an examination that is going fine.
+    const steps = readSteps(
+      [exam(5), rebuild(1, 1), game(100, "succeeded"), wf("subject_estimation", 0, 1, { state: "failed" })],
+      "analysing",
+    );
+    expect(steps.every((step) => step.state === "done")).toBe(true);
+  });
+
+  test("exactly one step runs at a time", () => {
+    const steps = readSteps([exam(1), rebuild(3, 10)], "analysing");
+    expect(steps.filter((step) => step.state === "running")).toHaveLength(1);
   });
 });

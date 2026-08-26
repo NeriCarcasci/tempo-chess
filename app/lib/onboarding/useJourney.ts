@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { listWorkflows } from "./api";
 import {
+  currentStep,
   emptyTracker,
   etaLabel,
   observe,
   readJourney,
+  readSteps,
   remainingAt,
   type Journey,
+  type Step,
 } from "./sync";
 import type { Workflow } from "../v1/types";
 
@@ -78,10 +81,21 @@ function useWorkflows(enabled: boolean): { workflows: Workflow[]; error: unknown
 
 export interface JourneyReading {
   journey: Journey;
+  /** The four named steps, each answering for its own progress. */
+  steps: Step[];
+  /** The one being worked on now, or null once everything has finished. */
+  step: Step | null;
+  /** Its position in the four, from 1. Zero once nothing is running. */
+  stepNumber: number;
   /** The bar's fill, high-water marked, or null while nothing is measurable. */
   fraction: number | null;
-  /** The estimate as a sentence, never as a ticking clock. */
-  eta: string;
+  /**
+   * The estimate as a sentence, never as a ticking clock, and null unless the
+   * step running now is the one it was measured from. Throughput is observed on
+   * analysis weight alone, so quoting it beside "rebuilding the positions"
+   * would be attaching a number to work it did not measure.
+   */
+  eta: string | null;
   /** A workflow read that failed. The caller decides whether it is worth saying. */
   error: unknown;
 }
@@ -89,6 +103,7 @@ export interface JourneyReading {
 export function useJourney(runStage: string, enabled = true): JourneyReading {
   const { workflows, error } = useWorkflows(enabled);
   const journey = useMemo(() => readJourney(workflows, runStage), [workflows, runStage]);
+  const steps = useMemo(() => readSteps(workflows, runStage), [workflows, runStage]);
 
   const [tracker, setTracker] = useState(emptyTracker);
   // Folded in when a reading lands, not on every render: a sample taken over no
@@ -98,10 +113,20 @@ export function useJourney(runStage: string, enabled = true): JourneyReading {
     setTracker((current) => observe(current, { at: Date.now(), journey }));
   }, [journey]);
 
+  const step = currentStep(steps);
+  const remaining = remainingAt(tracker, Date.now());
+
   return {
     journey,
+    steps,
+    step,
+    stepNumber: step ? steps.indexOf(step) + 1 : 0,
     fraction: tracker.fraction,
-    eta: etaLabel(remainingAt(tracker, Date.now())),
+    // Only while studying, and only once there is enough evidence for a figure.
+    // "Working out how long this will take" was being shown for minutes beside
+    // work whose length nothing was measuring, which is a hedge rather than an
+    // estimate — the step's own tally is the honest answer in that window.
+    eta: step?.key === "analyse" && remaining !== null ? etaLabel(remaining) : null,
     error,
   };
 }

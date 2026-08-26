@@ -169,6 +169,178 @@ export function boardsBelongHere(): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// The steps
+// ---------------------------------------------------------------------------
+
+/**
+ * The examination as four named steps, each answering for itself.
+ *
+ * The bar above measures one thing well and says nothing about the other
+ * three-quarters of the wall clock. Watching a real first run made the cost
+ * obvious: for minutes the screen said IMPORTING while the caption underneath
+ * said "Gathering what to read" — which is `coaching_onboarding_prepare`, a
+ * step that runs *after* the import and waits on something else entirely. The
+ * phase was wrong, there was no count, no estimate, and nothing that had been
+ * finished was ever marked finished. A person cannot tell a system that is
+ * working from one that is stuck if it never says what it has done.
+ *
+ * ## Why four, and why these
+ *
+ * They are the four things that actually happen, and each leaves its own
+ * evidence in the workflow list:
+ *
+ *   * **Reading** — the sync items on the examination workflow.
+ *   * **Rebuilding** — one `game_import` workflow per batch, one item per game.
+ *   * **Studying** — one `game_analysis` workflow per game.
+ *   * **Writing** — the last three items on the examination workflow.
+ *
+ * ## Why a step can show a count and no bar
+ *
+ * This is the rule that makes four segments honest where three were not. A step
+ * draws a fraction only once its denominator has stopped moving. The import has
+ * no denominator at all — a provider does not say how large an archive is
+ * before it sends it — so it counts up and never fills. Rebuilding has one, but
+ * it *grows* while the import is still landing games, so its bar is held back
+ * until reading is done and only its count moves before then. A fill that walks
+ * backwards reads as a bug however correct the arithmetic is; a tally that only
+ * rises cannot.
+ */
+export type StepKey = "import" | "rebuild" | "analyse" | "write";
+export type StepState = "waiting" | "running" | "done";
+
+export interface Step {
+  key: StepKey;
+  /** What this step is, in the product's voice. */
+  label: string;
+  state: StepState;
+  /** 0 to 1, or null when this step has no settled denominator to draw. */
+  fraction: number | null;
+  /** The concrete tally, or null when there is nothing true to count yet. */
+  detail: string | null;
+}
+
+const STEP_LABEL: Record<StepKey, string> = {
+  import: "Reading your games",
+  rebuild: "Rebuilding the positions",
+  analyse: "Studying every move",
+  write: "Writing your report",
+};
+
+/** Games, counted the way a person counts them. */
+const games = (n: number): string => `${n.toLocaleString()} ${n === 1 ? "game" : "games"}`;
+const outOf = (done: number, total: number): string =>
+  `${done.toLocaleString()} of ${total.toLocaleString()} ${total === 1 ? "game" : "games"}`;
+
+export function readSteps(workflows: readonly WorkflowLike[], runStage: string): Step[] {
+  const live = workflows.filter((workflow) => !ABANDONED.has(workflow.state));
+  const examination = live.find((workflow) => workflow.kind === "initial_examination") ?? null;
+  const analyses = live.filter((workflow) => workflow.kind === "game_analysis");
+  const rebuilds = live.filter((workflow) => workflow.kind === "game_import");
+
+  /*
+   * How many of the examination's items are syncs.
+   *
+   * The planner writes one sync per readable account and then exactly four more
+   * — prepare, report, examine, advance — so the count falls out of the total
+   * rather than needing to be sent. `max(1, …)` because a workflow read before
+   * its items are all committed can report a total smaller than the tail.
+   */
+  const settled = examination ? Math.max(1, examination.progress.totalWeight - 4) : 1;
+  const passed = examination ? examination.progress.completedWeight : 0;
+  const total = examination ? examination.progress.totalWeight : 0;
+
+  const importDone = examination !== null && passed >= settled;
+  // Prepare finishing *is* the definition of "every game rebuilt and the
+  // snapshot frozen": it refuses to freeze while anything is outstanding. That
+  // is a stronger signal than counting the rebuild workflows, which only says
+  // that everything discovered so far is done.
+  const rebuildDone = examination !== null && passed >= settled + 1;
+  const rebuiltWeight = rebuilds.reduce(
+    (sum, workflow) => sum + workflow.progress.completedWeight,
+    0,
+  );
+  const rebuildTotal = rebuilds.reduce((sum, workflow) => sum + workflow.progress.totalWeight, 0);
+
+  const analysed = analyses.filter((workflow) => workflow.state === "succeeded").length;
+  let weightDone = 0;
+  let weightTotal = 0;
+  for (const workflow of analyses) {
+    weightDone += workflow.progress.completedWeight;
+    weightTotal += workflow.progress.totalWeight;
+  }
+  // Either every planned game is read, or the examination has moved past the
+  // step that waits for them — which is the same fact from the other side, and
+  // the only evidence available for an archive with nothing analysable in it.
+  const analyseDone =
+    (analyses.length > 0 && analysed === analyses.length) ||
+    (examination !== null && passed >= settled + 2);
+  const writeDone = examination !== null && total > 0 && passed >= total;
+
+  const finished: Record<StepKey, boolean> = {
+    import: importDone,
+    rebuild: rebuildDone,
+    analyse: analyseDone,
+    write: writeDone,
+  };
+  const order: StepKey[] = ["import", "rebuild", "analyse", "write"];
+  // Exactly one step is running: the first that has not finished. Marking every
+  // unfinished step as running would say four things are happening at once, and
+  // marking none would leave a screen with no subject.
+  const current = order.find((key) => !finished[key]) ?? null;
+
+  const state = (key: StepKey): StepState =>
+    finished[key] ? "done" : key === current ? "running" : "waiting";
+
+  return [
+    {
+      key: "import",
+      label: STEP_LABEL.import,
+      state: state("import"),
+      // Never a fraction. A provider does not say how large an archive is
+      // before it sends it, so any bar here is a guess wearing a measurement.
+      fraction: null,
+      // The rebuild queue is the only live count of games that have landed:
+      // the sweep plans one item per game as it finds them. It lags the sync by
+      // up to a sweep, which is the right kind of wrong — it never overstates.
+      detail: rebuildTotal > 0 ? games(rebuildTotal) : null,
+    },
+    {
+      key: "rebuild",
+      label: STEP_LABEL.rebuild,
+      state: state("rebuild"),
+      // Held back until reading is done, because until then this denominator
+      // grows every time the sweep finds more games and the fill would slide
+      // backwards on a run going perfectly well.
+      fraction: importDone && rebuildTotal > 0 ? rebuiltWeight / rebuildTotal : null,
+      detail: rebuildTotal > 0 ? outOf(Math.min(rebuiltWeight, rebuildTotal), rebuildTotal) : null,
+    },
+    {
+      key: "analyse",
+      label: STEP_LABEL.analyse,
+      state: state("analyse"),
+      fraction: weightTotal > 0 ? Math.min(1, weightDone / weightTotal) : null,
+      detail: analyses.length > 0 ? outOf(analysed, analyses.length) : null,
+    },
+    {
+      key: "write",
+      label: STEP_LABEL.write,
+      // The run's own stage is the last resort, and only here: a workflow list
+      // read before the examination exists says nothing, and "writing" is the
+      // one step whose start the run announces on its own.
+      state:
+        !finished.write && current === "write" && runStage === "report_ready" ? "done" : state("write"),
+      fraction: null,
+      detail: null,
+    },
+  ];
+}
+
+/** The step being worked on now, or null once everything has finished. */
+export function currentStep(steps: readonly Step[]): Step | null {
+  return steps.find((step) => step.state === "running") ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // The estimate
 // ---------------------------------------------------------------------------
 

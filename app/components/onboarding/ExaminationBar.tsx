@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { useJourney } from "../../lib/onboarding/useJourney";
-import { PHASE_LABEL } from "../../lib/onboarding/sync";
+import type { Step } from "../../lib/onboarding/sync";
 
 /**
  * The examination, as one line across the top of the product.
@@ -13,15 +13,19 @@ import { PHASE_LABEL } from "../../lib/onboarding/sync";
  * watching a progress screen and using the product, so the product opens
  * immediately with the wait moved to a strip above it.
  *
- * It draws exactly what the full screen draws, from the same reading, and it
- * refuses a number the same way: where there is no denominator there is no
- * percentage, only a stripe that says work is happening. The games count sits
- * beside the fill because a raw tally cannot regress, so it keeps moving
- * through the moments the ratcheted bar has to wait.
+ * ## Four segments, not one bar
  *
- * When the run settles this calls `onSettled` once. The dashboard's panels are
- * loader data with a cache behind them, so nothing under this bar would notice
- * the report arriving without being told.
+ * The first version drew a single fill and it could only measure one of the
+ * four things that happen — so for minutes it said IMPORTING with no count, no
+ * estimate and nothing marked finished, while the work had in fact moved on
+ * twice. A person cannot tell a system that is working from one that is stuck
+ * if it never says what it has done.
+ *
+ * So the rail is the four steps, each answering for itself: filled when that
+ * step is finished, filling when it has a settled denominator, and travelling
+ * when it is running with nothing honest to divide by. The line above names the
+ * step running now and counts it. See `readSteps` for why a step may show a
+ * tally and refuse a bar.
  */
 export function ExaminationBar({
   runStage,
@@ -32,101 +36,111 @@ export function ExaminationBar({
   /** Called once, when every game has been read and the write-up has landed. */
   onSettled?: () => void;
 }) {
-  const { journey, fraction, eta } = useJourney(runStage);
-  const percent = fraction === null ? null : Math.round(fraction * 100);
-  const unknown = percent === null;
+  const { steps, step, stepNumber, eta } = useJourney(runStage);
+  const settledNow = step === null;
 
   // Once, and only on the edge. `onSettled` revalidates the page under this
   // bar; firing it on every poll of a finished run would put the dashboard in a
   // refetch loop for as long as the tab stayed open.
   const settled = useRef(false);
   useEffect(() => {
-    if (journey.phase !== "done" || settled.current) return;
+    if (!settledNow || settled.current) return;
     settled.current = true;
     onSettled?.();
-  }, [journey.phase, onSettled]);
+  }, [settledNow, onSettled]);
 
   return (
-    /* Full width, with the content in the page's own column inside it. The
-       first version centred the whole strip and stretched a full-bleed
-       pseudo-element behind it with `calc(50% - 50vw)`, which paints the wash
-       twice down the middle and can put a horizontal scrollbar on the page by
-       the width of the vertical one. A wrapper costs one element and neither. */
     <section className="exam-bar" aria-labelledby="exam-bar-head">
       <div className="exam-bar-inner">
-      <div className="exam-bar-line">
-        <p className="cap exam-bar-phase" id="exam-bar-head">
-          {journey.phase === "done" ? "Reading finished" : PHASE_LABEL[journey.phase]}
-        </p>
-
-        {/* The concrete version of the same fact, and the one a person actually
-            feels. A percentage of an abstract work unit means little; "412 of
-            4,317 games" means exactly what it says — so the two figures carry
-            the ink and the words around them step back, which is how every
-            other counted line in this product is set. */}
-        {journey.games.total > 0 ? (
-          <p className="exam-bar-count">
-            <b>{journey.games.done.toLocaleString()}</b> of{" "}
-            <b>{journey.games.total.toLocaleString()}</b> games
+        <div className="exam-bar-line">
+          <p className="cap exam-bar-phase" id="exam-bar-head">
+            {step ? step.label : "Reading finished"}
           </p>
-        ) : (
-          <p className="exam-bar-count is-quiet">Reading your archive</p>
-        )}
 
-        {/* The estimate, in words rather than as a clock, and only once there
-            is something to estimate from. Before the first game workflow exists
-            `etaLabel` can only say "working out how long this will take", which
-            sat beside "reading your archive" as a second sentence hedging the
-            first — two thirds of the line spent saying the same nothing twice.
-            A count is exactly the evidence a projection needs, so it is the
-            condition.
+          {/* The concrete version of the same fact, and the one a person
+              actually feels. A percentage of an abstract work unit means
+              little; "412 of 4,317 games" means exactly what it says — so the
+              figures carry the ink and the words around them step back. */}
+          {step?.detail ? <Tally detail={step.detail} /> : null}
 
-            It is also the first thing to go when the strip narrows: the count
-            beside it is a fact and this is a projection, so on a phone the fact
-            keeps the room. */}
-        {journey.phase !== "done" && journey.games.total > 0 ? (
-          <p className="exam-bar-eta">{eta}</p>
-        ) : null}
+          {/* Only while studying, because that is the only step whose rate was
+              ever measured. Beside anything else it would be a number attached
+              to work it did not come from. */}
+          {eta ? <p className="exam-bar-eta">{eta}</p> : null}
 
-        {/* The slot is held open whether or not there is a number in it. It used
-            to print an em dash while the run had no denominator, which reads as
-            a value rather than as the absence of one — and filling the gap later
-            shunted the whole line sideways. Empty and reserved is the honest
-            version of both. */}
-        <p className="exam-bar-figure">{percent === null ? "" : `${percent}%`}</p>
+          {/* Which of the four, which is the question a single bar could never
+              answer. The slot is held open whether or not there is a number in
+              it, so nothing shunts sideways when the run settles. */}
+          <p className="exam-bar-figure">{stepNumber > 0 ? `${stepNumber} / ${steps.length}` : ""}</p>
 
-        {/* The way out of the strip and into the screen that shows the work.
-            Not a duplicate of the nav: this is the only link on the product to
-            the running examination, and it disappears with the bar. */}
-        <Link to="/onboarding" className="exam-bar-watch">
-          Watch
-          <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" focusable="false">
-            <path
-              d="M5.5 3l5 5-5 5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </Link>
-      </div>
+          {/* The way out of the strip and into the screen that shows the work.
+              Not a duplicate of the nav: this is the only link on the product to
+              the running examination, and it disappears with the bar. */}
+          <Link to="/onboarding" className="exam-bar-watch">
+            Watch
+            <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" focusable="false">
+              <path
+                d="M5.5 3l5 5-5 5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </Link>
+        </div>
 
-      <div
-        className="exam-bar-track"
-        role="progressbar"
-        aria-label="Examination progress"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent ?? undefined}
-      >
-        <span
-          className={unknown ? "exam-bar-fill is-unknown" : "exam-bar-fill"}
-          style={unknown ? undefined : { width: `${percent}%` }}
-        />
-      </div>
+        <div
+          className="exam-bar-rail"
+          role="progressbar"
+          aria-label="Examination progress"
+          aria-valuemin={0}
+          aria-valuemax={steps.length}
+          aria-valuenow={steps.filter((entry) => entry.state === "done").length}
+          aria-valuetext={step ? `${step.label}, step ${stepNumber} of ${steps.length}` : "Finished"}
+        >
+          {steps.map((entry) => (
+            <RailSegment key={entry.key} step={entry} />
+          ))}
+        </div>
       </div>
     </section>
+  );
+}
+
+/** The two figures in the ink, the grammar around them in the muted tone. */
+function Tally({ detail }: { detail: string }) {
+  // Split on the numbers rather than rebuilding the sentence here: the copy for
+  // a tally belongs to `readSteps`, and a component that reassembles it would be
+  // a second place to change when the wording does.
+  const parts = detail.split(/(\d[\d,]*)/);
+  return (
+    <p className="exam-bar-count">
+      {parts.map((part, index) =>
+        /^\d/.test(part) ? <b key={index}>{part}</b> : <span key={index}>{part}</span>,
+      )}
+    </p>
+  );
+}
+
+function RailSegment({ step }: { step: Step }) {
+  if (step.state === "done") {
+    return <span className="exam-seg is-done" />;
+  }
+  if (step.state !== "running") {
+    return <span className="exam-seg" />;
+  }
+  return (
+    <span className="exam-seg is-running">
+      {/* A width when there is a denominator that has stopped moving, and a
+          travelling stripe when there is not. The stripe is the honest reading
+          of "working, with nothing true to divide by" — a fill sitting at zero
+          through a whole import read as broken. */}
+      <span
+        className={step.fraction === null ? "exam-seg-fill is-unknown" : "exam-seg-fill"}
+        style={step.fraction === null ? undefined : { width: `${Math.round(step.fraction * 100)}%` }}
+      />
+    </span>
   );
 }
