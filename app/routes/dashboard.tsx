@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useLoaderData, useRevalidator } from "react-router";
+import { redirect, useLoaderData, useRevalidator } from "react-router";
 import type { Route } from "./+types/dashboard";
 import { Today, leadTask, type LeadTask } from "../components/Today";
 import { Primer } from "../components/onboarding/Primer";
@@ -175,6 +175,25 @@ export async function clientLoader(): Promise<TodayData> {
     readReport(),
     readGoal(),
   ]);
+
+  /*
+   * An account is linked and no examination has ever been started.
+   *
+   * `requireSession` only asks whether a chess account exists, so somebody in
+   * this state walks straight onto the hub — and the hub has nothing to say to
+   * them. Every panel reports zero honestly, the "then" list renders no row
+   * because `welcome` is not a destination worth one, and the single control on
+   * screen offers to open a set of opening lines that do not exist yet. It is a
+   * dead end reached by doing nothing wrong, and it is where the first real
+   * run of this went: two accounts linked, no run, and no button anywhere that
+   * would start one.
+   *
+   * `/welcome` is the screen that owns starting, and it already handles this
+   * exact case — accounts connected, "Read my games" ready. It does not bounce
+   * back, because its own redirect is guarded on the run having left
+   * `not_started`, which is precisely the condition that sent us here.
+   */
+  if (run.destination?.kind === "welcome") throw redirect("/welcome");
 
   const sheet = deriveTearSheet(
     white.graph ? walkable(white.graph) : null,
