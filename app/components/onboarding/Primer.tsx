@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { PrimerFigure } from "./PrimerFigures";
 
 /**
  * How Forma works, in four cards, once.
@@ -146,9 +147,21 @@ export function Primer({
         if (event.key === "ArrowLeft") go(index - 1);
       }}
     >
-      {/* The progress, in the product's own mark. Hidden from assistive
-          technology because the label on the step line below says the same
-          thing in words, and a reader does not want it twice. */}
+      {/* Two columns, the same shape as the connect card a person met one
+          screen ago: copy on the left, one figure on the accent ground on the
+          right. It is not decoration — each figure draws the sentence beside
+          it, and the panel is the reason this reads as an introduction rather
+          than as a dialog box with a lot of text in it. */}
+      <div className="primer-split">
+      <div className="primer-left">
+      {/* The progress, in the product's own mark, and across the copy column
+          rather than the whole sheet. Full width, its unfilled segments ran
+          over the top of the accent panel as a light grey seam, and every tone
+          that reads on white reads as mud on orange. Progress belongs with the
+          words it is counting anyway.
+
+          Hidden from assistive technology because the step line at the foot
+          says the same thing in words, and a reader does not want it twice. */}
       <div className="primer-rule" aria-hidden="true">
         {cards.map((entry, position) => (
           <span
@@ -204,6 +217,18 @@ export function Primer({
             </button>
           </div>
         </div>
+      </div>
+      </div>
+
+      {/* Hidden from assistive technology: every figure restates the copy
+          beside it, and a screen reader hearing it twice would be worse off
+          than one that never sees it. Keyed on the card so the entrance plays
+          again, exactly as the copy column does. */}
+      <aside className="primer-aside" aria-hidden="true">
+        <div className="primer-figure" key={card.key}>
+          <PrimerFigure index={index} live={live} />
+        </div>
+      </aside>
       </div>
     </dialog>
   );

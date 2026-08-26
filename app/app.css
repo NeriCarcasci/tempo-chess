@@ -4385,30 +4385,98 @@
   }
 
   /* -- the introduction --------------------------------------------- */
-  /* The beta sheet's dialog, narrower: four short cards read badly at the
-     form's width, where a line runs past the comfortable measure.
-     Above the phone breakpoint only — under it `.sheet` becomes a full-width
-     bottom sheet, which is right for these too, and a narrower box pinned to
-     the bottom edge would read as a mistake. */
-  @media (min-width: 721px) {
-    /* Wider than the beta form, because this one is read rather than filled
-       in: at the form's width the body ran to five short lines a card and the
-       whole thing felt like a tooltip that had got above itself. */
-    .primer { width: min(41rem, calc(100vw - 3rem)); }
-    /* One height for all four, so the box does not jump under the cursor on
-       every Next: the cards differ by about ninety pixels, and a modal that
-       resizes around its own centre makes the button move away from the hand
-       that is about to press it again. Tall enough for the longest card, so
-       nothing is clipped and the shorter ones simply carry the space. */
-    .primer-card { min-height: 18rem; align-content: start; }
-  }
   /* The sheet's radius has to clip the rule across its top, or the rule's
      square corners sit proud of the rounded ones. Clipping means the body can
      no longer inherit the dialog's own max-height and scroll past it, so the
-     two become a column: a fixed rule, and a body that takes what is left and
-     scrolls inside it. */
+     two become a column: a fixed rule, and a split that takes what is left. */
   .primer { overflow: hidden; display: flex; flex-direction: column; }
-  .primer .sheet-body { max-height: none; flex: 1 1 auto; min-height: 0; }
+  .primer-split {
+    flex: 1 1 auto; min-height: 0;
+    display: grid; grid-template-columns: minmax(0, 1fr);
+  }
+  /* The rule sits on top of the copy and the copy takes the rest, so the
+     column scrolls under a progress bar that stays put. */
+  .primer-left { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .primer .sheet-body {
+    max-height: none; min-width: 0; min-height: 0; flex: 1 1 auto;
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+  /* A scrollbar only when the column genuinely overflows, and never a track —
+     the same treatment the connect card gives its own left half. */
+  .primer .sheet-body::-webkit-scrollbar { width: 6px; }
+  .primer .sheet-body::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--color-surface-3); }
+  .primer .sheet-body::-webkit-scrollbar-track { background: transparent; }
+
+  /* -- the accent half ----------------------------------------------- */
+  .primer-aside {
+    position: relative; display: grid; place-items: center;
+    padding: clamp(1.25rem, 3vw, 2.25rem);
+    background: var(--color-accent); color: var(--color-accent-ink);
+    /* One soft wash off the top left, so the panel has a light source rather
+       than reading as a flat swatch of paint. Same as the connect card. */
+    background-image: radial-gradient(
+      120% 90% at 18% 8%,
+      color-mix(in srgb, #ffffff 18%, transparent),
+      transparent 62%
+    );
+  }
+  /* The mascot's collar tracks the product accent, which on this panel means it
+     disappears into the ground it is standing on. Repainting it is what the
+     rook's own variables are for — but they have to be set *on* `.rk`, not on an
+     ancestor: `.rk` declares them itself, and a declaration on the element beats
+     an inherited value however close the ancestor is. */
+  .primer-aside .rk {
+    --rk-collar: #7d2f14;
+    --rk-collar-shade: #5d2210;
+  }
+  .primer-figure { display: grid; place-items: center; width: 100%; }
+  .primer-figure .pf { width: min(100%, 17rem); height: auto; }
+
+  /* Every figure is one flat tone at varying opacity: nothing here carries
+     meaning by colour, and the panel underneath is already the accent. */
+  .pf-tile { fill: var(--color-accent-ink); opacity: 0.26; }
+  .pf-tile.is-marked { opacity: 0.92; }
+  .pf-band { fill: var(--color-accent-ink); opacity: 0.16; }
+  .pf-bar { fill: var(--color-accent-ink); opacity: 0.5; }
+  .pf-bar.is-played { opacity: 0.95; }
+  .pf-dot { fill: var(--color-accent-ink); }
+  .pf-rank { fill: var(--color-accent-ink); opacity: 0.4; }
+  .pf-measure { fill: var(--color-accent-ink); opacity: 0.55; }
+  .pf-evidence { fill: var(--color-accent-ink); opacity: 0.28; }
+  .pf-row.is-lead .pf-rank,
+  .pf-row.is-lead .pf-measure { opacity: 0.95; }
+
+  /* Job: the tiles arriving one after another is an archive being read; the
+     bars growing to their real lengths is the value being the animation; the
+     rows landing in order is the rank being the message. Each plays once and
+     every figure is legible in its final state with none of it running. */
+  .pf-tile { animation: pf-tile-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  @keyframes pf-tile-in {
+    from { opacity: 0; transform: scale(0.7); }
+  }
+  .pf-tile { transform-origin: center; transform-box: fill-box; }
+  .pf-bar { animation: pf-bar-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both; transform-box: fill-box; }
+  @keyframes pf-bar-in {
+    from { transform: scaleX(0.04); }
+  }
+  .pf-row { animation: pf-row-in 460ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  @keyframes pf-row-in {
+    from { opacity: 0; transform: translateX(-10px); }
+  }
+
+  /* The examination bar, at panel size. Same claim, same travelling stripe:
+     at this point in a run there is no denominator to draw. */
+  .pf-rook { display: grid; justify-items: center; gap: 1.5rem; }
+  .pf-track {
+    display: block; position: relative; overflow: hidden;
+    width: 11rem; height: 0.4rem; border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--color-accent-ink) 24%, transparent);
+  }
+  .pf-track-fill {
+    display: block; width: 38%; height: 100%;
+    border-radius: var(--radius-pill); background: var(--color-accent-ink);
+    animation: sync-travel 1.9s ease-in-out infinite;
+  }
 
   /* Progress, in the same mark as the strip across the dashboard behind it.
      Four segments, flush, no gaps: it is one bar divided, not four objects. */
@@ -4473,8 +4541,42 @@
     to { opacity: 1; transform: none; }
   }
 
+  /* Above the phone breakpoint the sheet is the connect card's own object:
+     same width, same fixed height, two columns. Under it `.sheet` becomes a
+     full-width bottom sheet, which is right for these too.
+
+     This block sits *after* the single-column defaults above rather than
+     before them, and that is not tidiness: the two rules have equal
+     specificity, so the later one wins whatever the media query says. Written
+     the other way round, the split silently stacked on a desktop. */
+  @media (min-width: 721px) {
+    .primer {
+      width: min(58rem, calc(100vw - 3rem));
+      /* A fixed height, so the panel has somewhere to centre its figure and the
+         box does not resize under the cursor between cards. */
+      height: min(33rem, calc(100dvh - 4rem));
+    }
+    /* The copy takes the larger half. At an even split the heading wrapped to
+       three lines on two of the four cards, which is a heading that has stopped
+       being one; the figures lose nothing by being a little smaller. */
+    .primer-split { grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr); }
+    /* Room for the longest card, so the copy column does not start scrolling
+       on card two while cards one and four sit half empty. */
+    .primer-card { min-height: 13rem; align-content: start; }
+  }
+
+  /* Structural, as DESIGN.md requires: under the phone breakpoint the panel is
+     dropped rather than stacked. A figure above four cards of copy is a
+     screenful of scrolling before the first sentence, and the same reason the
+     connect card drops its own half there. */
+  @media (max-width: 720px) {
+    .primer-aside { display: none; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .primer-card { animation: none; }
     .primer-rule span { transition: none; }
+    .pf-tile, .pf-bar, .pf-row { animation: none; }
+    .pf-track-fill { animation: none; width: 100%; opacity: 0.5; }
   }
 }
