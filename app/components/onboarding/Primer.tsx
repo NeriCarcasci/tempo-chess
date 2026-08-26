@@ -203,8 +203,12 @@ export function Primer({
                 control that cannot do anything is furniture, and this product's
                 rule elsewhere is that something with no reason to be there is
                 not drawn. */}
+            {/* The same button as its neighbour, in the quieter of the two
+                treatments. A smaller Back beside a full-size Next reads as a
+                second-class control, and it is not one: on a four-card
+                introduction, going back is as ordinary as going on. */}
             {index > 0 ? (
-              <button type="button" className="chip-btn" onClick={() => go(index - 1)}>
+              <button type="button" className="secondary-button btn-lg" onClick={() => go(index - 1)}>
                 Back
               </button>
             ) : null}

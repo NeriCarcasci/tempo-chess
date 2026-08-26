@@ -61,27 +61,55 @@ export function ExaminationBar({
 
         {/* The concrete version of the same fact, and the one a person actually
             feels. A percentage of an abstract work unit means little; "412 of
-            4,317 games" means exactly what it says. */}
+            4,317 games" means exactly what it says — so the two figures carry
+            the ink and the words around them step back, which is how every
+            other counted line in this product is set. */}
         {journey.games.total > 0 ? (
           <p className="exam-bar-count">
-            {journey.games.done.toLocaleString()} of {journey.games.total.toLocaleString()} games
+            <b>{journey.games.done.toLocaleString()}</b> of{" "}
+            <b>{journey.games.total.toLocaleString()}</b> games
           </p>
         ) : (
-          <p className="exam-bar-count">Reading your archive</p>
+          <p className="exam-bar-count is-quiet">Reading your archive</p>
         )}
 
-        {/* The estimate, in words rather than as a clock. It is the first thing
-            to go when the strip narrows: the count above it is a fact and this
-            is a projection, so on a phone the fact keeps the room. */}
-        {journey.phase === "done" ? null : <p className="exam-bar-eta">{eta}</p>}
+        {/* The estimate, in words rather than as a clock, and only once there
+            is something to estimate from. Before the first game workflow exists
+            `etaLabel` can only say "working out how long this will take", which
+            sat beside "reading your archive" as a second sentence hedging the
+            first — two thirds of the line spent saying the same nothing twice.
+            A count is exactly the evidence a projection needs, so it is the
+            condition.
 
-        <p className="exam-bar-figure">{percent === null ? "—" : `${percent}%`}</p>
+            It is also the first thing to go when the strip narrows: the count
+            beside it is a fact and this is a projection, so on a phone the fact
+            keeps the room. */}
+        {journey.phase !== "done" && journey.games.total > 0 ? (
+          <p className="exam-bar-eta">{eta}</p>
+        ) : null}
+
+        {/* The slot is held open whether or not there is a number in it. It used
+            to print an em dash while the run had no denominator, which reads as
+            a value rather than as the absence of one — and filling the gap later
+            shunted the whole line sideways. Empty and reserved is the honest
+            version of both. */}
+        <p className="exam-bar-figure">{percent === null ? "" : `${percent}%`}</p>
 
         {/* The way out of the strip and into the screen that shows the work.
             Not a duplicate of the nav: this is the only link on the product to
             the running examination, and it disappears with the bar. */}
         <Link to="/onboarding" className="exam-bar-watch">
           Watch
+          <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" focusable="false">
+            <path
+              d="M5.5 3l5 5-5 5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </Link>
       </div>
 

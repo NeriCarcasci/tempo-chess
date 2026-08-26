@@ -4301,8 +4301,10 @@
     max-width: 1160px; margin: 0 auto;
     padding: 0.85rem 1.5rem 0.95rem;
   }
-  .exam-bar-line { display: flex; align-items: baseline; gap: 0.75rem; }
-  .exam-bar-phase { color: var(--color-accent); white-space: nowrap; }
+  .exam-bar-line { display: flex; align-items: baseline; gap: 0.7rem; }
+  /* The phase gets the accent and a little more air after it, so the strip
+     reads as "state, then detail" rather than as four things in a row. */
+  .exam-bar-phase { margin-right: 0.15rem; color: var(--color-accent); white-space: nowrap; }
   /* Mono and tabular for the same reason the full screen's count is: it
      changes every few seconds, and proportional digits make a still number
      look like a moving one. */
@@ -4312,16 +4314,31 @@
     font-family: var(--font-mono); font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .exam-bar-count { font-size: 0.72rem; color: var(--color-ink-muted); }
+  .exam-bar-count { font-size: 0.72rem; color: var(--color-ink-faint); }
+  /* The figures carry the ink and the words around them step back. Same
+     treatment as the standing line on `/today`, for the same reason: the two
+     numbers are the sentence and "of" and "games" are its grammar. */
+  .exam-bar-count b { font-weight: 650; color: var(--color-ink); }
+  .exam-bar-count.is-quiet { color: var(--color-ink-muted); }
   .exam-bar-eta { font-size: 0.72rem; color: var(--color-ink-faint); }
-  .exam-bar-figure { margin-left: auto; font-size: 0.78rem; color: var(--color-ink); }
+  /* A middot rather than another gap: without it the count and the estimate
+     ran together as one long line of grey mono and neither could be found. */
+  .exam-bar-eta::before { content: "·"; margin-right: 0.7rem; opacity: 0.55; }
+  .exam-bar-figure {
+    margin-left: auto; min-width: 2.4rem; text-align: right;
+    font-size: 0.85rem; font-weight: 650; color: var(--color-ink);
+  }
+  /* A control, not a word: the arrow is what makes it read as somewhere to go,
+     and it steps forward on approach rather than gaining an underline. */
   .exam-bar-watch {
-    font-size: 0.72rem; font-weight: 650; color: var(--color-accent);
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    font-size: 0.72rem; font-weight: 700; color: var(--color-accent);
     white-space: nowrap;
   }
-  .exam-bar-watch:hover { text-decoration: underline; }
+  .exam-bar-watch svg { transition: transform 130ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+  .exam-bar-watch:hover svg { transform: translateX(2px); }
   .exam-bar-track {
-    position: relative; height: 0.4rem; overflow: hidden;
+    position: relative; height: 0.45rem; overflow: hidden;
     border-radius: var(--radius-pill); background: var(--color-surface-3);
   }
   .exam-bar-fill {
@@ -4381,6 +4398,7 @@
   @media (prefers-reduced-motion: reduce) {
     .exam-bar-fill { transition: none; }
     .exam-bar-fill.is-unknown { animation: none; width: 100%; opacity: 0.45; }
+    .exam-bar-watch svg { transition: none; }
     .ghost-line, .ghost-board { animation: none; }
   }
 
@@ -4389,7 +4407,14 @@
      square corners sit proud of the rounded ones. Clipping means the body can
      no longer inherit the dialog's own max-height and scroll past it, so the
      two become a column: a fixed rule, and a split that takes what is left. */
-  .primer { overflow: hidden; display: flex; flex-direction: column; }
+  /* `[open]`, and the attribute is load-bearing.
+     A closed `<dialog>` is hidden by one UA rule — `dialog:not([open])
+     { display: none }` — and any author `display` beats it. Written as a bare
+     `.primer`, closing the sheet took it out of the top layer and left it lying
+     on the page: no backdrop, no focus trap, and the content underneath drawing
+     straight over it. It looked exactly like a close button that does nothing. */
+  .primer { overflow: hidden; }
+  .primer[open] { display: flex; flex-direction: column; }
   .primer-split {
     flex: 1 1 auto; min-height: 0;
     display: grid; grid-template-columns: minmax(0, 1fr);
