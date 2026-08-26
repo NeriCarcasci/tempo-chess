@@ -158,6 +158,46 @@ export async function currentRun(
  * on active runs makes that true even under a double-submitted form, and the
  * conflict path reads the existing row rather than raising.
  */
+/**
+ * Retire a run whose examination died, so the person can start another.
+ *
+ * **A dead sync never fails its run.** The workflow ends `failed`, and the run
+ * carries on saying `active` with a next action of `wait`, because nothing
+ * tells it otherwise. Every screen already knows to read the workflow as well
+ * and say the journey has stopped -- and then the only thing offered was "start
+ * again", which resumed the same dead run and planned nothing, because at most
+ * one run per subject may be active and this one still claimed to be. The
+ * person was stuck for good, on an account whose games had synced perfectly
+ * well.
+ *
+ * So starting again starts again. The dead run is closed with the reason it
+ * actually had, its evidence stays on record, and the insert below is free to
+ * create a fresh one -- which re-plans the whole examination from the sync
+ * forward, with new idempotency keys derived from the new run id.
+ *
+ * Only a run whose workflow is genuinely finished-and-bad is touched. A running
+ * or queued workflow leaves its run exactly where it is, which is what stops
+ * this from becoming a way to restart an examination that is merely slow.
+ */
+async function retireDeadRun(sql: Sql, subjectId: string): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    update coaching.onboarding_runs r
+    set status = 'failed',
+        failure_reason = 'analysis_failed',
+        completed_at = now(),
+        updated_at = now()
+    where r.subject_id = ${subjectId}
+      and r.status = 'active'
+      and r.sync_workflow_id is not null
+      and exists (
+        select 1 from ops.workflows w
+        where w.id = r.sync_workflow_id and w.state in ('failed', 'cancelled')
+      )
+    returning r.id
+  `;
+  return rows.length > 0;
+}
+
 export async function startRun(
   sql: Sql,
   input: {
@@ -166,6 +206,11 @@ export async function startRun(
     diagnosticChoice: "adaptive" | "skip";
   },
 ): Promise<{ runId: string; created: boolean }> {
+  // Before anything else, because the alternative is resuming a corpse: the
+  // partial unique index allows one active run per subject, so a dead one that
+  // still calls itself active is what makes "start again" a no-op.
+  await retireDeadRun(sql, input.subjectId);
+
   const [inserted] = await sql<{ id: string }[]>`
     insert into coaching.onboarding_runs (user_id, subject_id, diagnostic_choice)
     values (${input.userId}, ${input.subjectId}, ${input.diagnosticChoice})

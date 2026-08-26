@@ -4270,3 +4270,211 @@
     .connect-add { animation: none; }
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* The first examination, seen from inside the product.               */
+/*                                                                     */
+/* A person now lands on /today the moment they press "Read my games", */
+/* minutes before anything can be measured about them. Two things make */
+/* that honest rather than broken: a strip across the top saying how   */
+/* far the read has got, and panels drawn as the shape of what is      */
+/* coming rather than as empty states or invented figures.             */
+/* ------------------------------------------------------------------ */
+@layer components {
+  /* -- the strip ---------------------------------------------------- */
+  /* Under the header rather than over it: the header carries its own
+     stacking context at z-index 50 for the account menu, and a strip that
+     competed with it would put a progress bar over an open menu. */
+  .exam-bar {
+    position: sticky; top: 0; z-index: 40;
+    background: color-mix(in srgb, var(--color-bg) 88%, transparent);
+    -webkit-backdrop-filter: blur(12px) saturate(1.15);
+    backdrop-filter: blur(12px) saturate(1.15);
+  }
+  /* The wash spans the window; the content keeps the page's own column, so
+     moving between this page and any other does not shift it sideways. A
+     full-bleed pseudo-element on a centred strip was the first attempt: it
+     paints the wash twice down the middle, and `calc(50% - 50vw)` overflows
+     by the width of the scrollbar. */
+  .exam-bar-inner {
+    display: grid; gap: 0.5rem;
+    max-width: 1160px; margin: 0 auto;
+    padding: 0.85rem 1.5rem 0.95rem;
+  }
+  .exam-bar-line { display: flex; align-items: baseline; gap: 0.75rem; }
+  .exam-bar-phase { color: var(--color-accent); white-space: nowrap; }
+  /* Mono and tabular for the same reason the full screen's count is: it
+     changes every few seconds, and proportional digits make a still number
+     look like a moving one. */
+  .exam-bar-count,
+  .exam-bar-eta,
+  .exam-bar-figure {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .exam-bar-count { font-size: 0.72rem; color: var(--color-ink-muted); }
+  .exam-bar-eta { font-size: 0.72rem; color: var(--color-ink-faint); }
+  .exam-bar-figure { margin-left: auto; font-size: 0.78rem; color: var(--color-ink); }
+  .exam-bar-watch {
+    font-size: 0.72rem; font-weight: 650; color: var(--color-accent);
+    white-space: nowrap;
+  }
+  .exam-bar-watch:hover { text-decoration: underline; }
+  .exam-bar-track {
+    position: relative; height: 0.4rem; overflow: hidden;
+    border-radius: var(--radius-pill); background: var(--color-surface-3);
+  }
+  .exam-bar-fill {
+    display: block; height: 100%; width: 0;
+    border-radius: var(--radius-pill); background: var(--color-accent);
+    transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  /* Job: says work is happening in the stretch before there is a
+     denominator at all — one indivisible work item per account, so a 0%
+     fill that never moved would read as broken. Shares its keyframes with
+     the full-screen bar, which is the same claim at a different size. */
+  .exam-bar-fill.is-unknown { width: 34%; animation: sync-travel 1.9s ease-in-out infinite; }
+
+  /* The estimate is the first thing to go: the count beside it is a fact
+     and this is a projection, so on a phone the fact keeps the room. */
+  @media (max-width: 640px) {
+    .exam-bar-eta { display: none; }
+    .exam-bar-inner { padding-left: 1rem; padding-right: 1rem; }
+  }
+
+  /* -- pending panels ----------------------------------------------- */
+  /* Skeletons shaped like the content, per DESIGN.md, and never a greyed
+     figure: a placeholder number is indistinguishable from a measurement
+     that came out low, which is the one thing this product may not do. */
+  .ghost { display: grid; gap: 0.5rem; width: 100%; max-width: 42rem; }
+  .ghost-line {
+    display: block; height: 0.85rem; border-radius: var(--radius-pill);
+    background: var(--color-surface-3);
+  }
+  .ghost-board {
+    display: block; width: 260px; max-width: 100%; aspect-ratio: 1;
+    border-radius: var(--radius-panel); background: var(--color-surface-2);
+    box-shadow: var(--shadow-flat);
+  }
+
+  /* Job: says the panel is waiting rather than empty. One shared pulse, so
+     four ghosts read as one state changing and not four things moving. */
+  .ghost-line, .ghost-board { animation: ghost-breathe 2.4s ease-in-out infinite; }
+  @keyframes ghost-breathe {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+
+  /* The heading of a pending panel is a real sentence, so it keeps the
+     type it would have had; only its weight comes down, because nothing
+     under it is measured yet. */
+  .today-verdict.is-pending h1 { color: var(--color-ink-muted); }
+  .today-verdict.is-pending .ghost { margin: 0.2rem 0 0.35rem; }
+  .today-stack.is-pending .today-rank-row.is-pending {
+    display: grid; grid-template-columns: auto minmax(0, 1fr);
+    align-items: center; gap: 0.9rem;
+    padding: 0.9rem 1rem;
+  }
+  .today-lead.is-pending h2 { color: var(--color-ink-muted); }
+  .today-board.is-pending { display: grid; place-items: center; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .exam-bar-fill { transition: none; }
+    .exam-bar-fill.is-unknown { animation: none; width: 100%; opacity: 0.45; }
+    .ghost-line, .ghost-board { animation: none; }
+  }
+
+  /* -- the introduction --------------------------------------------- */
+  /* The beta sheet's dialog, narrower: four short cards read badly at the
+     form's width, where a line runs past the comfortable measure.
+     Above the phone breakpoint only — under it `.sheet` becomes a full-width
+     bottom sheet, which is right for these too, and a narrower box pinned to
+     the bottom edge would read as a mistake. */
+  @media (min-width: 721px) {
+    /* Wider than the beta form, because this one is read rather than filled
+       in: at the form's width the body ran to five short lines a card and the
+       whole thing felt like a tooltip that had got above itself. */
+    .primer { width: min(41rem, calc(100vw - 3rem)); }
+    /* One height for all four, so the box does not jump under the cursor on
+       every Next: the cards differ by about ninety pixels, and a modal that
+       resizes around its own centre makes the button move away from the hand
+       that is about to press it again. Tall enough for the longest card, so
+       nothing is clipped and the shorter ones simply carry the space. */
+    .primer-card { min-height: 18rem; align-content: start; }
+  }
+  /* The sheet's radius has to clip the rule across its top, or the rule's
+     square corners sit proud of the rounded ones. Clipping means the body can
+     no longer inherit the dialog's own max-height and scroll past it, so the
+     two become a column: a fixed rule, and a body that takes what is left and
+     scrolls inside it. */
+  .primer { overflow: hidden; display: flex; flex-direction: column; }
+  .primer .sheet-body { max-height: none; flex: 1 1 auto; min-height: 0; }
+
+  /* Progress, in the same mark as the strip across the dashboard behind it.
+     Four segments, flush, no gaps: it is one bar divided, not four objects. */
+  .primer-rule {
+    flex: 0 0 auto;
+    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; height: 0.3rem;
+  }
+  .primer-rule span { background: var(--color-surface-3); transition: background 220ms ease; }
+  .primer-rule span.is-past { background: color-mix(in oklch, var(--color-accent) 45%, var(--color-surface-3)); }
+  .primer-rule span.is-on { background: var(--color-accent); }
+
+  .primer-body {
+    display: grid; gap: 1.15rem;
+    padding: clamp(1.8rem, 4vw, 2.9rem);
+  }
+  /* Room on the right for the close control, which shares this line's corner
+     and is drawn over it. */
+  .primer-kicker { padding-right: 2.6rem; color: var(--color-accent); }
+  /* The count, in words the rule above deliberately does not repeat. Mono
+     numerals per DESIGN.md, and tabular so "02 / 04" does not shuffle sideways
+     on the way to "03 / 04". */
+  .primer-step {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.7rem; letter-spacing: 0.06em; color: var(--color-ink-faint);
+  }
+
+  .primer-card { display: grid; gap: 0.9rem; }
+  .primer-body h2 {
+    max-width: 22ch; font-size: clamp(1.6rem, 3.6vw, 2.15rem);
+    font-weight: 650; letter-spacing: -0.032em; line-height: 1.1;
+    color: var(--color-ink);
+  }
+  /* The heading takes focus on every step so a reader hears the card that
+     arrived; the ring is the page's, not a browser default. */
+  .primer-body h2:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 6px; }
+  .primer-copy {
+    max-width: 52ch; color: var(--color-ink-muted);
+    font-size: 1rem; line-height: 1.65;
+  }
+  /* The second fact, in a recessed well rather than behind a rule or in a
+     lighter grey. It is the sharpest sentence on most of these cards and
+     fading it was the wrong way round. */
+  .primer-note {
+    max-width: 52ch; margin-top: 0.15rem;
+    border-radius: var(--radius-control); background: var(--color-surface-2);
+    padding: 0.85rem 1rem;
+    color: var(--color-ink-muted); font-size: 0.9rem; line-height: 1.6;
+  }
+
+  .primer-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; margin-top: 0.5rem;
+  }
+  .primer-controls { display: flex; align-items: center; gap: 0.6rem; }
+
+  /* Job: sequence, so each card lands as its own beat rather than swapping in
+     place. Exponential ease-out and 220ms, per DESIGN.md's state-change band;
+     the rise is short because the box does not move and only its contents do. */
+  .primer-card { animation: primer-arrive 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  @keyframes primer-arrive {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .primer-card { animation: none; }
+    .primer-rule span { transition: none; }
+  }
+}

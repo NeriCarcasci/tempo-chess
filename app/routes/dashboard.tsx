@@ -1,11 +1,14 @@
-import { useLoaderData } from "react-router";
+import { useCallback, useEffect, useState } from "react";
+import { useLoaderData, useRevalidator } from "react-router";
 import type { Route } from "./+types/dashboard";
 import { Today, leadTask, type LeadTask } from "../components/Today";
+import { Primer } from "../components/onboarding/Primer";
 import { RouteError } from "../components/RouteError";
+import { markPrimerSeen, primerSeen } from "../lib/onboarding/primer";
 import { requireSession } from "../lib/session";
 import { deriveTearSheet } from "../lib/tearSheet";
 import { openingShape, type OpeningShape } from "../lib/todayShape";
-import { getCached, setCached } from "../lib/loaderCache";
+import { getCached, invalidateCache, setCached } from "../lib/loaderCache";
 import { getOnboarding, getWorkflow } from "../lib/onboarding/api";
 import { nextScreen, type Destination } from "../lib/onboarding/nextScreen";
 import { fetchRecentGames, type RecentGame } from "../lib/v1/games";
@@ -59,6 +62,10 @@ interface TodayData {
   unanalysed: number;
   lastGame: RecentGame | null;
   run: Destination | null;
+  /** The run's own stage, which decides which phase the top bar names. */
+  runStage: string | null;
+  /** Whose page this is. The introduction is remembered per person. */
+  userId: string;
   /** What the published report concludes, or null when nothing is published. */
   report: TodayReport | null;
   /** The goal this account is actively working, or null with none set. */
@@ -89,16 +96,19 @@ export function meta() {
  * A failure here is a missing row, not a failed page. Where the run stands is
  * context for the page, and /onboarding is the screen that owns it.
  */
-async function readRun(): Promise<Destination | null> {
+async function readRun(): Promise<{ destination: Destination | null; stage: string | null }> {
   try {
     const state = await getOnboarding();
     const workflow = state.syncWorkflowId
       ? await getWorkflow(state.syncWorkflowId).catch(() => null)
       : null;
-    return nextScreen({ state, workflow });
+    // The stage travels with the destination because the bar needs both: the
+    // destination says whether work is running, and the stage is the only thing
+    // to go on in the opening seconds, before any workflow has been read.
+    return { destination: nextScreen({ state, workflow }), stage: state.stage };
   } catch (error) {
     if (error instanceof Response) throw error; // a 401 redirect must land
-    return null;
+    return { destination: null, stage: null };
   }
 }
 
@@ -192,7 +202,9 @@ export async function clientLoader(): Promise<TodayData> {
     games,
     unanalysed,
     lastGame: recent[0] ?? null,
-    run,
+    run: run.destination,
+    runStage: run.stage,
+    userId: session.userId,
     report,
     goal,
     goalProgress: progress,
@@ -207,5 +219,42 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 
 export default function TodayRoute() {
   const data = useLoaderData() as TodayData;
-  return <Today {...data} />;
+  const revalidator = useRevalidator();
+
+  /**
+   * The four cards, once per person.
+   *
+   * Read in an effect rather than during render because it touches
+   * localStorage, and a loader that did it would make the answer part of the
+   * cached page — so the second visit in a minute would show the introduction
+   * again, or never. Deciding after mount also means the dashboard paints
+   * first and the card arrives over a page that is already there, which is the
+   * whole point of sending somebody here rather than to a progress screen.
+   */
+  const [primer, setPrimer] = useState(false);
+  useEffect(() => {
+    if (!primerSeen(data.userId)) setPrimer(true);
+  }, [data.userId]);
+
+  const closePrimer = useCallback(() => {
+    markPrimerSeen(data.userId);
+    setPrimer(false);
+  }, [data.userId]);
+
+  /**
+   * The examination finished under the page. Everything on it is loader data
+   * with a minute of cache behind it, so without this the report a person just
+   * watched arrive would not appear until they navigated away and back.
+   */
+  const onSettled = useCallback(() => {
+    invalidateCache(`today:${data.userId}`);
+    void revalidator.revalidate();
+  }, [data.userId, revalidator]);
+
+  return (
+    <>
+      <Today {...data} onSettled={onSettled} />
+      <Primer open={primer} live={data.run?.kind === "wait"} onClose={closePrimer} />
+    </>
+  );
 }

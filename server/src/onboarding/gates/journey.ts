@@ -20,11 +20,13 @@
  * engine is E12's fixture session: this gate is about the wiring, and Stockfish
  * has its own gates.
  *
- * Handlers are called with the owner connection, as every integration gate in
- * this repository does — tenancy is the security gates' claim. What is *not*
- * faked is the planning: the planners run as `forma_api` through the module
- * connection, which is the role that will really do it, and E04's rule that a
- * worker may not create work is what shaped the whole chain.
+ * Every step runs on the connection its own deployment uses: `forma_api` plans,
+ * `forma_ops` sweeps, `forma_ingestion` syncs, `forma_stockfish` searches and
+ * `forma_analysis` aggregates and publishes. That is not tenancy theatre — a
+ * grant is part of the wiring, and running the chain as its owner is how a
+ * missing one reached production. `forma_analysis` had no grant on the opening
+ * catalogue that the report step reads, so every examination died at the same
+ * step while this gate stayed green.
  */
 
 import assert from "node:assert/strict";
@@ -35,6 +37,7 @@ import postgres from "postgres";
 import { createDisposableDatabase, grantRolePasswords } from "../../platform/harness/postgres.js";
 import { applyMigrations } from "../../platform/harness/migrations.js";
 import { GateReport } from "../../v1/gates/harness.js";
+import { withActor } from "../../db/actor.js";
 
 const report = new GateReport("Journey gate: linked account to drill");
 
@@ -110,7 +113,13 @@ process.env.LICHESS_API_URL = `http://127.0.0.1:${providerPort}`;
 
 const db = await createDisposableDatabase();
 await applyMigrations(db.adminUrl);
-await grantRolePasswords(db, ["forma_api"]);
+await grantRolePasswords(db, [
+  "forma_api",
+  "forma_ops",
+  "forma_ingestion",
+  "forma_stockfish",
+  "forma_analysis",
+]);
 
 // The planners run through the module connection, as `forma_api`, because that
 // is the role that plans work in production and the one E04 grants `insert` to.
@@ -121,13 +130,58 @@ delete process.env.K_SERVICE;
 
 const sql = postgres(db.adminUrl, { max: 6, prepare: false, onnotice: () => {} });
 
+/**
+ * Each step, on the connection the deployment that owns it really uses.
+ *
+ * This gate used to run every handler on the owner connection, on the reasoning
+ * that tenancy is the security gates' claim and this one is about wiring. That
+ * reasoning has a hole, and onboarding fell through it: the step that writes a
+ * baseline report reads the opening catalogue, `forma_analysis` had no grant on
+ * it, and *every examination ever run* died there. The gate was green
+ * throughout, because the owner it ran as could read everything.
+ *
+ * A grant is part of the wiring. So the chain runs as the five roles that will
+ * really run it, and a missing one fails here rather than in production five
+ * attempts deep behind an unclassified handler error.
+ *
+ * The assertions keep using the owner connection on purpose: what a step is
+ * allowed to do and what the gate is allowed to look at are different
+ * questions, and checking the result through a restricted role would make a
+ * missing grant look like a missing row.
+ */
+const roleConnections = new Map<string, ReturnType<typeof postgres>>();
+function as(role: string): typeof sql {
+  const held = roleConnections.get(role);
+  if (held) return held as typeof sql;
+  const made = postgres(db.urlFor(role), { max: 3, prepare: false, onnotice: () => {} });
+  roleConnections.set(role, made);
+  return made as typeof sql;
+}
+
+/** `forma-api`: plans work, because E04 lets nothing else create it. */
+const api = as("forma_api");
+/** `forma-ops`: the sweep, for the same reason. */
+const ops = as("forma_ops");
+/** `forma-ingestion`: provider traffic and the canonical commit behind it. */
+const ingestion = as("forma_ingestion");
+/** `forma-stockfish`: the engine, and nothing that needs an actor. */
+const stockfish = as("forma_stockfish");
+/** `forma-analysis`: aggregation and publication, which is most of a report. */
+const analysis = as("forma_analysis");
+
 const { beginOnboarding } = await import("../planner.js");
+// Aliased because this file already has a `startRun`-shaped idea in its head:
+// the section at the bottom is about starting a *second* run after the first
+// one's examination died.
+const { startRun: startRunAgain } = await import("../store.js");
 const { syncAccount } = await import("../../sync/worker.js");
 const { prepareExamination, buildExaminationReport, buildExamination, advanceStage } = await import(
   "../worker.js"
 );
 const { materializeReplayRevision } = await import("../../positions/worker.js");
 const { planPendingWork } = await import("../../analysis/planner.js");
+const { detectConcepts } = await import("../../analysis/concepts/worker.js");
+const { registerCatalogue } = await import("../../analysis/concepts/register.js");
 const { screenGame, deepenGame, assessTransitions, setEngineSessionFactory } = await import(
   "../../engine/worker.js"
 );
@@ -184,6 +238,11 @@ await sql`
 // check that requires them.
 const stamp = `journey_${Date.now()}`;
 await seedPromotedRecipe(sql, stamp);
+// The named ideas the detector measures. In production this is part of the
+// `forma-promote` job, beside recipe promotion, and without it the detector
+// refuses with `no_registered_concepts` — which is what this gate got the first
+// time it tried to run the step that produces a report's actual content.
+await registerCatalogue(sql);
 await registerEstimateComponents(sql);
 const subjectRecipe = await registerRecipeVersion(sql, {
   recipeKey: `journey_subject_${stamp}`,
@@ -244,7 +303,9 @@ const runId = run!.id;
 
 let workflowId = "";
 await report.check("starting onboarding plans real work, in order", async () => {
-  const begun = await beginOnboarding(sql, { runId, userId, subjectId });
+  const begun = await withActor(api, userId, (tx) =>
+    beginOnboarding(tx, { runId, userId, subjectId }),
+  );
   assert.equal(begun.planned, true);
   workflowId = (begun as { workflowId: string }).workflowId;
 
@@ -279,9 +340,14 @@ await report.check("starting onboarding plans real work, in order", async () => 
 report.section("syncing from the provider");
 
 await report.check("the sync lands real games and moves the cursor", async () => {
-  const summary = await syncAccount(
-    { payload: { linkedAccountId: account!.id, subjectId, mode: "initial" }, holder: "journey" },
-    sql,
+  // Bound, exactly as `runSyncItem` binds it before calling this: the sync
+  // writes `chess.subject_games` and reads `app.linked_accounts`, both of which
+  // force row level security against `private.current_actor_id()`.
+  const summary = await withActor(ingestion, userId, (tx) =>
+    syncAccount(
+      { payload: { linkedAccountId: account!.id, subjectId, mode: "initial" }, holder: "journey" },
+      tx,
+    ),
   );
   assert.equal(summary.accepted, 2, "both games should have been accepted");
   assert.equal(summary.rejected, 0);
@@ -300,9 +366,11 @@ await report.check("the sync lands real games and moves the cursor", async () =>
 
 await report.check("a second sync reads from the cursor and adds nothing", async () => {
   requestsSeen = [];
-  const summary = await syncAccount(
-    { payload: { linkedAccountId: account!.id, subjectId, mode: "incremental" }, holder: "journey-2" },
-    sql,
+  const summary = await withActor(ingestion, userId, (tx) =>
+    syncAccount(
+      { payload: { linkedAccountId: account!.id, subjectId, mode: "incremental" }, holder: "journey-2" },
+      tx,
+    ),
   );
   assert.equal(summary.accepted, 0);
   assert.notEqual(requestsSeen[0]?.since, null, "the second sync must send a cursor");
@@ -317,7 +385,7 @@ await report.check("a second sync reads from the cursor and adds nothing", async
 report.section("turning games into evidence");
 
 await report.check("the sweep plans materialization for the new games", async () => {
-  const swept = await planPendingWork(sql, { subjectId });
+  const swept = await planPendingWork(ops, { subjectId });
   assert.equal(swept.materializations, 2);
   // Nothing to analyse yet: a game that is not materialized cannot be screened.
   assert.equal(swept.analyses, 0);
@@ -329,7 +397,7 @@ await report.check("materializing produces the position chain", async () => {
     where subject_id = ${subjectId}
   `;
   for (const revision of revisions) {
-    const result = await materializeReplayRevision({ replayRevisionId: revision.id }, sql);
+    const result = await materializeReplayRevision({ replayRevisionId: revision.id }, analysis);
     assert.equal(result.occurrences > 0, true);
   }
   const [published] = await sql<{ count: string }[]>`
@@ -338,9 +406,40 @@ await report.check("materializing produces the position chain", async () => {
   assert.equal(published!.count, "2");
 });
 
+/*
+ * Freezing comes *before* the analysis sweep, and the order is not cosmetic.
+ *
+ * `planPendingGameAnalyses` only plans games some frozen snapshot actually
+ * reads. Until `prepare` freezes one there is nothing for that filter to match,
+ * so a sweep run here plans nothing at all — which is exactly what happened to
+ * this gate the day the filter landed: two games materialized, zero analyses
+ * planned, and every check after it failing on evidence that was never going to
+ * be produced.
+ *
+ * Production has the same shape and depends on the same thing. `prepare` waits
+ * for materialization, freezes the snapshot and stops; the analyses behind it
+ * are planned by the *next* sweep, because E04 forbids a worker creating work.
+ * That is why `forma-sweep-work` is on the scheduler: without a sweep after
+ * prepare, the report step waits out its attempts for analysis nobody planned.
+ */
+await report.check("prepare freezes a snapshot and plans the analysis run", async () => {
+  const result = await prepareExamination(await workContext("coaching_onboarding_prepare", { onboardingRunId: runId }), analysis);
+  assert.equal(typeof result.outputRef, "string");
+
+  const [row] = await sql<
+    { subject_data_snapshot_id: string | null; examination_run_id: string | null; stage: string }[]
+  >`
+    select subject_data_snapshot_id, examination_run_id, stage
+    from coaching.onboarding_runs where id = ${runId}
+  `;
+  assert.notEqual(row!.subject_data_snapshot_id, null);
+  assert.notEqual(row!.examination_run_id, null);
+  assert.equal(row!.stage, "analysing");
+});
+
 let analysisRunIds: string[] = [];
 await report.check("the sweep then plans the analysis of each game", async () => {
-  const swept = await planPendingWork(sql, { subjectId });
+  const swept = await planPendingWork(ops, { subjectId });
   assert.equal(swept.analyses, 2);
 
   const runs = await sql<{ id: string }[]>`
@@ -379,9 +478,15 @@ await report.check("screening, deepening and assessment run and publish", async 
         return { continue: true };
       },
     } as never;
-    if (item.task_type === "stockfish_screen_game") await screenGame(context, sql);
-    if (item.task_type === "stockfish_deep_game") await deepenGame(context, sql);
-    if (item.task_type === "analysis_assess_transitions") await assessTransitions(context, sql);
+    if (item.task_type === "stockfish_screen_game") await screenGame(context, stockfish);
+    if (item.task_type === "stockfish_deep_game") await deepenGame(context, stockfish);
+    if (item.task_type === "analysis_assess_transitions") await assessTransitions(context, analysis);
+    // The step the report's *content* comes from. It was skipped here for as
+    // long as `analysis.concept_opportunities` had no producer, and a producer
+    // landed without this catching up -- so the gate went on asserting the
+    // table was empty while production filled it with ten thousand rows, and
+    // the estimator path over real evidence was never once exercised.
+    if (item.task_type === "analysis_detect_concepts") await detectConcepts(context, analysis);
   }
 
   const [assessments] = await sql<{ count: string }[]>`
@@ -422,25 +527,10 @@ async function workContext(taskType: string, payload: Record<string, unknown>) {
   } as never;
 }
 
-await report.check("prepare freezes a snapshot and plans the analysis run", async () => {
-  const result = await prepareExamination(await workContext("coaching_onboarding_prepare", { onboardingRunId: runId }), sql);
-  assert.equal(typeof result.outputRef, "string");
-
-  const [row] = await sql<
-    { subject_data_snapshot_id: string | null; examination_run_id: string | null; stage: string }[]
-  >`
-    select subject_data_snapshot_id, examination_run_id, stage
-    from coaching.onboarding_runs where id = ${runId}
-  `;
-  assert.notEqual(row!.subject_data_snapshot_id, null);
-  assert.notEqual(row!.examination_run_id, null);
-  assert.equal(row!.stage, "analysing");
-});
-
-await report.check("the report runs, and is empty for a reason worth naming", async () => {
+await report.check("the report runs, and the estimators read real evidence", async () => {
   const result = await buildExaminationReport(
     await workContext("coaching_examination_report", { onboardingRunId: runId }),
-    sql,
+    analysis,
   );
   assert.equal(typeof result.outputRef, "string");
 
@@ -449,36 +539,50 @@ await report.check("the report runs, and is empty for a reason worth naming", as
   `;
   assert.notEqual(publication, undefined, "nothing was published");
 
-  // Here is where the journey currently stops, and the reason is a real gap
-  // rather than a wiring one. E15's estimators read `analysis.concept_
-  // opportunities` — "there was a fork here; did they take it?" — and **nothing
-  // in the product writes that table**. E13 shipped its schema, its invariants
-  // and its version registry, and no detector. Every gate that produced an
-  // estimate seeded the opportunities by hand.
+  // This is where the journey used to stop, and the two assertions here used to
+  // pin zero: nothing in the product wrote `analysis.concept_opportunities`, so
+  // no estimator had anything to read and the report was empty by construction.
+  // The note left behind said that the day a detector landed this check would
+  // fail and somebody should rewrite it to assert the estimates that now exist.
+  // A detector did land, and this gate did not notice for a long time, because
+  // it never ran the step -- the two steps a report's *content* comes from were
+  // the two the chain above skipped.
   //
-  // So a subject with real games, real materializations and real transition
-  // assessments still has no evidence any estimator can read, and the report is
-  // empty. That is the honest state, and this assertion pins it so that the day
-  // a detector lands, this check fails and somebody rewrites it to assert the
-  // estimates that should now exist.
+  // So it asserts properties rather than counts. The exact numbers move every
+  // time a concept is added to the catalogue, and a gate that pins them would
+  // fail on work that is going well.
   const [opportunities] = await sql<{ count: string }[]>`
     select count(*)::text as count from analysis.concept_opportunities
   `;
-  assert.equal(opportunities!.count, "0", "a concept detector now exists; rewrite this check");
+  assert.equal(Number(opportunities!.count) > 0, true, "the detector found nothing to measure");
 
   const [estimates] = await sql<{ count: string }[]>`
     select count(*)::text as count from analysis.player_skill_estimates
   `;
-  assert.equal(estimates!.count, "0", "estimates exist without opportunities; investigate");
+  assert.equal(Number(estimates!.count) > 0, true, "no estimator read the evidence");
+
+  // Findings are what the reader actually sees, and the false-discovery control
+  // between the estimates and them is the part most worth proving runs at all.
+  // Zero *published* findings is a legitimate answer over two games; a
+  // publication with no findings row of any kind means the stage was skipped.
+  const [findings] = await sql<{ count: string }[]>`
+    select count(*)::text as count from analysis.findings
+  `;
+  assert.equal(Number(findings!.count) > 0, true, "the finding stage produced nothing at all");
 });
 
 await report.check("the examination writes coverage and an immutable baseline", async () => {
-  await buildExamination(await workContext("coaching_baseline_examination", { onboardingRunId: runId }), sql);
+  await buildExamination(await workContext("coaching_baseline_examination", { onboardingRunId: runId }), analysis);
 
-  const [coverage] = await sql<{ count: string }[]>`
-    select count(*)::text as count from coaching.data_coverage_snapshots
+  // Insufficient, and stated. Two games is nowhere near the fifty the coverage
+  // policy calls broadly sufficient, and the one thing this product may never do
+  // is publish a confident profile over an archive that cannot support one.
+  const [coverage] = await sql<{ count: string; overall_state: string }[]>`
+    select count(*)::text as count, min(overall_state) as overall_state
+    from coaching.data_coverage_snapshots
   `;
   assert.equal(Number(coverage!.count) > 0, true);
+  assert.equal(coverage!.overall_state, "insufficient", "two games were called sufficient");
 
   const [baseline] = await sql<{ manifest_sha256: string }[]>`
     select b.manifest_sha256 from coaching.baseline_reports b
@@ -490,7 +594,7 @@ await report.check("the examination writes coverage and an immutable baseline", 
 await report.check("the stage advances to report_ready", async () => {
   await advanceStage(
     await workContext("coaching_onboarding_advance", { onboardingRunId: runId, stage: "report_ready" }),
-    sql,
+    analysis,
   );
   const [row] = await sql<{ stage: string }[]>`
     select stage from coaching.onboarding_runs where id = ${runId}
@@ -582,8 +686,60 @@ await report.check("practice is assigned from the player's own mistakes", async 
 
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+report.section("starting again after an examination dies");
+
+/*
+ * The recovery path, which is the one a real person is most likely to need.
+ *
+ * A dead sync never fails its run: the workflow ends `failed` and the run keeps
+ * saying `active` with a next action of `wait`. The screens read the workflow
+ * too and correctly say the journey has stopped -- and then the only thing on
+ * offer, "start again", resumed the same dead run and planned nothing, because
+ * at most one run per subject may be active and this one still claimed to be.
+ *
+ * This is done last, on the subject the whole gate has been using, because it
+ * ends that subject's journey deliberately. Everything above it has already run
+ * against the healthy version.
+ */
+await report.check("a run whose workflow died is retired, and a new one starts", async () => {
+  // `completed_at` comes with the state: the ledger's own check constraint
+  // refuses a terminal workflow that never finished, which is the shape a real
+  // dead one always has.
+  await sql`
+    update ops.workflows
+    set state = 'failed', completed_at = now(), updated_at = now()
+    where id = ${workflowId}
+  `;
+
+  const started = await withActor(api, userId, (tx) =>
+    startRunAgain(tx, { userId, subjectId, diagnosticChoice: "skip" }),
+  );
+  assert.equal(started.created, true, "start again resumed the dead run instead of replacing it");
+  assert.notEqual(started.runId, runId, "the same run was handed back");
+
+  const [dead] = await sql<{ status: string; failure_reason: string | null }[]>`
+    select status, failure_reason from coaching.onboarding_runs where id = ${runId}
+  `;
+  assert.equal(dead!.status, "failed");
+  assert.equal(dead!.failure_reason, "analysis_failed");
+
+  // Exactly one active run, which is the invariant the partial unique index
+  // protects and the thing a resumed corpse was quietly holding.
+  const [active] = await sql<{ count: string }[]>`
+    select count(*)::text as count from coaching.onboarding_runs
+    where subject_id = ${subjectId} and status = 'active'
+  `;
+  assert.equal(active!.count, "1");
+});
+
+// ---------------------------------------------------------------------------
+
 setEngineSessionFactory(null);
 await sql.end({ timeout: 5 });
+// Every role connection too: `db.destroy()` drops the database, and a live
+// session against it turns a teardown into a hang.
+for (const connection of roleConnections.values()) await connection.end({ timeout: 5 });
 await new Promise<void>((resolve) => provider.close(() => resolve()));
 await db.destroy();
 report.finish();

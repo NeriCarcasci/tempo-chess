@@ -5,18 +5,9 @@ import { PieceGlyph } from "../PieceGlyph";
 import { ProblemNote } from "../v1/Honesty";
 import { fetchRecentGames, type RecentGame } from "../../lib/v1/games";
 import { toFrames, type ReplayFrame } from "../../lib/onboarding/replay";
-import { listWorkflows } from "../../lib/onboarding/api";
 import { waitLabel, workflowStageLabel } from "../../lib/onboarding/copy";
-import {
-  boardsBelongHere,
-  emptyTracker,
-  etaLabel,
-  observe,
-  PHASE_LABEL,
-  readJourney,
-  remainingAt,
-  type Journey,
-} from "../../lib/onboarding/sync";
+import { useJourney } from "../../lib/onboarding/useJourney";
+import { boardsBelongHere, PHASE_LABEL, type Journey } from "../../lib/onboarding/sync";
 import type { Workflow } from "../../lib/v1/types";
 
 /**
@@ -55,11 +46,6 @@ const STAGGER_MS = 260;
 /** Asked for once games exist, then twice more. */
 const GAME_ATTEMPTS = 3;
 const GAME_RETRY_MS = 12_000;
-/**
- * Slower than the run's own poll on purpose. One reading of the workflow list
- * is up to three requests, and the weights move in units of a whole game.
- */
-const WEIGH_MS = 6_000;
 
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -71,56 +57,6 @@ function useReducedMotion(): boolean {
     return () => query.removeEventListener("change", onChange);
   }, []);
   return reduced;
-}
-
-/**
- * The workflow list, re-read while this screen is open.
- *
- * Not `usePoll`: that one is seeded from a loader and starts on the interval,
- * and this screen has no seed — waiting a whole interval before the first
- * reading would leave the bar with no denominator for six seconds every time
- * somebody reloads. It borrows the same two rules: nothing runs while the tab
- * is hidden, and a response that lands after unmount cannot set state.
- */
-function useWorkflows(): { workflows: Workflow[]; error: unknown } {
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [error, setError] = useState<unknown>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const read = async (): Promise<void> => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      try {
-        const next = await listWorkflows();
-        if (cancelled) return;
-        setWorkflows(next);
-        setError(null);
-      } catch (caught) {
-        if (cancelled) return;
-        // A redirect is a Response and belongs to the router. The run's own
-        // poll on this route is what turns an expired session into a sign-in.
-        if (caught instanceof Response) return;
-        setError(caught);
-      }
-    };
-    void read();
-    const timer = setInterval(() => void read(), WEIGH_MS);
-    // Ask immediately on tab return, exactly as `usePoll` does. Reads are
-    // skipped while hidden, so without this the person who comes back to check
-    // on the run stares at a bar up to a poll's width out of date -- the one
-    // moment the screen is being looked at is the one it was stalest.
-    const onVisible = (): void => {
-      if (document.visibilityState === "visible") void read();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, []);
-
-  return { workflows, error };
 }
 
 // ---------------------------------------------------------------------------
@@ -345,17 +281,7 @@ export function SyncStage({
   error?: unknown;
 }) {
   const still = useReducedMotion();
-  const { workflows, error: weighError } = useWorkflows();
-
-  const journey = useMemo(() => readJourney(workflows, runStage), [workflows, runStage]);
-
-  const [tracker, setTracker] = useState(emptyTracker);
-  // Folded in when a reading lands, not on every render: a sample taken over no
-  // elapsed work is a rate of infinity, and two of them in a row would put a
-  // fabricated estimate on screen inside a second.
-  useEffect(() => {
-    setTracker((current) => observe(current, { at: Date.now(), journey }));
-  }, [journey]);
+  const { journey, fraction, eta, error: weighError } = useJourney(runStage);
 
   const [games, setGames] = useState<RecentGame[]>([]);
   const [attempt, setAttempt] = useState(0);
@@ -400,7 +326,6 @@ export function SyncStage({
     workflowStageLabel(workflow?.progress.stage ?? null) ??
     (waitReason === undefined ? null : waitLabel(waitReason)) ??
     PHASE_LABEL[journey.phase];
-  const eta = etaLabel(remainingAt(tracker, Date.now()));
   const showBoards = wanted && games.length > 0;
 
   return (
@@ -412,7 +337,7 @@ export function SyncStage({
       sub="Forma is reading every game you have played. This takes a few minutes, and it carries on whether or not this tab is open."
     >
 
-        <JourneyBar journey={journey} fraction={tracker.fraction} />
+        <JourneyBar journey={journey} fraction={fraction} />
 
         {/* Polite and atomic: the task and the estimate change together, and
             announcing them separately would interrupt somebody mid-sentence

@@ -5,7 +5,14 @@ import { OnboardingShell } from "../components/onboarding/OnboardingShell";
 import { ProviderChoice, type Provider } from "../components/onboarding/ProviderChoice";
 import { ConnectPanel } from "../components/onboarding/ConnectPanel";
 import { RouteError } from "../components/RouteError";
-import { getMe, getOnboarding, linkAccount, startRun, unlinkAccount } from "../lib/onboarding/api";
+import {
+  getMe,
+  getOnboarding,
+  getWorkflow,
+  linkAccount,
+  startRun,
+  unlinkAccount,
+} from "../lib/onboarding/api";
 import { nextScreen } from "../lib/onboarding/nextScreen";
 import { ProblemError } from "../lib/v1/problem";
 import { newIdempotencyKey } from "../lib/v1/client";
@@ -40,6 +47,21 @@ import { LichessMark, ChessComMark } from "../components/PlatformMarks";
 export function meta() {
   return [{ title: "Connect your chess account · Forma" }];
 }
+
+/**
+ * The sites Forma can actually read an archive from.
+ *
+ * `server/src/sync/providers.ts` ships one adapter, for Lichess, and the
+ * planner quietly plans no sync for anything else. Before this was checked
+ * here, a person who connected only a Chess.com account could press "Read my
+ * games", and the planner would find nothing syncable, fail the run
+ * `no_linked_account` inside the same request, and hand back a message telling
+ * them to check the spelling of a name that was spelled perfectly. The caveat
+ * was already on the chooser; what was missing was the refusal.
+ *
+ * When an adapter lands, this set is the one place that has to learn about it.
+ */
+const READABLE_PROVIDERS: ReadonlySet<string> = new Set(["lichess"]);
 
 interface Candidate {
   platform: Provider;
@@ -105,13 +127,31 @@ export async function clientLoader(): Promise<LoaderData> {
   //     way out of one, and bouncing it back to /onboarding leaves the person
   //     circling between a dead end and the screen that would fix it;
   //   * a run whose next step is `link_account` obviously stays here.
-  const destination = nextScreen({ state });
+  /*
+   * The workflow is read as well as the run, and that is not belt and braces.
+   *
+   * When a sync dies the run does not notice: its status stays `active` and its
+   * next action stays `wait`. Deciding from the run alone, this screen read a
+   * dead examination as live and redirected into it — and the only way out of a
+   * dead one is to reconnect, which is this screen. So the failure screen's
+   * "Start again" link came back here and was bounced straight to /onboarding,
+   * round and round, with nothing a person could press to escape. `nextScreen`
+   * closes that, but only if it is handed the workflow.
+   */
+  const workflow = state.syncWorkflowId
+    ? await getWorkflow(state.syncWorkflowId).catch(() => null)
+    : null;
+  const destination = nextScreen({ state, workflow });
   const live = state.status === "active" || state.status === "activated";
-  if (state.stage !== "not_started" && live && destination.kind !== "welcome") {
-    // Straight to the report when there is one. Sending everybody through
-    // /onboarding meant a person whose report was written days ago got a
-    // progress screen for the length of one redirect.
-    throw redirect(destination.kind === "report" ? "/report" : "/onboarding");
+  // `stuck` stays here with `welcome`. Both mean the journey needs a person,
+  // and this is the screen that person acts on.
+  const elsewhere = destination.kind !== "welcome" && destination.kind !== "stuck";
+  if (state.stage !== "not_started" && live && elsewhere) {
+    // Straight to the report when there is one, because opening it is what
+    // advances the run. Everything else goes to the product: the examination is
+    // watchable from the bar on `/today`, and sending a person to a progress
+    // screen they cannot act on is what this change is undoing.
+    throw redirect(destination.kind === "report" ? "/report" : "/today");
   }
   // The list is read from the server rather than accumulated in component
   // state: adding an account is a write on two surfaces, and a client-side
@@ -193,7 +233,17 @@ export async function clientAction({ request }: Route.ClientActionArgs): Promise
         code: state.failureReason ?? undefined,
       };
     }
-    throw redirect("/onboarding");
+    /*
+     * To the product, not to a progress screen.
+     *
+     * The examination takes minutes, and `/onboarding` used to be the only
+     * place to spend them: a person pressed one button and got a bar. The
+     * dashboard opens instead, with that same bar across its top and an
+     * introduction over it, so the wait happens inside the product rather than
+     * in front of it. `/onboarding` is still there for anybody who would rather
+     * watch, and the bar links to it.
+     */
+    throw redirect("/today");
   } catch (error) {
     if (error instanceof Response) throw error;
     if (error instanceof ProblemError) {
@@ -270,6 +320,7 @@ export default function Welcome({ loaderData }: Route.ComponentProps) {
 
   const connected = accounts.filter((account) => account.status === "active");
   const started = connected.length > 0;
+  const readable = connected.filter((account) => READABLE_PROVIDERS.has(account.provider));
 
   /**
    * The empty screen and the filled one are different shapes, not one shape
@@ -515,13 +566,26 @@ export default function Welcome({ loaderData }: Route.ComponentProps) {
             it is disabled is two pieces of furniture doing the job of one
             missing thing, and it is the page's own rule elsewhere: something
             that cannot state its reason does not render. */}
-        {started ? (
+        {started && readable.length > 0 ? (
           <Form method="post" className="connect-start">
             <input type="hidden" name="intent" value="start" />
             <button className="primary-button btn-lg" disabled={busy}>
               {writing ? "Starting…" : "Read my games"}
             </button>
           </Form>
+        ) : null}
+
+        {/* Connected, and none of it readable. The refusal is stated where the
+            control would have been, because the alternative — letting the
+            button through — produces a run that fails in the same second and
+            blames the person's spelling for it. */}
+        {started && readable.length === 0 ? (
+          <p className="tag-note connect-start">
+            Forma cannot read a Chess.com archive yet, so there is nothing for it
+            to start on. Add the Lichess account you play under and it will read
+            that one; the Chess.com link stays, ready for when the adapter
+            arrives.
+          </p>
         ) : null}
       </section>
     </OnboardingShell>

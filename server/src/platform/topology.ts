@@ -271,21 +271,56 @@ export interface ScheduleEntry {
   readonly purpose: string;
 }
 
-/** Scheduler triggers. Both drive `forma-ops`; neither carries a payload. */
+/**
+ * Scheduler triggers. All three drive `forma-ops`; none carries a payload.
+ *
+ * The paths are the ones `server/src/internal/routes.ts` actually registers.
+ * They were not: this table named `/internal/ops/dispatch` and
+ * `/internal/ops/recover`, which have never existed on any deployment, so the
+ * rendered topology described a scheduler pointed at two 404s. Whatever is
+ * running in production was created by hand against the real paths, which is
+ * exactly the divergence `deploy:check` exists to prevent.
+ */
 export const SCHEDULES: readonly ScheduleEntry[] = [
   {
     name: "forma-dispatch-outbox",
     target: "forma-ops",
-    path: "/internal/ops/dispatch",
+    path: "/internal/v1/outbox/dispatch",
     schedule: "* * * * *",
     purpose: "Publish committed outbox events to Cloud Tasks and enqueue due account syncs.",
   },
   {
     name: "forma-recover-leases",
     target: "forma-ops",
-    path: "/internal/ops/recover",
+    path: "/internal/v1/work-items/recover-leases",
     schedule: "*/5 * * * *",
     purpose: "Recover expired leases and reconcile the queue against the work ledger.",
+  },
+  /*
+   * The one that moves the pipeline forward, and the one that was missing.
+   *
+   * E04 grants ledger inserts to `forma_api` and `forma_ops` only, so a worker
+   * cannot create the work that follows its own: a synced game is materialized,
+   * and a materialized game inside a frozen snapshot is analysed, because this
+   * sweep plans both. Nothing called it. Not a schedule, not a script, not
+   * another route -- the endpoint existed and had no caller, so every
+   * examination stopped in the middle and waited out its attempts on analysis
+   * that was never going to be planned. It was reaching the report only when an
+   * operator happened to run the sweep by hand.
+   *
+   * Every minute, like the outbox, because a first examination is a chain of
+   * sweeps: one to materialize what the sync landed, then -- after `prepare`
+   * freezes the snapshot -- one to plan the analysis of the games that snapshot
+   * names. Anything slower is dead time a new person spends watching a bar.
+   * A sweep with nothing to do is two bounded queries and the normal case.
+   */
+  {
+    name: "forma-sweep-work",
+    target: "forma-ops",
+    path: "/internal/v1/work/sweep",
+    schedule: "* * * * *",
+    purpose:
+      "Plan materialization, game analysis and goal progress that nothing else has planned yet.",
   },
 ] as const;
 

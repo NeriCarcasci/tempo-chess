@@ -60,12 +60,34 @@ export function assertDisposableTarget(url: string): void {
   }
 }
 
+/**
+ * Where a PostgreSQL binary lives, on this machine.
+ *
+ * Two spellings of every name, because Windows spells an executable
+ * `initdb.exe` and POSIX spells it `initdb` — and one lookup per platform,
+ * because `sh -c "command -v"` under Git Bash answers with a POSIX path
+ * (`/c/Users/...`) that `execFileSync` cannot spawn. That is not a missing
+ * binary but it fails as one, so every gate that needs a disposable cluster was
+ * unrunnable on Windows with PostgreSQL installed and on PATH.
+ */
 function binary(name: string): string | null {
+  const names = process.platform === "win32" ? [`${name}.exe`, name] : [name];
   const dir = process.env.FORMA_PG_BINDIR;
-  if (dir && existsSync(join(dir, name))) return join(dir, name);
-  const found = spawnSync("sh", ["-c", `command -v ${name}`], { encoding: "utf8" });
-  const path = (found.stdout ?? "").trim();
-  return path.length > 0 ? path : null;
+  if (dir) {
+    for (const candidate of names) {
+      if (existsSync(join(dir, candidate))) return join(dir, candidate);
+    }
+  }
+  const found =
+    process.platform === "win32"
+      ? spawnSync("where", [name], { encoding: "utf8", shell: true })
+      : spawnSync("sh", ["-c", `command -v ${name}`], { encoding: "utf8" });
+  // `where` lists every match, one per line; take the first that exists.
+  for (const line of (found.stdout ?? "").split(/\r?\n/)) {
+    const path = line.trim();
+    if (path.length > 0 && existsSync(path)) return path;
+  }
+  return null;
 }
 
 interface Cluster {
@@ -106,7 +128,20 @@ function startLocalCluster(): Cluster {
         logfile,
         "start",
       ],
-      { stdio: "pipe" },
+      /*
+       * `ignore`, not `pipe`, and the difference is the whole gate on Windows.
+       *
+       * `pg_ctl start` exits as soon as the server is up, but the server it
+       * started inherits the stdio handles it was given. With pipes, those
+       * handles stay open for as long as the *server* runs, and `execFileSync`
+       * waits for end-of-file on them — so the call never returned, the cluster
+       * sat there accepting connections nobody made, and every gate that needs
+       * a disposable database hung before its first query with no output and no
+       * error. The server's own output is already going to `logfile`, which is
+       * what the failure path below reads, so nothing is lost by discarding
+       * these.
+       */
+      { stdio: "ignore" },
     );
   } catch (error) {
     // pg_ctl's own message is "examine the log output"; do that for the caller

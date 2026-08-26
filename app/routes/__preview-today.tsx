@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Today, type LeadTask } from "../components/Today";
+import { Primer } from "../components/onboarding/Primer";
 import { buildCone } from "../lib/trajectory";
 import type { TrajectoryBin } from "../lib/v1/types";
 import type { Measure, TodayReport } from "../lib/v1/dashboard";
@@ -186,19 +188,68 @@ const PROGRESS: GoalProgress = {
   practiceEvidence: 216,
 };
 
+/**
+ * The same page on somebody's first morning, before anything is measured.
+ *
+ * `?examining=1`. It is the state most people will meet first and the hardest
+ * one to see at will: it exists for the few minutes between pressing "Read my
+ * games" and the report landing, and it needs a linked account, a real
+ * examination and a wait to reach. The bar above it reads whatever the session
+ * can see, which on this route is usually nothing — that is the honest
+ * behaviour, and the stripe saying "working with no denominator yet" is exactly
+ * what the first thirty seconds of a real run look like.
+ */
 export default function PreviewToday() {
+  const query = new URLSearchParams(
+    typeof window === "undefined" ? "" : window.location.search,
+  );
+  const examining = query.has("examining");
+  /*
+   * `?primer=1` shows the four introduction cards over whichever state is
+   * underneath. They are shown once per person on the real page, which makes
+   * them the hardest copy in the product to re-read on purpose: the only other
+   * way is a fresh account or a cleared storage key.
+   */
+  const [primer, setPrimer] = useState(query.has("primer"));
+
+  const overlay = <Primer open={primer} live={examining} onClose={() => setPrimer(false)} />;
+
+  if (examining) {
+    return (
+      <>
+      {overlay}
+      <Today
+        shape={{ bars: [], total: 0, peak: null }}
+        lead={null}
+        empty={null}
+        games={0}
+        unanalysed={0}
+        lastGame={null}
+        run={{ kind: "wait", reason: "importing your games" }}
+        runStage="syncing"
+        report={null}
+        goal={null}
+        goalProgress={null}
+      />
+      </>
+    );
+  }
+
   return (
-    <Today
-      shape={{ bars: [], total: 0, peak: null }}
-      lead={LEAD}
-      empty={null}
-      games={204}
-      unanalysed={0}
-      lastGame={LAST_GAME}
-      run={null}
-      report={REPORT}
-      goal={GOAL}
-      goalProgress={PROGRESS}
-    />
+    <>
+      {overlay}
+      <Today
+        shape={{ bars: [], total: 0, peak: null }}
+        lead={LEAD}
+        empty={null}
+        games={204}
+        unanalysed={0}
+        lastGame={LAST_GAME}
+        run={null}
+        report={REPORT}
+        goal={GOAL}
+        goalProgress={PROGRESS}
+      />
+    </>
   );
 }

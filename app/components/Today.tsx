@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { Board } from "./Board";
+import { ExaminationBar } from "./onboarding/ExaminationBar";
 import { TopNav } from "./TopNav";
 import { Trajectory } from "./Trajectory";
 import { EmptyState, ClaimBadge } from "./v1/Honesty";
@@ -111,14 +112,38 @@ export interface TodayProps {
   lastGame: RecentGame | null;
   /** Where the examination stands, or null when the run could not be read. */
   run: Destination | null;
+  /** The run's own stage, for the bar. Null when there is no run to read. */
+  runStage?: string | null;
   /** What the published report says, or null when nothing is published. */
   report: TodayReport | null;
   /** The goal this account is actively working, or null with none set. */
   goal: GoalView | null;
   /** That goal's progress, or null when nothing has been measured on it yet. */
   goalProgress: GoalProgress | null;
+  /** Re-read the page's data. Called when the examination finishes under it. */
+  onSettled?: () => void;
 }
 
+/**
+ * The hub, while the first examination is still running.
+ *
+ * A person now lands here the moment they press "Read my games", minutes before
+ * anything can be measured about them. The alternative was to hold them on a
+ * progress screen until the report existed, and that is the version that loses
+ * people: a wait with no product behind it reads as a product that is not
+ * there.
+ *
+ * So the page opens, with a bar across the top saying how far the read has got,
+ * and the panels that have nothing to say yet drawn as the shape of what is
+ * coming. Two rules keep that from becoming a lie:
+ *
+ *   * **A pending panel says what will be in it and never guesses.** No greyed
+ *     figure, no placeholder rating, nothing that could be mistaken for a
+ *     measurement that came out low.
+ *   * **Real beats pending, always.** The opening graph exists before the
+ *     report does, so as soon as there are mistakes to draw, the real section
+ *     replaces its own skeleton. Nothing is held back to keep the page tidy.
+ */
 export function Today({
   shape,
   lead,
@@ -127,22 +152,129 @@ export function Today({
   unanalysed,
   lastGame,
   run,
+  runStage,
   report,
   goal,
   goalProgress,
+  onSettled,
 }: TodayProps) {
+  // `wait` is the one destination that means work is running now. `stuck` and
+  // `diagnostic` are stopped states, and drawing a progress bar over either
+  // would be telling somebody to hold on for something that is not coming.
+  const examining = run?.kind === "wait";
+
   return (
     <div className="relative z-10 min-h-dvh">
       <a className="skip-link" href="#today-main">Skip to content</a>
       <TopNav current="home" />
+      {examining ? (
+        <ExaminationBar runStage={runStage ?? "syncing"} onSettled={onSettled} />
+      ) : null}
       <main id="today-main" className="today">
-        {report ? <Verdict report={report} /> : <Shape shape={shape} empty={empty} games={games} />}
+        {report ? (
+          <Verdict report={report} />
+        ) : examining && shape.total === 0 ? (
+          <PendingVerdict />
+        ) : (
+          <Shape shape={shape} empty={empty} games={games} />
+        )}
         {report && report.measures.length > 0 ? <Stack measures={report.measures} /> : null}
-        {lead ? <Lead task={lead} /> : <NoLead games={games} unanalysed={unanalysed} />}
-        <Next lastGame={lastGame} run={run} report={report} />
+        {!report && examining ? <PendingStack /> : null}
+        {lead ? (
+          <Lead task={lead} />
+        ) : examining ? (
+          <PendingLead />
+        ) : (
+          <NoLead games={games} unanalysed={unanalysed} />
+        )}
+        <Next lastGame={lastGame} run={examining ? null : run} report={report} />
         <Progress goal={goal} progress={goalProgress} />
       </main>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pending: the shape of an answer that is still being worked out
+// ---------------------------------------------------------------------------
+
+/**
+ * A block of ghosted lines, shaped like the type it stands in for.
+ *
+ * Widths are handed in rather than random so two renders of the same panel are
+ * identical: a skeleton that reshuffles on every poll is motion with no job,
+ * which DESIGN.md refuses, and it also reads as content arriving when nothing
+ * has.
+ */
+function Ghost({ lines }: { lines: readonly string[] }) {
+  return (
+    <span className="ghost" aria-hidden="true">
+      {lines.map((width, index) => (
+        <span key={index} className="ghost-line" style={{ width }} />
+      ))}
+    </span>
+  );
+}
+
+/** Where the verdict will be. */
+function PendingVerdict() {
+  return (
+    <section className="today-verdict is-pending" aria-labelledby="today-verdict-head" aria-busy="true">
+      <h1 id="today-verdict-head">Working out where your games are decided</h1>
+      <Ghost lines={["82%", "64%"]} />
+      <p className="today-verdict-detail">
+        This is where Forma will state its conclusion: the phase your games turn
+        in, measured against your own earlier ones, with the evidence behind it
+        named. It needs the whole read before it can say anything honest.
+      </p>
+    </section>
+  );
+}
+
+/** Where the ranked measures will be. */
+function PendingStack() {
+  return (
+    <section className="today-stack is-pending" aria-labelledby="today-stack-head" aria-busy="true">
+      <h2 id="today-stack-head" className="cap">
+        Against your own earlier games
+      </h2>
+      <ol className="today-rank">
+        {[0, 1, 2].map((rank) => (
+          <li key={rank} className="today-rank-row is-pending">
+            <span className="today-rank-no" aria-hidden="true">
+              {rank + 1}
+            </span>
+            <Ghost lines={["58%", "34%"]} />
+          </li>
+        ))}
+      </ol>
+      <p className="today-stack-key">
+        Each area Forma can measure will be ranked here by how surely it has
+        moved against your earlier games. A change is only called once it is past
+        Forma's own threshold, so this list is usually shorter than the number of
+        things looked at.
+      </p>
+    </section>
+  );
+}
+
+/** Where the first line to practise will be. */
+function PendingLead() {
+  return (
+    <section className="today-lead is-pending" aria-labelledby="today-lead-head" aria-busy="true">
+      <div className="today-lead-copy">
+        <p className="cap">Start here</p>
+        <h2 id="today-lead-head">The line worth practising first</h2>
+        <p>
+          Once enough of your openings have been read, the single position
+          costing you the most will stand here, with the board it happens on and
+          a drill built from your own games.
+        </p>
+      </div>
+      <div className="today-board is-pending" aria-hidden="true">
+        <span className="ghost-board" />
+      </div>
+    </section>
   );
 }
 

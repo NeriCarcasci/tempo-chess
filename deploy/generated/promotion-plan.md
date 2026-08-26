@@ -129,6 +129,7 @@ gcloud run services update-traffic <service> --project tempo-chess-neri --region
 | --- | --- | --- | --- |
 | `forma-dispatch-outbox` | forma-ops | `* * * * *` | Publish committed outbox events to Cloud Tasks and enqueue due account syncs. |
 | `forma-recover-leases` | forma-ops | `*/5 * * * *` | Recover expired leases and reconcile the queue against the work ledger. |
+| `forma-sweep-work` | forma-ops | `* * * * *` | Plan materialization, game analysis and goal progress that nothing else has planned yet. |
 
 | Job | Runs as | Command | Purpose |
 | --- | --- | --- | --- |

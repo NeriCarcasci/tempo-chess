@@ -344,6 +344,13 @@
       "when": 1787929200000,
       "tag": "0046_the_report_can_read_the_opening_book",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1787932800000,
+      "tag": "0047_the_sweep_can_see_the_snapshot_it_plans_for",
+      "breakpoints": true
     }
   ]
 }

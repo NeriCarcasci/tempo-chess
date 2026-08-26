@@ -207,7 +207,7 @@
     {
       "name": "forma-dispatch-outbox",
       "target": "forma-ops",
-      "path": "/internal/ops/dispatch",
+      "path": "/internal/v1/outbox/dispatch",
       "schedule": "* * * * *",
       "purpose": "Publish committed outbox events to Cloud Tasks and enqueue due account syncs.",
       "oidcServiceAccount": "forma-scheduler@tempo-chess-neri.iam.gserviceaccount.com"
@@ -215,9 +215,17 @@
     {
       "name": "forma-recover-leases",
       "target": "forma-ops",
-      "path": "/internal/ops/recover",
+      "path": "/internal/v1/work-items/recover-leases",
       "schedule": "*/5 * * * *",
       "purpose": "Recover expired leases and reconcile the queue against the work ledger.",
+      "oidcServiceAccount": "forma-scheduler@tempo-chess-neri.iam.gserviceaccount.com"
+    },
+    {
+      "name": "forma-sweep-work",
+      "target": "forma-ops",
+      "path": "/internal/v1/work/sweep",
+      "schedule": "* * * * *",
+      "purpose": "Plan materialization, game analysis and goal progress that nothing else has planned yet.",
       "oidcServiceAccount": "forma-scheduler@tempo-chess-neri.iam.gserviceaccount.com"
     }
   ],
