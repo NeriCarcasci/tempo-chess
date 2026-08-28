@@ -90,11 +90,10 @@ describe("the stated threshold", () => {
     // The prototype counted a mistake at 90cp against a stored evaluation. It
     // is a different measurement, and carrying the old sentence across would
     // have put two rules under one word. The number survives in exactly one
-    // place — the note about what Practice selects by, which is a claim about
-    // a different screen and lives behind its disclosure.
+    // place — the Practice control's own accessible name, which is a claim
+    // about a different screen and travels with the thing it is about.
     expect(text).not.toContain("90 centipawns");
     expect(text).not.toContain("centipawn");
-    expect(text).toContain("Practice is drilled from the older opening graph");
   });
 });
 
@@ -145,9 +144,12 @@ describe("practice", () => {
     // mistake at 90cp — a different rule from the one this sheet just stated.
     // A reader who tabs straight to the button never passes the note in the
     // header, so the accessible name carries it too.
+    // The line that used to say this in the header is gone with the rest of
+    // the method prose, so the control itself is now the only carrier — which
+    // is the case this test was always really about.
     draw(graph(20, 20, 3));
     const link = screen.getAllByRole("link", { name: /Practice/ })[0]!;
     expect(link.getAttribute("aria-label")).toContain("older opening graph");
-    expect(document.body.textContent).toContain("Practice is drilled from the older opening graph");
+    expect(link.getAttribute("title")).toContain("older opening graph");
   });
 });

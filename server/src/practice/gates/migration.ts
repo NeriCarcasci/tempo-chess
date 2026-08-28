@@ -66,6 +66,42 @@ report.section("from an empty database");
 
       const seeded = await seedPractice(sql);
 
+      await report.check("assignments can store their structured source", async () => {
+        const rows = await sql<{ column_name: string }[]>`
+          select column_name from information_schema.columns
+          where table_schema = 'coaching' and table_name = 'learning_assignments'
+            and column_name = any(${[
+              "source_game_id",
+              "concept_slug",
+              "role",
+              "phase",
+              "move_number",
+              "side",
+            ]})
+          order by column_name
+        `;
+        assert.deepEqual(
+          rows.map((row) => row.column_name),
+          ["concept_slug", "move_number", "phase", "role", "side", "source_game_id"],
+        );
+      });
+
+      await report.check("structured assignment provenance cannot be partial", async () => {
+        await assert.rejects(
+          () => sql`
+            insert into coaching.learning_assignments (
+              subject_id, training_item_version_id, reason, selection_component_version_id,
+              priority, role, phase, move_number, side
+            ) values (
+              ${seeded.subjectId}, ${seeded.itemVersionId},
+              'a deliberately incomplete structured source for the gate',
+              ${seeded.componentVersionId}, 50, 'respond', 'middlegame', 12, 'white'
+            )
+          `,
+          /assignments_provenance_complete/,
+        );
+      });
+
       await report.check("a player-derived item without an owner is refused", async () => {
         await assert.rejects(
           () => sql`
@@ -258,13 +294,13 @@ report.section("from an empty database");
         assert.deepEqual([...rows], []);
       });
 
-      await report.check("the API cannot assign work to itself", async () => {
+      await report.check("only the API service, never a browser role, may mint assignments", async () => {
         const rows = await sql<{ privilege_type: string }[]>`
           select privilege_type from information_schema.role_table_grants
           where table_schema = 'coaching' and table_name = 'learning_assignments'
             and grantee = 'forma_api' and privilege_type = 'INSERT'
         `;
-        assert.deepEqual([...rows], [], "the API can create its own assignments");
+        assert.deepEqual(rows.map((row) => row.privilege_type), ["INSERT"]);
       });
 
       await report.check("re-applying 0031 changes nothing", async () => {

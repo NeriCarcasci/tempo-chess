@@ -1,4 +1,5 @@
 import { ChessComMark, LichessMark } from "../PlatformMarks";
+import { ChoiceCards } from "./ChoiceCards";
 
 export type Provider = "lichess" | "chesscom";
 
@@ -9,9 +10,10 @@ export type Provider = "lichess" | "chesscom";
  * a sync that never happens: Forma can link a Chess.com account but cannot read
  * its games yet, and the honest place to say so is before somebody picks it.
  *
- * `fieldset.auth-choice label` needs its element selector — app.css sets a
- * competing rule at equal specificity, and "simplifying" it silently loses the
- * styling.
+ * Lichess carries the suggestion tab and Chess.com does not, and the reason on
+ * the tab is the same fact the caveat states from the other side. That is the
+ * only kind of recommendation this component is allowed to make — one whose
+ * reason is a thing that is true about the product rather than a nudge.
  */
 export function ProviderChoice({
   value,
@@ -22,38 +24,34 @@ export function ProviderChoice({
 }) {
   return (
     <>
-      <fieldset className="auth-choice" aria-describedby={value === "chesscom" ? "provider-caveat" : undefined}>
-        <legend>Where do you play?</legend>
-        <label>
-          <input
-            type="radio"
-            name="platform"
-            value="lichess"
-            checked={value === "lichess"}
-            onChange={() => onChange("lichess")}
-          />
-          <LichessMark size={16} />
-          Lichess
-        </label>
-        <label>
-          <input
-            type="radio"
-            name="platform"
-            value="chesscom"
-            checked={value === "chesscom"}
-            onChange={() => onChange("chesscom")}
-          />
-          <ChessComMark size={16} />
-          Chess.com
-        </label>
-      </fieldset>
-      {/* Inside a live region and referenced by the fieldset, so somebody who
-          arrows onto Chess.com hears the caveat rather than only seeing it. */}
+      <ChoiceCards<Provider>
+        legend="Where do you play?"
+        name="platform"
+        value={value}
+        onChange={onChange}
+        choices={[
+          {
+            value: "lichess",
+            label: "Lichess",
+            mark: <LichessMark size={18} />,
+            suggested: { why: "The only archive Forma can read today." },
+          },
+          {
+            value: "chesscom",
+            label: "Chess.com",
+            mark: <ChessComMark size={18} />,
+            detail: "Connect now, read later",
+          },
+        ]}
+      />
+
+      {/* Inside a live region, so somebody who arrows onto Chess.com hears the
+          caveat rather than only seeing it. */}
       <div aria-live="polite">
         {value === "chesscom" ? (
           <p className="tag-note" id="provider-caveat">
-            Forma can connect a Chess.com account, but cannot read its games yet — only Lichess
-            archives are supported so far. Connecting now means it is ready when they are.
+            Forma cannot read Chess.com games yet. Connecting now means it is ready when it
+            can.
           </p>
         ) : null}
       </div>

@@ -151,6 +151,25 @@ export function setActiveAccount(userId: string, accountId: string): void {
 // synchronously instead of every nav bar doing its own async fetch.
 let current: Session | null = null;
 let inFlight: Promise<Session | null> | null = null;
+/** When `current` was resolved, for the reuse window below. */
+let currentAt = 0;
+
+/**
+ * How long a resolved session is reused across navigations.
+ *
+ * `getSession` de-duplicated *concurrent* callers and then threw the answer
+ * away, so every client-side navigation re-ran `loadSession` and paid a full
+ * `/v1/me` round trip — measured at about a second — **before** the route it
+ * was navigating to could start fetching its own data. That was most of the
+ * delay between pressing a nav item and seeing the page.
+ *
+ * Reuse is safe because the invalidation points are explicit: sign-in,
+ * sign-up, sign-out, account switch and account linking all clear `current`,
+ * and a 401 on any `/v1` read redirects to `/login` rather than trusting this.
+ * The window is short so a change made in another tab is picked up quickly
+ * without anyone having to remember to clear it.
+ */
+const SESSION_REUSE_MS = 30_000;
 
 /** The last resolved session. Safe in components; null before the first loader. */
 /**
@@ -313,6 +332,7 @@ async function loadSession(): Promise<Session | null> {
     locale: me.locale,
     timezone: me.timezone,
   };
+  currentAt = Date.now();
   return current;
 }
 
@@ -321,6 +341,10 @@ async function loadSession(): Promise<Session | null> {
  * parallel loaders would otherwise make.
  */
 export function getSession(): Promise<Session | null> {
+  // A session resolved moments ago is reused rather than re-fetched: this is
+  // the difference between a navigation that starts loading its page and one
+  // that waits on `/v1/me` first.
+  if (current && Date.now() - currentAt < SESSION_REUSE_MS) return Promise.resolve(current);
   if (!inFlight) {
     inFlight = loadSession().finally(() => {
       inFlight = null;

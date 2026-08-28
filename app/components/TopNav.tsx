@@ -64,6 +64,17 @@ function ClashIcon() {
   );
 }
 
+/** A target: the queue puts one position in front of you at a time. */
+function TargetIcon() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="10" cy="10" r="6.5" />
+      <circle cx="10" cy="10" r="1.4" fill="currentColor" stroke="none" />
+      <path d="M10 1.8v2.4M10 15.8v2.4M1.8 10h2.4M15.8 10h2.4" />
+    </svg>
+  );
+}
+
 /** A flag: the phase you are converting, not exploring. */
 function FlagIcon() {
   return (
@@ -288,7 +299,16 @@ export function TopNav({
    * queue that draws from all three; lessons moved into the account menu when
    * the phases took the bar, because it is a library rather than a phase.
    */
-  current: "home" | "openings" | "middlegame" | "endgame" | "lessons" | "account" | "game";
+  current:
+    | "home"
+    | "openings"
+    | "path"
+    | "middlegame"
+    | "endgame"
+    | "practice"
+    | "lessons"
+    | "account"
+    | "game";
   right?: React.ReactNode;
   /** A left-aligned "back to parent" control shown on sub-pages. */
   back?: { to: string; label: string };
@@ -321,21 +341,34 @@ export function TopNav({
             <Logo size={20} />
           </Link>
         </div>
-        {/* Three siblings in a three-column grid, so the tabs sit optically
-            centred in the bar rather than pushed around by whatever the lead
-            and the actions happen to weigh. */}
+        {/* Three tabs, and each one is a different tense: what is happening
+            now, what to work through, what is due right now.
+
+            It was five, and three of those were a third of a game each -
+            which is not a thing anybody navigates to. Nobody decides to go
+            and look at their middlegame. The three phases are three
+            entrances on `/path` now, and Today's dials link straight to
+            them. */}
         <nav className="product-tabs" aria-label="Primary navigation">
           <Link to="/today" prefetch="intent" aria-current={current === "home" ? "page" : undefined}>
             <HomeIcon /><span>Today</span>
           </Link>
-          <Link to="/openings" prefetch="intent" aria-current={current === "openings" ? "page" : undefined}>
-            <TreeIcon /><span>Openings</span>
+          <Link
+            to="/path"
+            prefetch="intent"
+            aria-current={
+              current === "path" ||
+              current === "openings" ||
+              current === "middlegame" ||
+              current === "endgame"
+                ? "page"
+                : undefined
+            }
+          >
+            <ClashIcon /><span>Path</span>
           </Link>
-          <Link to="/middlegame" prefetch="intent" aria-current={current === "middlegame" ? "page" : undefined}>
-            <ClashIcon /><span>Middlegame</span>
-          </Link>
-          <Link to="/endgame" prefetch="intent" aria-current={current === "endgame" ? "page" : undefined}>
-            <FlagIcon /><span>Endgame</span>
+          <Link to="/practice" prefetch="intent" aria-current={current === "practice" ? "page" : undefined}>
+            <TargetIcon /><span>Practice</span>
           </Link>
         </nav>
         <div className="product-nav-actions">

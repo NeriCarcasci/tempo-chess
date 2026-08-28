@@ -13,6 +13,13 @@ import {
 import { CoveragePanel } from "../components/onboarding/CoveragePanel";
 import { JourneyFailure } from "../components/onboarding/JourneyFailure";
 import { WithheldNote } from "../components/onboarding/WithheldNote";
+import { useState } from "react";
+import { Dial } from "../components/instruments";
+import { PhaseRow } from "../components/phases";
+import type { PhaseReading } from "../lib/v1/dashboard";
+import { RookSays } from "../components/RookSays";
+import { ChoiceCards } from "../components/onboarding/ChoiceCards";
+import { MOVEMENT_COPY, type Movement } from "../lib/v1/dashboard";
 import { ProblemError } from "../lib/v1/problem";
 import { FAILURE_REASONS } from "../lib/onboarding/copy";
 import { CLAIM_STATES, COVERAGE_STATES } from "../lib/v1/types";
@@ -55,7 +62,37 @@ function Row({
   );
 }
 
+/** A published phase, for the gallery. Every field the real read carries. */
+function phaseFixture(phase: string, over: Partial<PhaseReading>): PhaseReading {
+  return {
+    phase,
+    rate: 0.5,
+    intervalLow: null,
+    intervalHigh: null,
+    took: 0,
+    chances: 0,
+    setAside: 0,
+    gamesReaching: null,
+    coverageStatus: "sufficient",
+    unavailableReason: null,
+    movement: "unclear",
+    change: null,
+    ...over,
+  };
+}
+
+/** The chip the hub draws, copied here so the gallery needs no hub import. */
+function MovementChip({ movement }: { movement: Movement }) {
+  return (
+    <span className={`move-chip is-${movement}`}>
+      <i aria-hidden="true" />
+      {MOVEMENT_COPY[movement].label}
+    </span>
+  );
+}
+
 export default function Foundation() {
+  const [choice, setChoice] = useState<"a" | "b" | "c">("b");
   const rateLimited = new ProblemError(
     {
       type: "https://docs.formachess.com/problems/rate-limited",
@@ -87,6 +124,78 @@ export default function Foundation() {
           same, the product has quietly stopped telling the truth.
         </p>
       </header>
+
+      <Row
+        title="The phase row"
+        note="The real component, with fixture readings. Rendered through PhaseRow rather than hand-written here, because a gallery that reimplements what it documents drifts from it, and this one had: it still drew the two-element node the hub replaced."
+      >
+        <div style={{ width: "100%" }}>
+          <PhaseRow
+            readings={[
+              phaseFixture("opening", { rate: 0.72, intervalLow: 0.69, intervalHigh: 0.75, took: 604, chances: 839, movement: "gaining" }),
+              phaseFixture("middlegame", { rate: 0.41, intervalLow: 0.37, intervalHigh: 0.45, took: 232, chances: 566, movement: "declined" }),
+              phaseFixture("endgame", { rate: null, intervalLow: null, intervalHigh: null, took: 0, chances: 0, movement: "unclear" }),
+            ]}
+            provenance="Fixture data, for the gallery."
+          />
+        </div>
+      </Row>
+
+      <Row
+        title="The dial, by tone"
+        note="The mark alone, in every movement the estimator can publish. The arc is the rate with its interval; the disc is the direction. Colour is never the level - a beginner sits in the bottom band of every measure Forma has, and painting all of it red is both unfair and uninformative. A thing nobody has compared is ink."
+      >
+        {(
+          [
+            ["improved", 0.72, 0.69, 0.75],
+            ["gaining", 0.54, 0.44, 0.63],
+            ["unclear", 0.41, 0.37, 0.45],
+            ["slipping", 0.33, 0.2, 0.47],
+            ["declined", 0.18, 0.14, 0.23],
+          ] as const
+        ).map(([tone, value, low, high]) => (
+          <span key={tone} className={`dial-swatch is-${tone}`}>
+            <Dial value={value} low={low} high={high} size={96} title={tone} />
+            <MovementChip movement={tone as Movement} />
+          </span>
+        ))}
+      </Row>
+
+      <Row
+        title="Choice cards"
+        note="A question asked as cards rather than a strip of pills, so the consequence of each option is readable before it is picked. The suggestion tab requires a reason and never pre-selects: a default somebody has to notice and undo is not a recommendation."
+      >
+        <div style={{ width: "min(26rem, 100%)" }}>
+          <ChoiceCards<"a" | "b" | "c">
+            legend="How much time per day?"
+            name="foundation-demo"
+            numeric
+            value={choice}
+            onChange={setChoice}
+            choices={[
+              { value: "a", label: "5–15 min", detail: "Build the habit" },
+              {
+                value: "b",
+                label: "15–30 min",
+                detail: "Steady progress",
+                suggested: { why: "Long enough to finish a drill queue in one sitting." },
+              },
+              { value: "c", label: "30+ min", detail: "Push hard" },
+            ]}
+          />
+        </div>
+      </Row>
+
+      <Row
+        title="The rook, speaking"
+        note="Onboarding, and nowhere else. A mascot speaking is charming on a screen somebody meets once and a mannerism on the screen they open every morning. Everywhere else the same words go on the page as a short line, or into FigureNote."
+      >
+        <div style={{ width: "min(30rem, 100%)" }}>
+          <RookSays mood="curious">
+            <p>I read games you have already played. Nothing is posted.</p>
+          </RookSays>
+        </div>
+      </Row>
 
       <Row
         title="Coverage"

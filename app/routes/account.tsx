@@ -5,7 +5,7 @@ import { TopNav } from "../components/TopNav";
 import { requireSession, setActiveAccount, signOut, type Session } from "../lib/session";
 import { EmptyState } from "../components/v1/Honesty";
 import { LichessMark, ChessComMark } from "../components/PlatformMarks";
-import { fetchRepertoire, fetchLessonProgress, fetchMistakes, fetchActivity, type RepertoireData, type LessonProgress } from "../lib/account";
+import { fetchRepertoire, fetchLessonProgress, type RepertoireData, type LessonProgress } from "../lib/account";
 import { getCached, setCached } from "../lib/loaderCache";
 import { LESSONS } from "../lib/lessons";
 import { RouteError } from "../components/RouteError";
@@ -14,8 +14,6 @@ interface AccountData {
   session: Session;
   repertoire: RepertoireData;
   lessonProgress: LessonProgress[];
-  activity: Awaited<ReturnType<typeof fetchActivity>>;
-  mistakes: { white: number; black: number };
 }
 
 export function meta() {
@@ -31,19 +29,14 @@ export async function clientLoader({}: Route.ClientLoaderArgs): Promise<AccountD
   const cacheKey = `account:${session.username}`;
   const cached = getCached<AccountData>(cacheKey, 60_000);
   if (cached) return cached;
-  const [repertoire, lessonProgress, whiteMistakes, blackMistakes, activity] = await Promise.all([
+  const [repertoire, lessonProgress] = await Promise.all([
     fetchRepertoire(session.username).catch(() => ({ openings: [], stats: [] }) as RepertoireData),
     fetchLessonProgress(session.username),
-    fetchMistakes(session.username, "white"),
-    fetchMistakes(session.username, "black"),
-    fetchActivity(session.username),
   ]);
   const data: AccountData = {
     session,
     repertoire,
     lessonProgress,
-    activity,
-    mistakes: { white: whiteMistakes.length, black: blackMistakes.length },
   };
   setCached(cacheKey, data);
   return data;
@@ -98,7 +91,7 @@ function BillingPanel({ session }: { session: Session }) {
       <div className="account-identity">
         <div>
           <p className="eyebrow">Signed in as</p>
-          <strong>{session.email ?? "—"}</strong>
+          <strong>{session.email ?? "Not set"}</strong>
           {/* Linked accounts are a list you act on, not a sentence. Until this
               was one, a second account could be linked and imported with no
               way to point the product at it. */}
@@ -156,7 +149,7 @@ function BillingPanel({ session }: { session: Session }) {
 }
 
 export default function Account({ loaderData }: Route.ComponentProps) {
-  const { session, repertoire, lessonProgress, mistakes, activity } = loaderData;
+  const { session, repertoire, lessonProgress } = loaderData;
 
   const statByKey = useMemo(() => {
     const m = new Map<string, RepertoireData["stats"][number]>();
@@ -192,40 +185,37 @@ export default function Account({ loaderData }: Route.ComponentProps) {
               {lessonsDone} lessons completed
             </p>
           </div>
-          <div className={`account-streak ${activity.streak > 0 ? "is-active" : ""}`}>
-            <strong>{activity.streak > 0 ? `🔥 ${activity.streak}` : "0"}</strong>
-            <span>day streak</span>
-            <small>{activity.practicedToday ? "Practised today ✓" : activity.streak > 0 ? "Practise today to keep it" : "Practise today to start one"}</small>
-          </div>
+          {/* The day-streak block that stood here is gone.
+              It counted practice sessions, which is turning up, and DESIGN.md
+              is explicit that nothing on this product is awarded for that:
+              "a product that congratulates you for turning up has stopped
+              measuring your chess". PRODUCT.md lists badge-and-streak apps as
+              an anti-reference by name. What belongs in this corner is a
+              milestone - a rate, its earlier rate, and the moments it was
+              counted over - and that surface already exists on `/profile`. */}
         </header>
 
-        {mistakes.white + mistakes.black > 0 ? (
-          <section className="account-fix">
-            <div>
-              <p className="eyebrow">Fix your mistakes</p>
-              <h2>Turn your slip-ups into fixed lines</h2>
-              <p>Forma found the opening moments where the engine beats the move you actually played. Drill the better move until it's automatic.</p>
-            </div>
-            <div className="account-fix-actions">
-              {mistakes.white > 0 ? (
-                <Link to="/mistakes?color=white" className="primary-button inline-flex items-center">
-                  {mistakes.white}{mistakes.white >= 15 ? "+" : ""} as White →
-                </Link>
-              ) : null}
-              {mistakes.black > 0 ? (
-                <Link to="/mistakes?color=black" className="secondary-button inline-flex items-center">
-                  {mistakes.black}{mistakes.black >= 15 ? "+" : ""} as Black →
-                </Link>
-              ) : null}
-            </div>
-          </section>
-        ) : null}
+        {/* The legacy per-colour mistake drills lived here. The canonical
+            queue replaced them: one surface, built from the same games by the
+            pipeline that analyses them, reachable from the primary nav. */}
+        <section className="account-fix">
+          <div>
+            <p className="eyebrow">Practice</p>
+            <h2>Drills built from your own games</h2>
+            <p>Every position in the queue is a decision you actually got wrong, put back in front of you on a spaced schedule.</p>
+          </div>
+          <div className="account-fix-actions">
+            <Link to="/practice" className="primary-button inline-flex items-center">
+              Open the queue →
+            </Link>
+          </div>
+        </section>
 
         {repertoire.openings.length === 0 ? (
           <div className="account-empty">
             <p>
               You haven't chosen any openings to own yet. Head to the explorer and star the openings you
-              want in your repertoire — then track how well you know them here.
+              want in your repertoire. Then track how well you know them here.
             </p>
             <Link to="/openings" className="primary-button mt-4 inline-flex">Choose openings →</Link>
           </div>

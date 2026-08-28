@@ -35,8 +35,17 @@
 import { v1, type V1Result } from "./client";
 import { ProblemError } from "./problem";
 import { CENSORING_NOTE, measureName } from "./measures";
-import { coneFinding, coneFrom, type Cone } from "../trajectory";
+import {
+  coneFinding,
+  coneFrom,
+  costliestPhase,
+  type Cone,
+  type PhaseAccuracy,
+} from "../trajectory";
 import type { Dashboard, Finding, RatingProfile, SkillEstimate } from "./types";
+
+/** One published phase card, as the dashboard carries it. */
+export type PhaseFigure = Dashboard["phases"]["phases"][number];
 
 // ---------------------------------------------------------------------------
 // Reading it
@@ -56,13 +65,40 @@ import type { Dashboard, Finding, RatingProfile, SkillEstimate } from "./types";
  * may not see this" into "this does not exist" — on the one page whose entire
  * job is telling somebody what Forma knows about them.
  */
+/**
+ * The last read publication, shared by every screen that needs it.
+ *
+ * Five surfaces read this one document — the hub, both phase pages, the
+ * profile and the report — and each was paying its own round trip for it,
+ * which on a managed database is most of a second per navigation for an
+ * answer that cannot have changed. A publication only changes when a new
+ * examination lands, so a short shared window is safe in a way that caching
+ * a live query would not be, and it is what makes moving between the phase
+ * pages feel like moving inside one page.
+ */
+let cached: { at: number; result: V1Result<Dashboard> | null } | null = null;
+const DASHBOARD_TTL_MS = 60_000;
+
+/** Drop the shared copy. For anything that knows a new publication landed. */
+export function forgetDashboard(): void {
+  cached = null;
+}
+
 export async function getDashboard(): Promise<V1Result<Dashboard> | null> {
+  if (cached && Date.now() - cached.at < DASHBOARD_TTL_MS) return cached.result;
   try {
-    return await v1<Dashboard>("/v1/dashboard");
+    const result = await v1<Dashboard>("/v1/dashboard");
+    cached = { at: Date.now(), result };
+    return result;
   } catch (error) {
     // A 401 arrives as a redirect `Response`, which React Router has to see.
     if (error instanceof Response) throw error;
-    if (error instanceof ProblemError && error.status === 404) return null;
+    if (error instanceof ProblemError && error.status === 404) {
+      // "Nothing published" is a page state, and a stable one: cached like an
+      // answer rather than re-asked on every navigation.
+      cached = { at: Date.now(), result: null };
+      return null;
+    }
     throw error;
   }
 }
@@ -141,10 +177,10 @@ export function coverageRank(status: string): number {
  * true and vague sentence rather than the slug.
  */
 const UNAVAILABLE_TEXT: Record<string, string> = {
-  no_observations: "No chance like this came up in the games Forma read.",
+  no_observations: "No key moment like this came up in the games Forma read.",
   all_evidence_censored:
-    "Every chance ended before you could answer, so there is nothing here to score. That is not a failure on your part.",
-  below_minimum_sample: "Too few chances so far to put a number on this.",
+    "Every moment like this ended before you could answer, so there is nothing here to score. That is not a failure on your part.",
+  below_minimum_sample: "Too few key moments so far to put a number on this.",
   outside_calibrated_range:
     "Your rating sits outside the band Forma calibrated against, so it will not put a number here.",
   estimator_unavailable: "Forma could not run this measure for this report.",
@@ -346,10 +382,10 @@ export function movementOf(improvementProbability: number | null): Movement {
 
 /** How a movement is said out loud. Never a bare direction: the certainty is the claim. */
 export const MOVEMENT_COPY: Record<Movement, { label: string; tone: string }> = {
-  declined: { label: "Gone backwards", tone: "is-declined" },
+  declined: { label: "Declined", tone: "is-declined" },
   slipping: { label: "Slipping", tone: "is-slipping" },
   unclear: { label: "No clear change", tone: "is-unclear" },
-  gaining: { label: "Early gain", tone: "is-gaining" },
+  gaining: { label: "Improving", tone: "is-gaining" },
   improved: { label: "Improved", tone: "is-improved" },
 };
 
@@ -367,6 +403,13 @@ export interface Measure {
    * reads as a duplicate row rather than as two different things.
    */
   role: string | null;
+  /**
+   * The catalogue's family for this concept — `tactical`, `defensive`,
+   * `conversion` — or null on one the catalogue has not classed. It is what
+   * lets the hub roll twenty-odd measures into a handful of cards without
+   * inventing a taxonomy of its own.
+   */
+  category: string | null;
   definition: string | null;
   /** The standing rate over everything read, or null with no figure. */
   rate: number | null;
@@ -374,6 +417,9 @@ export interface Measure {
   intervalHigh: number | null;
   /** Chances behind the standing rate. */
   sample: number;
+  /** Of those, the published counts: taken, missed. Censored are neither. */
+  took: number;
+  missed: number;
   coverageStatus: string;
   unavailableReason: string | null;
   /**
@@ -415,7 +461,9 @@ export interface Measure {
  * not have.
  */
 export function measures(dashboard: Dashboard): Measure[] {
-  return groupMeasures(dashboard.estimates)
+  // Phase-scoped concept rows belong to the Patterns sections. The profile's
+  // cross-phase catalogue stays one measure per concept and role.
+  return groupMeasures(dashboard.estimates.filter((estimate) => estimate.phase === null))
     .map((group): Measure => {
       const { headline, recent, baseline } = group;
       const change =
@@ -435,11 +483,14 @@ export function measures(dashboard: Dashboard): Measure[] {
         baseKey: group.baseKey,
         name: group.name,
         role: headline.copy?.roleLabel ?? null,
+        category: headline.copy?.category ?? null,
         definition: group.definition,
         rate: headline.estimate,
         intervalLow: headline.intervalLow,
         intervalHigh: headline.intervalHigh,
         sample: headline.rawSampleSize,
+        took: headline.coverage.success,
+        missed: headline.coverage.failure,
         coverageStatus: headline.coverageStatus,
         unavailableReason: headline.unavailableReason,
         change,
@@ -453,6 +504,73 @@ export function measures(dashboard: Dashboard): Measure[] {
       if (left !== right) return left - right;
       return a.name.localeCompare(b.name);
     });
+}
+
+// ---------------------------------------------------------------------------
+// The hub's categories
+// ---------------------------------------------------------------------------
+
+/**
+ * A handful of cards instead of a wall of rows.
+ *
+ * The hub used to render the whole ranked stack, which even folded was eight
+ * near-identical lines — the repetitive strip layout the redesign exists to
+ * kill. What a glance actually needs is the catalogue's own families, each
+ * summarised once: how many chances of that family went by, how many were
+ * missed (both summed from published counts, never derived), and the family's
+ * most decisively moved measure as the card's one figure. The full stack
+ * still exists, on `/profile`, where reading every measure is the point.
+ */
+export interface CategorySummary {
+  key: string;
+  /** The family on screen. */
+  name: string;
+  /** Measures in the family that carry a figure. */
+  areas: number;
+  /** Summed published counts across those measures. */
+  chances: number;
+  missed: number;
+  /**
+   * The family's most decisively moved measure — the one whose posterior sits
+   * furthest from "no change" in either direction — or, with no second window
+   * anywhere in the family, null. The card shows its movement as the payoff
+   * figure, so a family is fronted by its clearest fact rather than a mean of
+   * unrelated rates.
+   */
+  mover: Measure | null;
+}
+
+const CATEGORY_NAME: Record<string, string> = {
+  tactical: "Tactics",
+  defensive: "Defence",
+  conversion: "Conversion",
+};
+
+export function categorySummaries(ranked: readonly Measure[]): CategorySummary[] {
+  const byKey = new Map<string, Measure[]>();
+  for (const measure of ranked) {
+    if (!measure.category || measure.rate === null) continue;
+    byKey.set(measure.category, [...(byKey.get(measure.category) ?? []), measure]);
+  }
+
+  const decisiveness = (measure: Measure): number => {
+    const p = measure.change?.improvementProbability;
+    return p === null || p === undefined ? -1 : Math.abs(p - 0.5);
+  };
+
+  return [...byKey.entries()]
+    .map(([key, members]) => {
+      const mover = [...members].sort((a, b) => decisiveness(b) - decisiveness(a))[0] ?? null;
+      return {
+        key,
+        name: CATEGORY_NAME[key] ?? key.replace(/_/g, " "),
+        areas: members.length,
+        chances: members.reduce((sum, measure) => sum + measure.took + measure.missed, 0),
+        missed: members.reduce((sum, measure) => sum + measure.missed, 0),
+        mover: mover && mover.change ? mover : null,
+      };
+    })
+    .sort((a, b) => b.missed - a.missed);
 }
 
 // ---------------------------------------------------------------------------
@@ -643,6 +761,20 @@ export interface TodayReport {
   finding: string | null;
   /** The graph itself. The hub draws the same one the profile and report do. */
   cone: Cone | null;
+  /** The published phase cards, opening first, or empty when unpublished. */
+  phases: PhaseFigure[];
+  /** The same figures in the shape the trajectory's own cards read. */
+  accuracy: PhaseAccuracy[];
+  /**
+   * The three phases in the hub's one unit, with their movement.
+   *
+   * This is what the hub draws. `accuracy` stays because the trajectory's own
+   * cards read that shape, and `phases` stays because the phase pages quote the
+   * raw published figure — but a reader only ever meets these.
+   */
+  readings: PhaseReading[];
+  /** What has moved enough to say out loud, worst first. Often empty. */
+  milestones: Milestone[];
   measured: number;
   conclusions: number;
   games: number;
@@ -668,10 +800,50 @@ export interface TodayReport {
   publishedAt: string;
 }
 
+/**
+ * The published phase figures, in the shape the trajectory's cards read.
+ *
+ * `lib/trajectory.ts` declared this seam when no route returned a per-phase
+ * rate: the cards said the figure was recorded but not published, and refused
+ * to derive one. `/v1/dashboard` publishes the pooled rate per phase now, so
+ * this is the wiring that seam was waiting for — a rename of published fields,
+ * and nothing computed. Cards whose rate the estimator withheld are simply
+ * absent, and the card keeps saying so.
+ */
+export function phaseAccuracy(dashboard: Dashboard): PhaseAccuracy[] {
+  // Optional access on purpose: a payload published before the phases section
+  // existed simply has none, and "none" is the pre-wiring behaviour.
+  if (dashboard.phases?.state !== "published") return [];
+  return dashboard.phases.phases
+    .filter((figure) => figure.rate !== null)
+    .map((figure) => ({
+      phase: figure.phase,
+      chances: figure.observed,
+      took: figure.taken,
+      rate: figure.rate!,
+      intervalLow: figure.intervalLow,
+      intervalHigh: figure.intervalHigh,
+      gamesReaching: figure.gamesReaching ?? 0,
+      setAside: figure.setAside,
+    }));
+}
+
 export function todayReport(dashboard: Dashboard): TodayReport | null {
   const cone = coneFrom(dashboard.trajectory);
   const holdings = holdingsOf(dashboard);
-  const finding = headlineFinding(dashboard.findings);
+  const accuracy = phaseAccuracy(dashboard);
+  // With the per-phase rates published, the cone's own caption already states
+  // the like-for-like phase gap in one sentence — so the hub's finding slot
+  // goes to the strongest conclusion that is *not* that, instead of printing
+  // the same comparison twice at two lengths. The phase pages still quote the
+  // contrast verbatim, because there it is the point rather than an echo.
+  const finding = headlineFinding(
+    accuracy.length > 0
+      ? dashboard.findings.filter(
+          (entry) => (entry.claim as { kind?: string }).kind !== "phase_contrast",
+        )
+      : dashboard.findings,
+  );
 
   // Nothing to draw, nothing to read out and nothing measured is a report with
   // no claim in it, and a row that cannot state its reason does not render.
@@ -683,11 +855,20 @@ export function todayReport(dashboard: Dashboard): TodayReport | null {
   if (cone === null && finding === null && ranked.length === 0) return null;
 
   const reading = cone === null ? null : coneFinding(cone);
+  // The hub's own sentence, from the same figure its nodes count. See
+  // `costliestPhase` for why this is not `cone.decisive`.
+  const costliest = cone === null ? null : costliestPhase(cone);
   return {
-    headline: reading?.headline ?? "Forma has finished reading your games.",
+    headline: costliest
+      ? `Your games are decided in the ${costliest.name.toLowerCase()}.`
+      : reading?.headline ?? "Forma has finished reading your games.",
     detail: reading?.detail ?? "",
     finding: readableExplanation(finding),
     cone,
+    phases: dashboard.phases?.state === "published" ? [...dashboard.phases.phases] : [],
+    accuracy,
+    readings: phaseReadings(dashboard),
+    milestones: milestones(ranked),
     measured: holdings.measured,
     conclusions: holdings.conclusions,
     games: holdings.trajectoryGames,
@@ -695,4 +876,148 @@ export function todayReport(dashboard: Dashboard): TodayReport | null {
     measures: ranked,
     publishedAt: dashboard.publishedAt,
   };
+}
+
+// ---------------------------------------------------------------------------
+// The hub's one unit
+// ---------------------------------------------------------------------------
+
+/**
+ * One phase of the game, in the single unit the hub speaks.
+ *
+ * The hub used to draw three phases in three different units — mistakes per
+ * game, expected score given up, a conversion percentage — on one row of three
+ * identical discs. Nobody can rank those. They do not share a scale, they do
+ * not share a direction, and two of the three were derived on the client from
+ * thresholds that appear nowhere in the contract.
+ *
+ * Every phase is already published as chances taken over chances observed.
+ * That is the unit, it is the estimator's own, and it is the same shape as
+ * every concept in the catalogue — so one mark can draw a phase, a concept, or
+ * a repertoire and a reader never has to re-learn the scale.
+ *
+ * Two channels, and they are never mixed:
+ *
+ *   * **the rate** says where you are, drawn on the full 0–100 scale with its
+ *     published interval, so a tight estimate and a guess cannot look alike;
+ *   * **the movement** says which way you are going, and it is the only thing
+ *     allowed to colour the mark.
+ *
+ * Colouring by level is the version this replaced, and it is both unfair and
+ * uninformative: a beginner is in the bottom band of every measure Forma has,
+ * so every dial is red for as long as they need encouragement most. Movement is
+ * the thing they control, it is measured against their own earlier games rather
+ * than against a cohort, and it is the one comparison the estimator says is
+ * valid.
+ */
+export interface PhaseReading {
+  phase: string;
+  /** Chances taken over chances observed, or null when nothing was published. */
+  rate: number | null;
+  intervalLow: number | null;
+  intervalHigh: number | null;
+  /** The counts behind the rate. Always shown beside it, never instead of it. */
+  took: number;
+  chances: number;
+  /** Chances that ended before the player was on move. Never failures. */
+  setAside: number;
+  gamesReaching: number | null;
+  coverageStatus: string;
+  unavailableReason: string | null;
+  /** Which way this phase is going, against this player's own earlier games. */
+  movement: Movement;
+  /** The two windows behind that movement, or null when there is one window. */
+  change: { from: number; to: number; improvementProbability: number | null } | null;
+}
+
+/** The order a game is played in. Never a ranking. */
+const PHASE_ORDER = ["opening", "middlegame", "endgame"];
+
+export function phaseReadings(dashboard: Dashboard): PhaseReading[] {
+  if (dashboard.phases?.state !== "published") return [];
+
+  return [...dashboard.phases.phases]
+    .map((figure): PhaseReading => {
+      const change =
+        figure.baselineRate !== null && figure.recentRate !== null
+          ? {
+              from: figure.baselineRate,
+              to: figure.recentRate,
+              improvementProbability: figure.improvementProbability,
+            }
+          : null;
+      return {
+        phase: figure.phase,
+        rate: figure.rate,
+        intervalLow: figure.intervalLow,
+        intervalHigh: figure.intervalHigh,
+        took: figure.taken,
+        chances: figure.observed,
+        setAside: figure.setAside,
+        gamesReaching: figure.gamesReaching ?? null,
+        coverageStatus: figure.coverageStatus,
+        unavailableReason: figure.unavailableReason,
+        movement: movementOf(change?.improvementProbability ?? null),
+        change,
+      };
+    })
+    .sort((a, b) => PHASE_ORDER.indexOf(a.phase) - PHASE_ORDER.indexOf(b.phase));
+}
+
+/**
+ * What moved, in the reader's words, worst first.
+ *
+ * A milestone is never written here. It is a published estimate that crossed a
+ * published threshold, and the only editorial act is choosing which of them is
+ * worth a card. Three rules keep it from becoming a badge shelf:
+ *
+ *   * **nothing is awarded for effort.** Drills done, days visited and games
+ *     synced are all absent on purpose. They measure showing up, and a product
+ *     that congratulates you for showing up has stopped measuring your chess;
+ *   * **a milestone can be lost.** `declined` and `slipping` produce cards in
+ *     the same shape as `improved` and `gaining`, because the ones a reader
+ *     keeps are only worth something if the others can be taken away;
+ *   * **the evidence travels with the claim**, in the card, not behind a
+ *     tooltip. Two rates and the games they were counted over.
+ */
+export interface Milestone {
+  key: string;
+  /** What moved. The catalogue's own name. */
+  name: string;
+  movement: Movement;
+  from: number;
+  to: number;
+  /** Chances behind the recent window. */
+  sample: number;
+}
+
+export function milestones(ranked: readonly Measure[], limit = 3): Milestone[] {
+  return ranked
+    .filter((measure) => measure.change !== null && measure.change.movement !== "unclear")
+    // Not worst-first, which is how `measures()` ranks the full stack on
+    // `/profile`. That order is right there — reading every measure is the
+    // point, and the things going wrong should lead a document somebody has
+    // opened deliberately. On a strip of three cards it produces a hub that
+    // opens on two failures every single day, which is neither the most useful
+    // reading nor one anybody comes back to.
+    //
+    // Most-certain-first instead: distance of the posterior from 0.5,
+    // descending. That is not cherry-picking — it surfaces a strong decline
+    // exactly as readily as a strong gain, and it is the honest answer to
+    // "what does Forma actually know changed". A player going backwards still
+    // sees it first, because that is what the evidence says.
+    .sort((a, b) => {
+      const certainty = (measure: Measure) =>
+        Math.abs((measure.change!.improvementProbability ?? 0.5) - 0.5);
+      return certainty(b) - certainty(a);
+    })
+    .map((measure) => ({
+      key: measure.baseKey,
+      name: measure.name,
+      movement: measure.change!.movement,
+      from: measure.change!.from,
+      to: measure.change!.to,
+      sample: measure.change!.sample,
+    }))
+    .slice(0, limit);
 }

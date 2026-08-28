@@ -263,7 +263,7 @@ export function PracticeEmpty({
     return (
       <EmptyState
         title="You are up to date"
-        detail="Everything due has been practised. The next review comes back on its own — spacing it out is what makes it stick."
+        detail="Everything due has been practised. The next review comes back on its own; spacing it out is what makes it stick."
       />
     );
   }

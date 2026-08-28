@@ -142,21 +142,68 @@ export function setAuthorizationContextForTest(context: AuthorizationContext | n
   contextOverride = context;
 }
 
+/**
+ * How long a built context is reused for the same actor.
+ *
+ * Every authenticated request was rebuilding this from scratch, and building
+ * it costs about nine sequential round trips: the profile upsert, then a
+ * transaction that binds the actor context and upserts `app.profiles`, the
+ * personal subject and the access request, then the subject lookup. Against a
+ * managed Postgres that is most of a second **before the route handler
+ * starts**, on every call, and it is the same answer every time: all of it is
+ * idempotent bootstrap that only has to happen once per account.
+ *
+ * The token verifier beside this file already caches its own answer the same
+ * way and for the same reason. The window is deliberately short, because two
+ * things here do change under the account: `plan`, and `access.state` when an
+ * operator lets somebody into the closed beta. Thirty seconds is long enough
+ * to take the bootstrap off the hot path and short enough that an approval is
+ * felt as "it took a moment", not as "it did not work".
+ */
+const CONTEXT_TTL_MS = 30_000;
+const CONTEXT_LIMIT = 1_024;
+
+interface ContextEntry {
+  context: Omit<AuthorizationContext, "authMode">;
+  expiresAtMs: number;
+}
+
+const contextCache = new Map<string, ContextEntry>();
+
+/** Drop an actor's cached context. Called wherever the answer stops being true. */
+export function forgetAuthorizationContext(actorId: string): void {
+  contextCache.delete(actorId);
+}
+
 export async function buildAuthorizationContext(
   token: VerifiedToken,
 ): Promise<AuthorizationContext> {
   if (contextOverride) return { ...contextOverride, authMode: token.mode };
+
+  const now = Date.now();
+  const hit = contextCache.get(token.actorId);
+  if (hit && hit.expiresAtMs > now) return { ...hit.context, authMode: token.mode };
+
   const plan = await ensureProfile(token.actorId, token.email);
   const access = await ensureAccount(token.actorId);
-  return {
+  const context = {
     actorId: token.actorId,
     profileId: token.actorId,
     email: token.email,
     plan,
-    authMode: token.mode,
     subjects: await resolveSubjects(token.actorId),
     access,
   };
+
+  // Bounded, and oldest-first: an unbounded map keyed by actor is a slow leak
+  // in a long-lived process, and the entries are cheap to rebuild.
+  if (contextCache.size >= CONTEXT_LIMIT) {
+    const oldest = contextCache.keys().next();
+    if (!oldest.done) contextCache.delete(oldest.value);
+  }
+  contextCache.set(token.actorId, { context, expiresAtMs: now + CONTEXT_TTL_MS });
+
+  return { ...context, authMode: token.mode };
 }
 
 /**

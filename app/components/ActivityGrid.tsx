@@ -119,9 +119,9 @@ function describe(cell: Cell): string {
     day: "numeric",
     month: "long",
   });
-  if (!cell.day) return `${when} — no games`;
+  if (!cell.day) return `${when}: no games`;
   const { games, win, draw, loss } = cell.day;
-  return `${when} — ${games} game${games === 1 ? "" : "s"}: ${win}W ${draw}D ${loss}L`;
+  return `${when}: ${games} game${games === 1 ? "" : "s"}, ${win}W ${draw}D ${loss}L`;
 }
 
 export function ActivityGrid({

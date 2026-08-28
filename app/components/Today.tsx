@@ -1,12 +1,13 @@
-import { useState } from "react";
 import { Link } from "react-router";
 import { Board } from "./Board";
+import { FigureNote } from "./FigureNote";
 import { ExaminationBar } from "./onboarding/ExaminationBar";
+import { PhaseRow } from "./phases";
+import { MarkChart, MarkClock, MarkEye } from "./marks";
+import { MarkDrill as MarkTarget } from "./pathMarks";
 import { TopNav } from "./TopNav";
-import { Trajectory } from "./Trajectory";
-import { EmptyState, ClaimBadge } from "./v1/Honesty";
+import { EmptyState } from "./v1/Honesty";
 import { relTimeIso } from "../lib/format";
-import { MOVEMENT_COPY, unavailableText, type Measure } from "../lib/v1/dashboard";
 import type { OpeningShape } from "../lib/todayShape";
 import type { SheetCell, SheetRow, TearSheet } from "../lib/tearSheet";
 import type { RecentGame } from "../lib/v1/games";
@@ -116,6 +117,8 @@ export interface TodayProps {
   runStage?: string | null;
   /** What the published report says, or null when nothing is published. */
   report: TodayReport | null;
+  /** What is due in the practice queue, or null when it could not be read. */
+  queue: { due: number; overdue: number } | null;
   /** The goal this account is actively working, or null with none set. */
   goal: GoalView | null;
   /** That goal's progress, or null when nothing has been measured on it yet. */
@@ -154,6 +157,7 @@ export function Today({
   run,
   runStage,
   report,
+  queue,
   goal,
   goalProgress,
   onSettled,
@@ -171,23 +175,69 @@ export function Today({
         <ExaminationBar runStage={runStage ?? "syncing"} onSettled={onSettled} />
       ) : null}
       <main id="today-main" className="today">
-        {report ? (
-          <Verdict report={report} />
-        ) : examining && shape.total === 0 ? (
+        {/* The report's own conclusion, visible.
+            It was `sr-only` on the argument that the three dials under it say
+            the same thing in colour - which stopped being true the moment a
+            young account met three grey dials, and left the page opening on
+            three circles with no words at all. It is a real sentence the
+            report published and it is the answer to the first of the two
+            questions this page exists to answer, so it leads. Modest type:
+            the dials are still the picture. */}
+        {report ? <h1 className="today-headline">{report.headline}</h1> : null}
+
+        {/* The rating is not inside `Phases` any more. It used to be, so a
+            published report whose phase estimates were unpublished rendered
+            nothing at all above the action - and dropped a figure the API had
+            published along with it. `PhaseRow` already returns null on empty
+            readings, so the guard bought nothing and cost the rating. */}
+        {report?.rating ? <Rating rating={report.rating} /> : null}
+
+        {report && report.readings.length > 0 ? (
+          <Phases report={report} />
+        ) : report ? null : examining && shape.total === 0 ? (
+          // A published report with no trajectory has no phase reading to
+          // give, and the opening-mistake bars are not allowed to take the
+          // page in its place: that is the hero this product removed twice.
           <PendingVerdict />
         ) : (
           <Shape shape={shape} empty={empty} games={games} />
         )}
-        {report && report.measures.length > 0 ? <Stack measures={report.measures} /> : null}
-        {!report && examining ? <PendingStack /> : null}
-        {lead ? (
-          <Lead task={lead} />
-        ) : examining ? (
-          <PendingLead />
-        ) : (
-          <NoLead games={games} unanalysed={unanalysed} />
-        )}
-        <Next lastGame={lastGame} run={examining ? null : run} report={report} />
+
+        {/* One thing to do, and the page's only accented control. Everything
+            else here is a dial, a card, or a link. */}
+        {/* Real beats pending, always - this file's own rule, forty lines up,
+            which the phase branch honours and this one did not. A returning
+            player with a full report and a due queue who starts a re-sync was
+            shown a skeleton saying "the position costing you the most will
+            stand here" while the position was sitting in `lead`. */}
+        {/* No single accented action card here any more.
+
+            It was a large box saying "10 positions ready", and it was the last
+            thing on the hub still trying to be the decision: the path is the
+            decision now, and the three rings above are the way into it. A box
+            competing with them for the same job read as a second, louder
+            answer to a question they had already answered. Whatever is worth
+            doing besides walking the path is in the deck below, at the deck's
+            own size. */}
+
+        {/* "What moved" used to stand here: three cards, each a measure whose
+            posterior had crossed a threshold, with two rates and a sample.
+            It was the weakest block on the product. Every card was a verdict
+            with nowhere to go, and on an account whose three most certain
+            movements are all declines it opened the morning on three red
+            chips saying 89% became 80%. A measurement is not motivating
+            without the work attached to it.
+
+            Movement did not disappear: it is the stage on the deck it
+            belongs to on `/path`, beside the evidence and the drills for
+            that exact pattern. The full ranked list is on `/profile`, which
+            is the page somebody opens to read every measure. */}
+        <Deck
+          lastGame={lastGame}
+          run={examining ? null : run}
+          report={report}
+          queue={queue}
+        />
         <Progress goal={goal} progress={goalProgress} />
       </main>
     </div>
@@ -231,330 +281,110 @@ function PendingVerdict() {
   );
 }
 
-/** Where the ranked measures will be. */
-function PendingStack() {
-  return (
-    <section className="today-stack is-pending" aria-labelledby="today-stack-head" aria-busy="true">
-      <h2 id="today-stack-head" className="cap">
-        Against your own earlier games
-      </h2>
-      <ol className="today-rank">
-        {[0, 1, 2].map((rank) => (
-          <li key={rank} className="today-rank-row is-pending">
-            <span className="today-rank-no" aria-hidden="true">
-              {rank + 1}
-            </span>
-            <Ghost lines={["58%", "34%"]} />
-          </li>
-        ))}
-      </ol>
-      <p className="today-stack-key">
-        Each area Forma can measure will be ranked here by how surely it has
-        moved against your earlier games. A change is only called once it is past
-        Forma's own threshold, so this list is usually shorter than the number of
-        things looked at.
-      </p>
-    </section>
-  );
-}
-
-/** Where the first line to practise will be. */
-function PendingLead() {
-  return (
-    <section className="today-lead is-pending" aria-labelledby="today-lead-head" aria-busy="true">
-      <div className="today-lead-copy">
-        <p className="cap">Start here</p>
-        <h2 id="today-lead-head">The line worth practising first</h2>
-        <p>
-          Once enough of your openings have been read, the single position
-          costing you the most will stand here, with the board it happens on and
-          a drill built from your own games.
-        </p>
-      </div>
-      <div className="today-board is-pending" aria-hidden="true">
-        <span className="ghost-board" />
-      </div>
-    </section>
-  );
-}
-
 /**
- * What the report says, and a reason to go and read the rest of it.
+ * The three phases, and nothing above them.
  *
- * This is the page's answer to "how am I doing". The three facts that stood
- * here before — a rating, a lifetime record, an analysed-game count — came from
- * a prototype endpoint reading tables the pipeline stopped writing, so the line
- * became a stated absence. `/v1/dashboard` publishes all three from the
- * publication itself, and the absence is over.
+ * The hub used to open on a headline sentence over an evaluation graph. Both
+ * are gone. The graph drew one line across the whole game and the nodes under
+ * it drew three states, and a reader had to reconcile them; the sentence over
+ * the top was a third telling of the same thing. The nodes *are* the reading
+ * now, and the figures behind them arrive on hover rather than standing in a
+ * column of small type nobody scans.
  *
- * The link is not a nav item called "Report". It says what is inside, counted
- * from what came back, because a reader who has already seen the conclusion
- * needs to know what the second page adds before they will press it.
+ * ## Why the three are measured differently
+ *
+ * Because the three phases are different jobs, and the same number cannot
+ * score them. This is the mistake the pooled hit rate made — it ranked this
+ * account 59 / 76 / 86 with the opening worst, while the games were being
+ * lost in the middlegame — and it is not fixed by choosing a better single
+ * number. It is fixed by asking each phase its own question:
+ *
+ *   * **The opening is preparation.** Its failure is a line that leaks, and
+ *     the tell is not the median (which sits at level all the way through)
+ *     but the spread: the middle half of the games opens from 4 points to 88
+ *     before move twelve. Some games are already lost and some are fine,
+ *     which is what an unreliable repertoire looks like.
+ *   * **The middlegame is holding the thread.** Its failure is measured in
+ *     ground: the median falls from level to nothing across it.
+ *   * **The endgame is conversion, and it has to be asked conditionally.**
+ *     A quarter of these games reach one and the median arrives at zero, so
+ *     "ground given up" is vacuous there: there is nothing left to give. The
+ *     question that survives is what happened to the endgames that *were*
+ *     winnable, which `winning_conversion` counts directly.
  */
-function Verdict({ report }: { report: TodayReport }) {
-  const { games, rating, publishedAt } = report;
-  const when = new Date(publishedAt);
+/**
+ * The hub does not draw the trajectory graph.
+ *
+ * It did, for one revision, with the phase rings rendered as the graph's own
+ * legend - and the two instruments disagreed on sight. The line reads the
+ * median evaluation, which collapses in the middlegame; the rings count key
+ * moments handled, where the middlegame scores highest because its moments
+ * are a different mix. Both are true and the page needed a footnote to hold
+ * them apart, which is a hero arguing with itself. The graph's conclusion
+ * survives as the headline sentence, which is the part a reader actually
+ * takes away; the picture itself lives on `/profile` and `/report`, where
+ * reading the evidence behind a sentence is the point.
+ */
+function Phases({ report }: { report: TodayReport }) {
+  const when = new Date(report.publishedAt);
   const dated = Number.isNaN(when.getTime())
     ? null
     : when.toLocaleDateString(undefined, { day: "numeric", month: "long" });
 
   return (
-    <section className="today-verdict" aria-labelledby="today-verdict-head">
-      <h1 id="today-verdict-head">{report.headline}</h1>
-
-      {/* The provenance of every figure below, in one line and never as a
-          caption at the bottom. A report is a frozen cohort rather than a live
-          count: the archive keeps growing after it is published, and a page
-          that prints the cohort size with no date invites a reader to check it
-          against their real total and conclude the product cannot count. The
-          date is what makes the smaller number correct instead of wrong. */}
-      <p className="today-verdict-standing">
-        {rating ? (
-          <>
-            <span className="figure">{rating.rating.toLocaleString()}</span> {rating.speed} on{" "}
-            {rating.provider}
-            {" · "}
-          </>
-        ) : null}
-        measured over <span className="figure">{games.toLocaleString()}</span>{" "}
-        {plural(games, "game", "games")}
-        {dated ? <>, {dated}</> : null}
-      </p>
-
-      {report.cone ? <Trajectory cone={report.cone} /> : null}
-
-      {report.cone === null && report.detail ? (
-        <p className="today-verdict-detail">{report.detail}</p>
-      ) : null}
-
-      {/* Forma's own strongest sentence, printed verbatim or not at all — and
-          only once it reads as English. `readableExplanation` holds back text
-          from a report published before the renderer was repaired, which would
-          otherwise put a database key in the largest prose on the page. */}
-      {report.finding ? <p className="today-verdict-finding">{report.finding}</p> : null}
-    </section>
+    <PhaseRow
+      readings={report.readings}
+      provenance={`Measured over ${report.games.toLocaleString()} ${plural(report.games, "game", "games")}${dated ? `, published ${dated}` : ""}.`}
+    />
   );
 }
 
 /**
- * The seven measures, worst-moving first.
+ * The rating, as one figure and nothing else.
  *
- * ## Why this is a ranked stack and not a row of cards
+ * The first thing any chess player looks for, and Forma publishes it, so
+ * withholding it to keep the page tidy would be hiding the number somebody
+ * came for. It sits outside `Phases` because it is published independently of
+ * them: drawn inside, a report whose phase estimates were unpublished lost the
+ * rating too.
  *
- * The page this replaced put three equal-width cards under the graph, each with
- * the same heading, the same figure and the same paragraph, and repeated the
- * absence of a per-phase rate three times. Equal weight is the failure: it is
- * the arrangement that says every one of these matters the same amount, on a
- * page whose entire job is to say which one to open tonight. Rank carries that
- * instead, so nothing needs a badge or a colour to announce priority — reading
- * down the stack *is* reading the priority order.
- *
- * The leading row opens with its evidence; the rest hold their rank as one
- * dense line each and open on demand. That is the second half of the refusal: a
- * page showing seven measures at full detail is the stat-dump PRODUCT.md names
- * as an anti-reference, and one showing only the worst is the version that left
- * a reader with no idea how they were doing.
- *
- * ## Why the order is movement and not rate
- *
- * See `measures()`. Rates across different concepts are not comparable and
- * sorting by them would rank the catalogue's difficulty rather than the player.
+ * Not a graph, because there is no history to graph. The dashboard publishes
+ * one current rating per pool and `/v1/games/recent` carries only the
+ * opponent's, so a line here would be a shape drawn over data that does not
+ * exist.
  */
-function Stack({ measures }: { measures: Measure[] }) {
-  const [open, setOpen] = useState<string | null>(measures[0]?.baseKey ?? null);
-
+function Rating({ rating }: { rating: NonNullable<TodayReport["rating"]> }) {
   return (
-    <section className="today-stack" aria-labelledby="today-stack-head">
-      <h2 id="today-stack-head" className="cap">
-        Against your own earlier games
-      </h2>
-      <ol className="today-rank">
-        {measures.map((measure, index) => (
-          <MeasureRow
-            key={measure.baseKey}
-            measure={measure}
-            rank={index + 1}
-            open={open === measure.baseKey}
-            onOpen={() => setOpen(open === measure.baseKey ? null : measure.baseKey)}
-          />
-        ))}
-      </ol>
-      <p className="today-stack-key">
-        Ordered by how surely each has moved against your earlier games, not by rate: these
-        are different jobs, so their rates are not a ranking. A change is called only when
-        Forma puts it past its own threshold.
-      </p>
-    </section>
-  );
-}
-
-const pct = (value: number): string => `${Math.round(value * 100)}%`;
-
-/**
- * A probability, without letting it round to certainty at either end.
- *
- * The same rule `server/src/estimates/render.ts` applies, and for the same
- * reason in the mirror: a posterior of 0.003 printed as "0%" tells somebody it
- * is impossible their play improved, which no amount of evidence about chess
- * earns. "Under 1%" is the strongest true version of it. The floor is stated
- * rather than derived so the number on screen is one the data supports.
- */
-const chance = (value: number): string => {
-  // Zero and one are included deliberately. The posterior is stored to five
-  // decimal places, so a genuinely small number arrives as 0.00000, and a
-  // continuous model cannot produce a true zero in the first place — printing
-  // "0%" would turn a rounding artefact into the claim that this player's
-  // improvement is impossible.
-  if (value < 0.01) return "under 1%";
-  if (value > 0.99) return "over 99%";
-  return pct(value);
-};
-
-/**
- * Percentage points, signed, in the unit the estimator computes them in.
- *
- * A movement that rounds to nothing loses its sign: "+0" is a change being
- * announced and then withdrawn in the same two characters, and the row already
- * says "no clear change" beside it.
- */
-const points = (value: number): string => {
-  const rounded = Math.round(value * 100);
-  if (rounded === 0) return "0";
-  return `${rounded > 0 ? "+" : "−"}${Math.abs(rounded)}`;
-};
-
-function MeasureRow({
-  measure,
-  rank,
-  open,
-  onOpen,
-}: {
-  measure: Measure;
-  rank: number;
-  open: boolean;
-  onOpen: () => void;
-}) {
-  const { change } = measure;
-  const movement = change ? MOVEMENT_COPY[change.movement] : null;
-  const headingId = `measure-${measure.baseKey}`;
-
-  return (
-    <li className={`today-rank-row${open ? " is-open" : ""}`}>
-      <button
-        type="button"
-        className="today-rank-head"
-        aria-expanded={open}
-        aria-controls={`${headingId}-detail`}
-        onClick={onOpen}
-      >
-        <span className="today-rank-no" aria-hidden="true">
-          {rank}
-        </span>
-
-        <span className="today-rank-name" id={headingId}>
-          {measure.name}
-          {measure.role ? <small>{measure.role}</small> : null}
-        </span>
-
-        {/* The movement is the ranking key, so it is the figure on the row.
-            Never a bare arrow: a direction with no certainty behind it is the
-            claim this product refuses to make, so the word and the number
-            travel together and the colour is only ever a third carrier. */}
-        {change && movement ? (
-          <span className={`today-rank-move ${movement.tone}`}>
-            <b>{points(change.delta)}</b>
-            <small>{movement.label}</small>
-          </span>
-        ) : (
-          <span className="today-rank-move is-unclear">
-            <small>Not compared yet</small>
-          </span>
-        )}
-      </button>
-
-      <div id={`${headingId}-detail`} className="today-rank-detail" hidden={!open}>
-        {measure.rate === null ? (
-          <p className="today-rank-none">{unavailableText(measure.unavailableReason)}</p>
-        ) : (
-          <>
-            {/* The standing rate with its interval drawn to scale. A point
-                estimate on its own is a stronger claim than the estimator
-                made, so the interval is the mark and the point sits inside
-                it. */}
-            <p className="today-rank-rate">
-              You take <b>{pct(measure.rate)}</b> of these, over{" "}
-              {measure.sample.toLocaleString()} recorded{" "}
-              {plural(measure.sample, "chance", "chances")}.
-              {measure.intervalLow !== null && measure.intervalHigh !== null ? (
-                <>
-                  {" "}
-                  The evidence puts the real rate between{" "}
-                  <b>{pct(measure.intervalLow)}</b> and <b>{pct(measure.intervalHigh)}</b>.
-                </>
-              ) : null}
-            </p>
-            {measure.intervalLow !== null && measure.intervalHigh !== null ? (
-              <Interval
-                low={measure.intervalLow}
-                high={measure.intervalHigh}
-                value={measure.rate}
-              />
-            ) : null}
-          </>
-        )}
-
-        {change ? (
-          <p className="today-rank-change">
-            Earlier games <b>{pct(change.from)}</b>, recent games <b>{pct(change.to)}</b>, over{" "}
-            {change.sample.toLocaleString()} recent{" "}
-            {plural(change.sample, "chance", "chances")}.
-            {change.improvementProbability !== null ? (
-              <>
-                {" "}
-                Forma puts the chance this is a real improvement at{" "}
-                <b>{chance(change.improvementProbability)}</b>.
-              </>
-            ) : null}
-          </p>
-        ) : null}
-
-        {measure.definition ? (
-          <p className="today-rank-definition">{measure.definition}</p>
-        ) : null}
-      </div>
-    </li>
-  );
-}
-
-/**
- * An interval, drawn to the 0–100 scale it is a share of.
- *
- * Deliberately not scaled to the interval's own width: a narrow interval and a
- * wide one would then look identical, which is the one thing this mark exists
- * to distinguish. The full scale is the frame, so a measure Forma knows to
- * within two points reads as tight and one it knows to within twenty reads as
- * the guess it is.
- */
-function Interval({ low, high, value }: { low: number; high: number; value: number }) {
-  return (
-    // The scale is labelled at both ends because without them the mark is a dot
-    // at an arbitrary position on an unlabelled rule: a reader cannot tell 84%
-    // from 8% without knowing where the track starts and stops. The numbers
-    // themselves are in the sentence above; what this adds is the position and
-    // the width, which prose carries badly.
-    <span className="today-interval-row" aria-hidden="true">
-      <span className="today-interval-end">0%</span>
-      <span className="today-interval">
-        <span
-          className="today-interval-band"
-          style={{ left: `${low * 100}%`, width: `${Math.max(high - low, 0) * 100}%` }}
-        />
-        <span className="today-interval-point" style={{ left: `${value * 100}%` }} />
+    <p className="today-rating">
+      <b className="metric">{rating.rating.toLocaleString()}</b>
+      <span>
+        {speedLabel(rating.speed)} on {providerLabel(rating.provider)}
       </span>
-      <span className="today-interval-end">100%</span>
-    </span>
+    </p>
   );
 }
+
+/**
+ * Provider and speed, as words.
+ *
+ * `QuotedRating` carries the wire's own keys, and the hub printed them raw:
+ * "blitz on chesscom", while every other surface in the product writes
+ * "Chess.com". A database key must never reach a customer.
+ */
+const PROVIDER_LABEL: Record<string, string> = {
+  lichess: "Lichess",
+  chesscom: "Chess.com",
+};
+const SPEED_LABEL: Record<string, string> = {
+  bullet: "Bullet",
+  blitz: "Blitz",
+  rapid: "Rapid",
+  classical: "Classical",
+  correspondence: "Correspondence",
+};
+/** Falls back to the key rather than inventing one, and never to a blank. */
+const providerLabel = (key: string): string => PROVIDER_LABEL[key] ?? key;
+const speedLabel = (key: string): string => SPEED_LABEL[key] ?? key;
 
 /**
  * The shape. This is the page.
@@ -599,141 +429,30 @@ function Shape({
         <h1 id="today-shape-head">No opening mistakes found in your games yet.</h1>
         <p>
           Forma read the openings of {games} {plural(games, "game", "games")} and every
-          move it could grade held. Play more and the picture will fill in.
+          move it could grade held.
         </p>
       </section>
     );
   }
 
-  const tallest = shape.bars.reduce((max, bar) => Math.max(max, bar.mistakes), 0);
-  const peak = shape.peak;
-  const share = peak ? Math.round((peak.mistakes / shape.total) * 100) : 0;
-
+  /**
+   * There are mistakes but no published report, so there are no dials to draw.
+   *
+   * What used to fill this slot was a bar chart of which move numbers the
+   * player's opening mistakes fall on, under a heading like "34% of your
+   * opening mistakes land between moves 5 and 7". That is a real measurement
+   * and a very small one — a detail of one phase, wearing the largest type on
+   * the product — and this file has now removed it from the hero twice for
+   * exactly that reason. It is still on `/openings`, drawn properly, where a
+   * detail of the opening belongs.
+   */
   return (
-    <section className="today-shape" aria-labelledby="today-shape-head">
+    <section className="today-shape is-empty" aria-labelledby="today-shape-head">
       <h1 id="today-shape-head">
-        {peak ? (
-          <>
-            {share}% of your opening mistakes land between moves {peak.from} and{" "}
-            {peak.to}.
-          </>
-        ) : (
-          <>{shape.total} opening mistakes across your games.</>
-        )}
+        {shape.total.toLocaleString()} opening{" "}
+        {plural(shape.total, "mistake", "mistakes")} so far.
       </h1>
-
-      <figure className="shape-chart">
-        <div className="shape-bars">
-          {shape.bars.map((bar) => {
-            const inPeak = peak != null && bar.moveNo >= peak.from && bar.moveNo <= peak.to;
-            return (
-              <div
-                key={bar.moveNo}
-                className={`shape-bar ${inPeak ? "is-peak" : ""}`}
-                title={`Move ${bar.moveNo}: ${bar.mistakes} ${plural(bar.mistakes, "mistake", "mistakes")} in ${bar.moves} ${plural(bar.moves, "move", "moves")}`}
-              >
-                <span
-                  className="shape-fill"
-                  style={{ height: tallest ? `${(bar.mistakes / tallest) * 100}%` : "0%" }}
-                />
-                <span className="shape-tick">{bar.moveNo}</span>
-              </div>
-            );
-          })}
-        </div>
-        {/* The threshold is stated because it changed with the source. The
-            prototype graph counted a mistake at 90 centipawns; the canonical
-            one counts a move outside the engine's stated tolerance, which is
-            0.02 of expected score against the best line the same search found.
-            Two different rules wearing the same word is exactly the kind of
-            quiet reclassification the tolerance is versioned to prevent. Both
-            surfaces now read the canonical graph — /openings moved onto it with
-            the sheet — so the two figures agree, and each still names the rule
-            it was counted by. */}
-        <figcaption>
-          Your own move number. {shape.total} mistakes in total, counted where the
-          move played cost more than 0.02 of expected score against the engine's
-          best line in the same search.
-        </figcaption>
-      </figure>
-    </section>
-  );
-}
-
-/** The one square worth starting from, with the position it actually happens in. */
-function Lead({ task }: { task: LeadTask }) {
-  const where = task.variation ? `${task.label}, ${task.variation}` : task.label;
-  const board = task.nodeKeys.find(
-    (key) => (key.split(" ")[0] ?? "").split("/").length === 8,
-  );
-
-  return (
-    <section className="today-lead" aria-labelledby="today-lead-head">
-      <div className="today-lead-copy">
-        <p className="cap">Start here</p>
-        <h2 id="today-lead-head">
-          Move {task.moveNo} of your {where}.
-        </h2>
-        <p>
-          {task.mistakes} of the {task.moves} {plural(task.moves, "move", "moves")} you
-          have played in that position {plural(task.mistakes, "was a mistake", "were mistakes")}.
-          Nothing else in your repertoire has cost you more.
-        </p>
-        <Link
-          to={`/train?color=${task.color}&family=${encodeURIComponent(task.family)}`}
-          className="primary-button btn-lg today-go"
-        >
-          Practice
-        </Link>
-      </div>
-
-      {board ? (
-        <figure className="today-board">
-          <Board fen={`${board} 0 1`} size={260} flip={task.color === "black"} />
-          <figcaption>
-            The position, with {task.color} to move.
-          </figcaption>
-        </figure>
-      ) : null}
-    </section>
-  );
-}
-
-/**
- * No marker: either there are not enough games to name a worst line, or the
- * repertoire genuinely has no square bad enough to qualify. Those are different
- * facts and the page says which.
- *
- * The "import N more games" button that used to live here is gone. It posted
- * to the prototype importer, and `/v1` has no import: games arrive with an
- * examination run, which /welcome and /onboarding start. Offering the button
- * would be offering a control that writes to the half of the database this
- * page has stopped reading.
- */
-function NoLead({ games, unanalysed }: { games: number; unanalysed: number }) {
-  const thin = games < 20;
-
-  return (
-    <section className="today-lead" aria-labelledby="today-lead-head">
-      <div className="today-lead-copy">
-        <p className="cap">Start here</p>
-        <h2 id="today-lead-head">
-          {thin
-            ? "Not enough games to name a worst line yet."
-            : "No line is going wrong often enough to name."}
-        </h2>
-        <p>
-          {thin
-            ? `Forma has read the openings of ${games} ${plural(games, "game", "games")}. Opening patterns need about twenty before a worst line means anything.`
-            : "Every line you play holds within tolerance. Practise the repertoire you have."}
-          {unanalysed > 0
-            ? ` ${unanalysed} of them ${plural(unanalysed, "has", "have")} not been analysed yet, so the sample will widen on its own.`
-            : ""}
-        </p>
-        <Link to="/openings" className="primary-button btn-lg today-go">
-          Open your lines
-        </Link>
-      </div>
+      <p>Forma is still working out what they add up to.</p>
     </section>
   );
 }
@@ -795,49 +514,70 @@ function runItem(run: Destination): NextItem | null {
 }
 
 /**
- * Two or three rows, then the page stops.
+ * The deck: everything else worth doing, as cards rather than rows.
  *
- * Every row is a real destination with a measured reason to go there. A row
- * that cannot state its reason does not render, which is why this list is
- * short and why its length changes between players. It is also why a failed
- * `/v1/onboarding` read produces no row rather than a placeholder: "we could
- * not check" is not a reason to go anywhere.
+ * Each card is a real destination with a counted reason and a mark of its
+ * own, so the eye can tell them apart before reading any of them. A card
+ * that cannot state its reason does not render, which is why the deck is
+ * short and why its length changes between players.
  *
- * The blunder-drilling row is gone with the counts it stated. It needed the
- * analysed-game and blunder totals from the prototype `/me`, and `/v1` has
- * neither; /mistakes is still reachable from the nav, and a row claiming a
- * number it cannot count would be worse than no row.
+ * The rows this replaced were the page's fourth identical full-width strip:
+ * same height, same left-aligned title over a grey line, same pill on the
+ * right, four times. A grid of marked cards says the same things and does
+ * not read as a list to skim past.
  */
-function Next({
+interface DeckItem {
+  key: string;
+  /** Its mark. Never decoration: one mark per destination, always the same. */
+  mark: React.ReactNode;
+  title: string;
+  fact: string;
+  /** The counted figure, when there is one worth putting on the card. */
+  badge?: string;
+  to?: string;
+  href?: string;
+  /** A card that states a fact but has nowhere to send anybody. */
+  inert?: boolean;
+}
+
+function Deck({
   lastGame,
   run,
   report,
+  queue,
 }: {
   lastGame: RecentGame | null;
   run: Destination | null;
   report: TodayReport | null;
+  queue: { due: number; overdue: number } | null;
 }) {
-  const items: NextItem[] = [];
+  const items: DeckItem[] = [];
 
   const fromRun = run ? runItem(run) : null;
-  if (fromRun) items.push(fromRun);
-
-  // The full report, as a row with a counted reason rather than a nav item
-  // called "Report". It used to be the page's primary button, which spent the
-  // one accented control on going to another screen instead of on playing
-  // chess; the practice control above it is the action now.
-  //
-  // The conclusion count is deliberately absent. The findings on the published
-  // report are duplicated across two statistical frames, so the honest figure
-  // is not the row count, and the measured areas are the thing this page can
-  // stand behind.
-  if (report && report.measured > 0) {
+  if (fromRun) {
     items.push({
-      key: "report",
-      title: "Everything Forma measured",
-      fact: `${report.measured} measured ${plural(report.measured, "area", "areas")} across ${report.games.toLocaleString()} ${plural(report.games, "game", "games")}`,
-      to: "/profile",
-      cta: "Open",
+      key: `run:${fromRun.key}`,
+      mark: <MarkClock />,
+      title: fromRun.title,
+      fact: fromRun.fact,
+      to: fromRun.to,
+      href: fromRun.href,
+    });
+  }
+
+  // The queue, at the deck's size rather than as the page's one big box. It
+  // is a real destination with a counted reason, which is the only test a
+  // deck card has to pass.
+  if (queue && queue.due > 0) {
+    items.push({
+      key: "practice",
+      mark: <MarkTarget />,
+      title: `${queue.due} ${plural(queue.due, "position", "positions")} ready`,
+      fact:
+        queue.overdue > 0
+          ? `Your own mistakes, back for a second look. ${queue.overdue} overdue`
+          : "Your own mistakes, back for a second look",
+      to: "/practice",
     });
   }
 
@@ -854,48 +594,77 @@ function Next({
             ? "Drew"
             : "Played";
     const when = relTimeIso(lastGame.playedAt);
-    const against = lastGame.opponent ? ` against ${lastGame.opponent}` : "";
     items.push({
       key: "last-game",
+      mark: <MarkEye />,
       title: "Your last game",
-      fact: `${outcome}${against}${when ? `, ${when}` : ""}`,
-      // The board review this used to link to reads the prototype's game ids,
-      // and these are the canonical ones. Until a `/v1` review screen exists
-      // the honest destination is the game where it was played.
+      fact: `${outcome}${lastGame.opponent ? ` against ${lastGame.opponent}` : ""}${when ? `, ${when}` : ""}`,
+      // Only when there is somewhere to go. `providerUrl` is nullable, and
+      // without this the render fell through to `to={item.to ?? "/today"}` and
+      // the card became a link to the page the reader is already on.
       href: lastGame.providerUrl ?? undefined,
-      cta: "Open",
+      inert: lastGame.providerUrl === null,
+    });
+  }
+
+  if (report && report.measured > 0) {
+    items.push({
+      key: "report",
+      mark: <MarkChart />,
+      title: "Every measurement",
+      fact: `Over ${report.games.toLocaleString()} ${plural(report.games, "game", "games")}`,
+      badge: `${report.measured} ${plural(report.measured, "area", "areas")}`,
+      to: "/profile",
     });
   }
 
   if (!items.length) return null;
 
   return (
-    <section className="today-next" aria-label="Then">
-      <p className="cap">Then</p>
-      <ul>
-        {items.map((item) => (
-          <li key={item.key} className="today-row">
-            <span className="today-row-copy">
-              <strong>{item.title}</strong>
-              <small>{item.fact}</small>
-            </span>
-            {item.to ? (
-              <Link to={item.to} className="today-row-go">
-                {item.cta}
-              </Link>
-            ) : item.href ? (
-              <a
-                href={item.href}
-                className="today-row-go"
-                target="_blank"
-                rel="noreferrer"
-              >
-                {item.cta}
-              </a>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+    <section className="today-deck" aria-label="Then">
+      <h2 className="section-head">Then</h2>
+      <div className="deck-grid">
+        {items.map((item) => {
+          const body = (
+            <>
+              <span className="deck-mark" aria-hidden="true">
+                {item.mark}
+              </span>
+              <span className="deck-copy">
+                <strong>{item.title}</strong>
+                <small>{item.fact}</small>
+              </span>
+              {item.badge ? <span className="deck-badge metric">{item.badge}</span> : null}
+            </>
+          );
+          if (item.inert) {
+            return (
+              <div key={item.key} className="deck-card is-inert">
+                {body}
+              </div>
+            );
+          }
+          return item.href ? (
+            <a
+              key={item.key}
+              href={item.href}
+              className="deck-card"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {body}
+            </a>
+          ) : item.to ? (
+            <Link key={item.key} to={item.to} className="deck-card">
+              {body}
+            </Link>
+          ) : (
+            <div key={item.key} className="deck-card is-inert">
+              {body}
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }
@@ -917,10 +686,10 @@ function Progress({ goal, progress }: { goal: GoalView | null; progress: GoalPro
   if (!goal) {
     return (
       <section className="today-progress" aria-labelledby="today-progress-head">
-        <p className="cap" id="today-progress-head">Progress</p>
+        <h2 className="section-head" id="today-progress-head">Progress</h2>
         <EmptyState
           title="No goal set yet"
-          detail="Set a goal and this fills in with how you are doing against it, from the day you set it to now — measured from the games you actually play, not from how much you practised."
+          detail="Measured from the games you play, not from how much you practise."
         />
       </section>
     );
@@ -929,42 +698,42 @@ function Progress({ goal, progress }: { goal: GoalView | null; progress: GoalPro
   if (!progress) {
     return (
       <section className="today-progress" aria-labelledby="today-progress-head">
-        <p className="cap" id="today-progress-head">Progress</p>
+        <h2 className="section-head" id="today-progress-head">Progress</h2>
         <EmptyState
           title={goal.statedObjective}
-          detail="Nothing has been measured on this goal yet. That fills in once games are played and analysed against it."
+          detail="Nothing measured on it yet. That fills in as you play."
         />
       </section>
     );
   }
 
-  const { metrics, adherence, realGameEvidence } = progress;
+  const { metrics, realGameEvidence } = progress;
 
   return (
     <section className="today-progress" aria-labelledby="today-progress-head">
-      <p className="cap" id="today-progress-head">Progress</p>
+      <h2 className="section-head" id="today-progress-head">Progress</h2>
       <div className="today-progress-card">
         <h2>{goal.statedObjective}</h2>
 
+        {/* A count of published facts, not a rollup. `/v1/goals` returns each
+            metric under a database key and no display name, so the rows this
+            replaced printed a slug per line — or, with the slug removed, an
+            anonymous percentage that told a reader nothing at all. How many of
+            the goal's targets are met is the one thing that can be said here
+            without naming a metric, and it is also the thing somebody actually
+            wants to know. */}
         {metrics.length > 0 ? (
-          <ul className="today-progress-metrics">
-            {metrics.map((metric) => (
-              <li key={metric.metricKey}>
-                <ClaimBadge state={metric.claimState} />
-                <span className="today-progress-metric-key">{metric.metricKey}</span>
-                {metric.readiness !== null ? (
-                  <span className="today-progress-readiness">
-                    {Math.round(metric.readiness * 100)}% of the way there
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+          <p className="today-progress-targets">
+            <b className="metric">
+              {metrics.filter((metric) => metric.targetAchieved).length}/{metrics.length}
+            </b>{" "}
+            {plural(metrics.length, "target met", "targets met")}
+          </p>
         ) : null}
 
         <p className="today-progress-note">
-          {realGameEvidence} {plural(realGameEvidence, "real game has", "real games have")}{" "}
-          counted as evidence toward this. {adherence.note}
+          <b className="metric">{realGameEvidence}</b>{" "}
+          {plural(realGameEvidence, "real game counts", "real games count")} toward this.
         </p>
       </div>
     </section>

@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import { CoverageBadge, EmptyState } from "./v1/Honesty";
+import { MoveChip } from "./instruments";
 import {
   confidenceLabel,
   findingLabel,
+  movementOf,
   splitFindings,
   suppressionText,
   unavailableText,
@@ -61,8 +63,8 @@ export function MeasureRate({ estimate }: { estimate: SkillEstimate }) {
       <p className="rate-figure is-none">
         <span className="rate-none">No figure</span>
         <small>
-          {estimate.rawSampleSize.toLocaleString()}{" "}
-          {estimate.rawSampleSize === 1 ? "chance" : "chances"} seen
+          {estimate.rawSampleSize.toLocaleString()} key{" "}
+          {estimate.rawSampleSize === 1 ? "moment" : "moments"} seen
         </small>
       </p>
     );
@@ -78,8 +80,8 @@ export function MeasureRate({ estimate }: { estimate: SkillEstimate }) {
           : "range not published"}
       </small>
       <small>
-        over {estimate.rawSampleSize.toLocaleString()}{" "}
-        {estimate.rawSampleSize === 1 ? "chance" : "chances"}
+        over {estimate.rawSampleSize.toLocaleString()} key{" "}
+        {estimate.rawSampleSize === 1 ? "moment" : "moments"}
       </small>
     </p>
   );
@@ -123,7 +125,7 @@ function EvidenceLine({ estimate }: { estimate: SkillEstimate }) {
         <b>{graded.toLocaleString()}</b> graded
       </span>
       <span>
-        <b>{success.toLocaleString()}</b> taken
+        <b>{success.toLocaleString()}</b> handled
       </span>
       <span>
         <b>{failure.toLocaleString()}</b> missed
@@ -146,6 +148,22 @@ function EvidenceLine({ estimate }: { estimate: SkillEstimate }) {
  * confident or meaningless depending on how much evidence stands under each.
  * That probability is the sentence, not the delta.
  */
+/**
+ * A probability, without letting it round to certainty at either end.
+ *
+ * The same rule `server/src/estimates/render.ts` applies, mirrored: a
+ * posterior of 0.997 printed as "100%" tells somebody it is impossible their
+ * play held, which no amount of evidence about chess earns. The floor and the
+ * ceiling are stated rather than derived, so the number on screen is one the
+ * data supports. This guard used to live on the hub, which no longer reports
+ * movement; the claim moved here and the guard moved with it.
+ */
+function chanceText(value: number): string {
+  if (value < 0.01) return "under 1%";
+  if (value > 0.99) return "over 99%";
+  return pct(value);
+}
+
 function ChangeNote({ recent }: { recent: SkillEstimate }) {
   if (recent.delta === null) return null;
   if (Math.abs(recent.delta) < 0.005) {
@@ -164,17 +182,31 @@ function ChangeNote({ recent }: { recent: SkillEstimate }) {
       Your recent games are {points(recent.delta)} {up ? "up" : "down"} on your earlier ones.
       {chance === null
         ? " Forma did not publish how sure it is of that."
-        : ` Forma puts the chance it has genuinely gone ${up ? "up" : "down"} at ${pct(chance)}.`}
+        : ` Forma puts the chance it has genuinely gone ${up ? "up" : "down"} at ${chanceText(chance)}.`}
     </p>
   );
 }
 
 function MeasureRow({ group }: { group: MeasureGroup }) {
-  const { headline } = group;
+  const { headline, recent, baseline } = group;
+  const movement =
+    recent && baseline && recent.estimate !== null && baseline.estimate !== null
+      ? movementOf(recent.improvementProbability)
+      : null;
   return (
     <li className="rate-row">
       <div className="rate-name">
         <strong>{group.name}</strong>
+        {/* The movement, on the row rather than only as a line of small type
+            inside it. A reader scanning this wall is looking for the things
+            that changed, and until now the one fact on each row that is about
+            *them* rather than about the catalogue was set as a footnote under
+            two other figures. */}
+        {movement && movement !== "unclear" ? (
+          <span className={`rate-move is-${movement}`}>
+            <MoveChip movement={movement} />
+          </span>
+        ) : null}
         <CoverageBadge state={headline.coverageStatus} />
       </div>
       <RateTrack estimate={headline} />
@@ -203,7 +235,7 @@ export function MeasureList({ groups }: { groups: readonly MeasureGroup[] }) {
   if (groups.length === 0) {
     return (
       <EmptyState
-        title="No measure has any chances behind it"
+        title="No measure has any key moments behind it"
         detail="Your games were read, but none of them produced a moment Forma knows how to judge. That is a statement about what Forma can currently see, not about how you play."
       />
     );
@@ -374,7 +406,7 @@ export function CoverageWarnings({ warnings }: { warnings: readonly string[] }) 
     return (
       <p className="profile-lede">
         Forma raised nothing about the evidence behind this report. Every figure on this page still
-        carries the number of chances it was counted from.
+        carries the number of key moments it was counted from.
       </p>
     );
   }

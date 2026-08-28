@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { withActorContext } from "../auth/context.js";
+import { resolveAnalysisSubject, withActorContext } from "../auth/context.js";
 import { client } from "../../db/client.js";
 import { isoOf, requiredIso } from "../../db/timestamps.js";
 import { ProblemError } from "../problem.js";
@@ -7,7 +7,7 @@ import { POLICIES } from "../rate-limit.js";
 import type { RouteDefinition } from "../registry.js";
 import { QUEUE_POLICY } from "../../practice/contract.js";
 import { buildQueue, nextReview } from "../../practice/scheduler.js";
-import { assignPractice, registerPracticeComponents } from "../../practice/select.js";
+import { assignPractice, atomic, registerPracticeComponents } from "../../practice/select.js";
 
 /**
  * The practice surface.
@@ -34,6 +34,14 @@ const queueItemSchema = z.object({
   fen: z.string(),
   prompt: z.string(),
   reason: z.string(),
+  /** The subject game this position came from. Null only on legacy/unknown provenance. */
+  gameId: z.string().nullable(),
+  /** The catalogue dimension selected with the drill. Null only on a legacy assignment. */
+  conceptSlug: z.string().nullable(),
+  role: z.enum(["recognize", "execute", "respond", "convert"]).nullable(),
+  phase: z.enum(["opening", "middlegame", "endgame"]).nullable(),
+  moveNumber: z.number().int().nullable(),
+  side: z.enum(["white", "black"]).nullable(),
   priority: z.number().int(),
   dueAt: z.string().nullable(),
   /** Set once the item has been attempted before and is coming back around. */
@@ -54,7 +62,7 @@ const queueRoute: RouteDefinition<never, never, z.infer<typeof queueSchema>> = {
   operationId: "getPracticeQueue",
   summary: "What to practise now, and why",
   description:
-    "Overdue work first, capped so a queue is never only a backlog. Each item says which of your own games it came from. The expected move is never in this response.",
+    "Overdue work first, capped so a queue is never only a backlog. Each item carries its source game, pattern, role, phase, move number and side beside the rendered reason. Legacy assignments may have null provenance. The expected move is never in this response.",
   kind: "read",
   auth: "required",
   envelope: "resource",
@@ -64,10 +72,13 @@ const queueRoute: RouteDefinition<never, never, z.infer<typeof queueSchema>> = {
   rateLimits: [{ policy: POLICIES.onboardingRead, source: "actor" }],
   async handler({ auth }) {
     if (!auth) throw new ProblemError("AUTH_REQUIRED");
-    const subjectId = auth.subjects[0];
-    if (!subjectId) throw new ProblemError("NOT_FOUND", { detail: "No subject." });
 
     return withActorContext(auth.profileId, async (sql) => {
+      // Not `auth.subjects[0]` — that is the profile id, always, and the
+      // assignments key to the analysis subject. Read with the profile id this
+      // returned an empty queue for every account, forever, as `no_material`.
+      const subjectId = await resolveAnalysisSubject(sql, auth.profileId);
+      if (!subjectId) throw new ProblemError("NOT_FOUND", { detail: "No subject." });
       const rows = await sql<
         {
           assignment_id: string;
@@ -75,6 +86,12 @@ const queueRoute: RouteDefinition<never, never, z.infer<typeof queueSchema>> = {
           fen: string;
           prompt: string;
           reason: string;
+          source_game_id: string | null;
+          concept_slug: string | null;
+          role: "recognize" | "execute" | "respond" | "convert" | null;
+          phase: "opening" | "middlegame" | "endgame" | null;
+          move_number: number | null;
+          side: "white" | "black" | null;
           priority: number;
           due_at: string | Date | null;
           assigned_at: string | Date;
@@ -82,7 +99,8 @@ const queueRoute: RouteDefinition<never, never, z.infer<typeof queueSchema>> = {
         }[]
       >`
         select la.id as assignment_id, la.training_item_version_id, tv.fen, tv.prompt,
-               la.reason, la.priority,
+               la.reason, la.source_game_id, la.concept_slug, la.role, la.phase,
+               la.move_number, la.side, la.priority,
                coalesce(rs.due_at, la.due_at) as due_at,
                la.assigned_at,
                (select count(*)::int from coaching.practice_attempts a
@@ -129,6 +147,12 @@ const queueRoute: RouteDefinition<never, never, z.infer<typeof queueSchema>> = {
               fen: row.fen,
               prompt: row.prompt,
               reason: row.reason,
+              gameId: row.source_game_id,
+              conceptSlug: row.concept_slug,
+              role: row.role,
+              phase: row.phase,
+              moveNumber: row.move_number,
+              side: row.side,
               priority: row.priority,
               dueAt: isoOf(row.due_at),
               reviewNumber: row.attempts,
@@ -182,12 +206,13 @@ const attemptRoute: RouteDefinition<never, z.infer<typeof attemptBody>, z.infer<
   rateLimits: [{ policy: POLICIES.onboardingCommand, source: "actor" }],
   async handler({ auth, body }) {
     if (!auth) throw new ProblemError("AUTH_REQUIRED");
-    const subjectId = auth.subjects[0];
-    if (!subjectId) throw new ProblemError("NOT_FOUND", { detail: "No subject." });
 
     const { selectorVersionId } = await registerPracticeComponents(client);
 
     return withActorContext(auth.profileId, async (sql) => {
+      // The analysis subject, never `subjects[0]` (the profile id).
+      const subjectId = await resolveAnalysisSubject(sql, auth.profileId);
+      if (!subjectId) throw new ProblemError("NOT_FOUND", { detail: "No subject." });
       const [assignment] = await sql<
         { id: string; training_item_version_id: string; solution_uci: string[]; status: string }[]
       >`
@@ -210,7 +235,9 @@ const attemptRoute: RouteDefinition<never, z.infer<typeof attemptBody>, z.infer<
           and client_attempt_id = ${body.clientAttemptId}
       `;
 
-      const result = await sql.begin(async (tx) => {
+      // `atomic`, not `sql.begin`: this runs inside the actor context, which
+      // is itself a transaction, and the boundary inside one is a savepoint.
+      const result = await atomic(sql, async (tx) => {
         if (existing) {
           const [schedule] = await tx<{ due_at: string | Date; interval_days: string }[]>`
             select due_at, interval_days from coaching.review_schedules
@@ -344,28 +371,43 @@ const refillRoute: RouteDefinition<never, Record<string, never>, z.infer<typeof 
   rateLimits: [{ policy: POLICIES.onboardingCommand, source: "actor" }],
   async handler({ auth }) {
     if (!auth) throw new ProblemError("AUTH_REQUIRED");
-    const subjectId = auth.subjects[0];
-    if (!subjectId) throw new ProblemError("NOT_FOUND", { detail: "No subject." });
 
-    const [cycle] = await client<{ id: string }[]>`
-      select c.id
-      from coaching.coaching_cycles c
-      join coaching.goals g on g.id = c.goal_id
-      where g.subject_id = ${subjectId} and c.status = 'active' and g.status = 'active'
-      limit 1
-    `;
+    // Registered on the pool, before the actor context opens: registration
+    // runs its own transaction, and the catalogue carries no per-subject rows
+    // for the context to guard anyway.
+    const { selectorVersionId } = await registerPracticeComponents(client);
 
-    const result = await assignPractice(client, {
-      subjectId,
-      cycleId: cycle?.id ?? null,
+    // Inside the actor context, unlike the first version of this route, which
+    // ran on the pooled client: every table the selector reads carries forced
+    // row level security bound to the actor, so off the pool the mistakes
+    // query saw zero rows and every refill answered `no_material` — the exact
+    // silent-empty failure the context exists to prevent. Same for the
+    // subject: `subjects[0]` is the profile id, which no game keys to.
+    return withActorContext(auth.profileId, async (sql) => {
+      const subjectId = await resolveAnalysisSubject(sql, auth.profileId);
+      if (!subjectId) throw new ProblemError("NOT_FOUND", { detail: "No subject." });
+
+      const [cycle] = await sql<{ id: string }[]>`
+        select c.id
+        from coaching.coaching_cycles c
+        join coaching.goals g on g.id = c.goal_id
+        where g.subject_id = ${subjectId} and c.status = 'active' and g.status = 'active'
+        limit 1
+      `;
+
+      const result = await assignPractice(sql, {
+        subjectId,
+        cycleId: cycle?.id ?? null,
+        selectorVersionId,
+      });
+      return {
+        data: {
+          assigned: result.assigned,
+          outstanding: result.outstanding,
+          reason: result.reason ?? null,
+        },
+      };
     });
-    return {
-      data: {
-        assigned: result.assigned,
-        outstanding: result.outstanding,
-        reason: result.reason ?? null,
-      },
-    };
   },
 };
 

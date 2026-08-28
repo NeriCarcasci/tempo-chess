@@ -5,6 +5,8 @@ import { RouteError } from "../components/RouteError";
 import { ChessComMark, LichessMark } from "../components/PlatformMarks";
 import { CoverageBadge, EmptyState, RedactionNote } from "../components/v1/Honesty";
 import { Trajectory } from "../components/Trajectory";
+import { MoveChip } from "../components/instruments";
+import { PhaseRow } from "../components/phases";
 import {
   CoverageWarnings,
   FindingList,
@@ -15,7 +17,13 @@ import {
 import { getCoverage, getMe, getOnboarding } from "../lib/onboarding/api";
 import { limitationText, STAGE_LABEL, type Stage } from "../lib/onboarding/copy";
 import { fetchRecentGames, type RecentGame } from "../lib/v1/games";
-import { getDashboard, groupMeasures } from "../lib/v1/dashboard";
+import {
+  getDashboard,
+  groupMeasures,
+  measures,
+  milestones,
+  phaseReadings,
+} from "../lib/v1/dashboard";
 import { coneFrom } from "../lib/trajectory";
 import type { Redaction } from "../lib/v1/client";
 import type { Dashboard, Me, OnboardingCoverage, OnboardingState } from "../lib/v1/types";
@@ -118,9 +126,25 @@ export default function Profile() {
           <NothingMeasured state={state} />
         ) : (
           <>
+            {/* The hub's own three dials, first, and literally the same
+                component. `/profile` is `/today` with everything behind it
+                rather than a second product, and a reader who lands here and
+                meets a different drawing of the same three figures has to
+                work out whether the two screens disagree. */}
+            <PhaseRow
+              readings={phaseReadings(dashboard)}
+              provenance={`Measured over ${dashboard.trajectory.includedGameCount.toLocaleString()} games.`}
+            />
+
+            {/* The page's spine. Everything Forma is sure has changed, most
+                certain first — the reading somebody actually came for, ahead
+                of the wall of standing rates that answers a different
+                question. */}
+            <MovedSection dashboard={dashboard} />
+
+            <MeasureSection dashboard={dashboard} />
             <TrajectorySection dashboard={dashboard} />
             <ReadSection dashboard={dashboard} coverage={coverage} />
-            <MeasureSection dashboard={dashboard} />
             <FindingSection dashboard={dashboard} />
             <RatingSection dashboard={dashboard} />
             <GameSection games={games} />
@@ -273,7 +297,7 @@ function TrajectorySection({ dashboard }: { dashboard: Dashboard }) {
         <h2>Where your games are decided</h2>
         <EmptyState
           title="No trajectory has been built yet"
-          detail="Forma lines every game up by phase and looks at how far apart they are at each point. That needs games whose positions have been read all the way through, and this report has none."
+          detail="This needs games whose positions have been read all the way through, and this report has none."
         />
       </section>
     );
@@ -317,8 +341,7 @@ function ReadSection({
           <p className="profile-count">
             <span className="figure">{eligible.toLocaleString()}</span> of{" "}
             <span className="figure">{total.toLocaleString()}</span> synced games could be read.
-            Forma reads rated standard games against human opponents, which is the limit of what it
-            can say something honest about.
+            Forma reads rated standard games against human opponents.
           </p>
           {share === null ? null : (
             <div className="coverage-track" aria-hidden="true">
@@ -342,6 +365,65 @@ function ReadSection({
 }
 
 // ---------------------------------------------------------------------------
+// What moved
+// ---------------------------------------------------------------------------
+
+/**
+ * Every measure Forma is confident has changed, most certain first.
+ *
+ * This is the reading a person opens the page for, and until now it existed
+ * only as a line of small type at the bottom of each row in the wall below —
+ * "Earlier 47%, recently 40%" — which is the one fact on the page that is
+ * *about* them rather than about the catalogue, filed where it reads as a
+ * footnote.
+ *
+ * The order is certainty, not severity: distance of the posterior from 0.5,
+ * descending. It surfaces a strong decline exactly as readily as a strong gain,
+ * which is the point — a wall that can only fill up is a wall nobody reads
+ * twice, and the entries somebody keeps only mean something because the others
+ * can be taken away.
+ *
+ * Uncapped here. The hub takes three; this page is the one somebody opened
+ * deliberately to read all of it.
+ */
+function MovedSection({ dashboard }: { dashboard: Dashboard }) {
+  const moved = milestones(measures(dashboard), Number.POSITIVE_INFINITY);
+
+  return (
+    <section className="profile-section">
+      <h2>What moved</h2>
+      {moved.length === 0 ? (
+        <EmptyState
+          title="Nothing has moved enough to call"
+          detail="Forma will not report a change until the evidence carries it."
+        />
+      ) : (
+        <ul className="moved-grid is-wide">
+          {moved.map((milestone) => (
+            <li key={milestone.key} className={`moved-card is-${milestone.movement}`}>
+              <MoveChip movement={milestone.movement} />
+              <strong>{milestone.name}</strong>
+              <span className="moved-figures metric" aria-hidden="true">
+                {Math.round(milestone.from * 100)}% <i>→</i> {Math.round(milestone.to * 100)}%
+              </span>
+              <small>
+                {milestone.sample.toLocaleString()} recent{" "}
+                {milestone.sample === 1 ? "moment" : "moments"}
+              </small>
+              <span className="sr-only">
+                {milestone.name}: earlier {Math.round(milestone.from * 100)}%, recently{" "}
+                {Math.round(milestone.to * 100)}%, over {milestone.sample.toLocaleString()}{" "}
+                moments.
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // What Forma measured
 // ---------------------------------------------------------------------------
 
@@ -354,12 +436,11 @@ function MeasureSection({ dashboard }: { dashboard: Dashboard }) {
   return (
     <section className="profile-section">
       <h2>What Forma measured</h2>
+      {/* One line. The paragraph this replaced spent five of them saying two
+          things — what a row is, and that the rows are not a ranking — on a
+          page that already has more to read than any other in the product. */}
       <p className="profile-lede">
-        Each row is a named chance Forma can find in your games and how often you took it, with the
-        range that figure could plausibly sit in and the number of chances behind it. The bars share
-        one scale so the rows read together, but the measures do not: taking a piece your opponent
-        left hanging is not the same difficulty as converting a won endgame, so read down the column
-        for shape rather than for a ranking.
+        How often you got each kind of moment right. Not a ranking: the jobs differ.
       </p>
       <MeasureList groups={groups} />
     </section>
@@ -375,8 +456,7 @@ function FindingSection({ dashboard }: { dashboard: Dashboard }) {
     <section className="profile-section">
       <h2>What Forma concluded</h2>
       <p className="profile-lede">
-        Conclusions are drawn from the measures above and are held to a false-discovery correction,
-        so a pattern that is only chance does not become a sentence about you.
+        Held to a false-discovery correction, so noise does not become a sentence about you.
       </p>
       <FindingList findings={dashboard.findings} />
     </section>
@@ -413,8 +493,7 @@ function GameSection({ games }: { games: RecentGame[] }) {
     <section className="profile-section">
       <h2>Your newest games</h2>
       <p className="profile-lede">
-        The most recent games Forma has synced. Everything above was measured from a frozen snapshot
-        of your archive, so a game here may be newer than the examination that read it.
+        Newest first. Some may be newer than the examination that read the rest.
       </p>
       <div className="table-scroll">
         <table className="profile-games">

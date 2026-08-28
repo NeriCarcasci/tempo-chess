@@ -39,9 +39,19 @@
 
   --color-ink: #23211d;
   --color-ink-muted: #5f5a52;
-  --color-ink-faint: #8a847a;
+  /* Darkened from #8a847a, which measured 3.32:1 on the paper ground and 3.71
+     on white. It is the token every caption, unit and sample count on the
+     product uses, so every one of them was failing the AA minimum this
+     project states in DESIGN.md. #736d64 measures 4.58 on paper, 5.12 on
+     white, and 4.94 for the chip's own light text sitting on it. */
+  --color-ink-faint: #736d64;
 
-  --color-accent: #cf5730;
+  /* Darkened from #cf5730. The old value failed the AA minimum DESIGN.md
+     states, in both directions it is used: white button text measured 4.00:1
+     against it, and the accent set as text on the paper ground measured 3.71.
+     #b8441d measures 5.22 and 4.84 respectively, which is the first step that
+     clears both. The hue is unchanged; it is the same burnt orange, darker. */
+  --color-accent: #b8441d;
   --color-accent-ink: #fffaf6;
   --color-accent-wash: #fbe9e1;
   --color-signal: #277c86;
@@ -82,6 +92,28 @@
      behind it, so it reads as a key rather than a sticker. */
   --shadow-key: inset 0 -2px 0 rgb(0 0 0 / 0.16), 0 2px 6px rgb(35 33 29 / 0.14);
   --shadow-key-down: inset 0 -1px 0 rgb(0 0 0 / 0.16), 0 1px 3px rgb(35 33 29 / 0.12);
+
+  /* The same key edge, at the depth a large object needs to read as pressable
+     from across the page. A 2px lip disappears under a 132px dial and under a
+     card the size of a hand; these do not.
+
+     The edge is drawn *outside* the shape here rather than inset, because a
+     white card cannot darken its own bottom two pixels without looking soiled.
+     A ring plus a solid offset below it is the same idea in the other
+     direction: the object sits on a plinth of its own ink. Press moves the
+     object down by exactly the plinth height, so the plinth disappears and
+     nothing else on the row shifts. */
+  --lip: 4px;
+
+  /* Referenced in five transitions and defined nowhere, which made every one
+     of those declarations invalid and silently dropped. The values are the
+     ones DESIGN.md's motion section already names. */
+  --dur-state: 160ms;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --shadow-lip: 0 0 0 1px rgb(35 33 29 / 0.07), 0 var(--lip) 0 var(--color-line-strong),
+    0 6px 14px rgb(35 33 29 / 0.10);
+  --shadow-lip-down: 0 0 0 1px rgb(35 33 29 / 0.07), 0 0 0 var(--color-line-strong),
+    0 2px 6px rgb(35 33 29 / 0.10);
 }
 
 @layer base {
@@ -139,6 +171,16 @@
     letter-spacing: 0.09em;
     text-transform: uppercase;
     color: var(--color-ink-faint);
+  }
+  /* A section's own name, in the text face at reading size.
+     The hub used `.cap` here: tracked uppercase mono at 11px in the faint
+     ink. Four of those down one page is a rhythm nobody chose, the numeral
+     face was standing in for "technical" rather than marking a measurement,
+     and 11px faint measured 3.32:1. A heading is a heading. */
+  .section-head {
+    margin-bottom: 0.9rem;
+    font-size: 0.95rem; font-weight: 620; letter-spacing: -0.01em;
+    color: var(--color-ink);
   }
   .metric {
     font-family: var(--font-mono);
@@ -658,7 +700,7 @@
     border-radius: var(--radius-control); background: var(--color-surface-2); color: var(--color-ink);
     padding: 0 0.7rem; font-size: 0.8rem; box-shadow: var(--shadow-flat);
   }
-  .opening-filter-grid select:focus { outline: 0; box-shadow: 0 0 0 2px var(--color-accent); }
+  .opening-filter-grid select:focus { outline: 2px solid var(--color-accent); outline-offset: 2px; }
   .opening-teaching {
     display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
     gap: clamp(1.5rem, 4vw, 4rem); margin-top: 2.25rem;
@@ -689,19 +731,42 @@
      does not leave a hard-edged shadow sitting on the background. */
   .primary-button,
   .secondary-button {
-    display: inline-flex; min-height: 2.7rem; align-items: center; justify-content: center;
+    /* 2.75rem, not 2.7. The old value rendered at 43.2px, which is under the
+       44px a finger needs and was the smallest control on every touch screen
+       the product runs on. */
+    display: inline-flex; min-height: 2.75rem; align-items: center; justify-content: center;
     border: 0; border-radius: var(--radius-pill);
     padding: 0 1.15rem; font-size: 0.78rem; font-weight: 700;
     letter-spacing: 0.005em;
     transition: transform 130ms cubic-bezier(0.2, 0.9, 0.3, 1),
                 box-shadow 130ms ease, background 130ms ease;
   }
+  /* The plinth. `--shadow-key` was a 2px lip drawn inside the shape, which
+     reads at 32px tall and disappears at `btn-lg`. A solid offset in the
+     accent's own darker ink is the same idea at the depth the object needs,
+     and pressing moves the button down by exactly the plinth height so
+     nothing beside it shifts. */
+  /* `.btn-lg` was declared only in `public.css`, which the product shell does
+     not load — so the hub's one large control rendered at the base height and
+     the modifier did nothing at all. */
+  .btn-lg { min-height: 3rem; padding: 0 1.75rem; font-size: 0.88rem; }
+
   .primary-button {
     background: var(--color-accent); color: var(--color-accent-ink);
-    box-shadow: var(--shadow-key);
+    box-shadow: 0 var(--lip) 0 color-mix(in srgb, var(--color-accent) 62%, #000),
+                0 5px 12px color-mix(in srgb, var(--color-accent) 28%, transparent);
   }
-  .primary-button:hover { background: color-mix(in srgb, var(--color-accent) 92%, #fff); transform: translateY(-1px); }
-  .primary-button:active { box-shadow: var(--shadow-key-down); transform: translateY(1px); }
+  .primary-button:hover {
+    background: color-mix(in srgb, var(--color-accent) 92%, #fff);
+    transform: translateY(-1px);
+    box-shadow: 0 calc(var(--lip) + 1px) 0 color-mix(in srgb, var(--color-accent) 62%, #000),
+                0 8px 18px color-mix(in srgb, var(--color-accent) 32%, transparent);
+  }
+  .primary-button:active {
+    transform: translateY(var(--lip));
+    box-shadow: 0 0 0 color-mix(in srgb, var(--color-accent) 62%, #000),
+                0 1px 3px color-mix(in srgb, var(--color-accent) 24%, transparent);
+  }
   .secondary-button {
     background: var(--color-surface); color: var(--color-ink);
     box-shadow: var(--shadow-soft);
@@ -944,97 +1009,104 @@
      The row's own picture of where its book gives out. Squares are the same
      ramp as the archive grid on the public site, so a player meets one visual
      idea across the product rather than a chart per page. */
-  .line-strip { display: flex; gap: 3px; min-width: 0; transition: opacity 180ms ease; }
-  /* Open, the header strip is the thumbnail and the panel below holds the one
-     you can point at. Two strips at full strength read as the same picture
-     twice; recessing the summary is what tells them apart. */
-  .line-row.is-open .line-head .line-strip { opacity: 0.5; }
-  /* Square at every width: the cap is on both axes, so a strip that gets more
-     room than it needs stops growing rather than stretching into pills. */
-  .line-sq {
-    flex: 1 1 0; min-width: 0; aspect-ratio: 1;
-    max-height: 1.35rem; max-width: 1.35rem;
-    position: relative; border-radius: 5px; padding: 0;
-    background: var(--color-surface-2);
-    animation: line-sq-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* -- a line's mistakes, by move number -----------------------------------
+     Bars with the move number under them, on one scale across the whole sheet.
+
+     This replaced a strip of heat squares, and the reasons are the ones the
+     rest of the product already answers to. A square encoded a mistake RATE
+     as colour intensity, banded into three levels at thresholds the source
+     calls "tuned by eye, not by theory" - which is the product deciding what
+     "shaky" means with nothing published behind it, the same invented verdict
+     the hub's phase colours were removed for. The strip also carried no axis,
+     so nothing told a reader that a square was a move number, and no legend,
+     so nothing told them darker was worse. And it was the only mark in the
+     product that drew a rate as colour when every other one draws it as
+     length.
+
+     Bars draw the count, which is published, on an axis that names itself. */
+  .movebars {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+    gap: 2px; align-items: end; min-width: 0; height: 2.2rem;
+    transition: opacity 180ms ease;
+  }
+  .line-row.is-open .line-head .movebars { opacity: 0.45; }
+  .movebars.is-small { height: 1.5rem; gap: 1px; }
+
+  /* `grid-template-rows: 1fr auto`, exactly as the miss histogram does it.
+     `align-content: end` with auto rows was the first attempt and it silently
+     failed: the fill's percentage height had no definite row to resolve
+     against, so every bar on the page fell back to its 2px minimum. An
+     explicit `1fr` row is the definite height the percentage needs. */
+  .movebar {
+    position: relative; display: grid; grid-template-rows: 1fr auto;
+    align-items: end; height: 100%; min-width: 0;
+    background: none; border: 0; padding: 0;
+  }
+  .movebar-fill {
+    display: block; height: var(--h, 0%); min-height: 2px;
+    border-radius: 3px 3px 1px 1px;
+    background: color-mix(in srgb, var(--color-accent) 34%, var(--color-surface-2));
+    transform-origin: bottom;
+    animation: movebar-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
     animation-delay: calc(var(--i, 0) * 22ms);
   }
-  .line-strip.is-small .line-sq { max-height: 0.85rem; max-width: 0.85rem; border-radius: 4px; }
+  @keyframes movebar-rise {
+    from { transform: scaleY(0); }
+    to { transform: none; }
+  }
+  /* A move the line has not reached, or one with nothing played on it, draws
+     no bar at all. Absent is not zero, and a 2px stub would read as one. */
+  .movebar[data-state="pre"] .movebar-fill,
+  .movebar[data-state="blank"] .movebar-fill { display: none; }
+  /* Played but never judged. Hatched, which is this product's own mark for
+     "not scored", so it can never be mistaken for a clean move. */
+  .movebar[data-state="unjudged"] .movebar-fill {
+    min-height: 3px; height: 3px;
+    background: repeating-linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--color-ink) 26%, transparent) 0 2px,
+      transparent 2px 4px
+    );
+  }
+  .movebar[data-state="thin"] .movebar-fill {
+    background: color-mix(in srgb, var(--color-accent) 20%, var(--color-surface-2));
+  }
+  /* The one square the sheet nominates, and the one the reader has picked. */
+  .movebar.is-marked .movebar-fill,
+  .movebar.is-picked .movebar-fill { background: var(--color-accent); }
 
-  /* One ramp, one hue. Intensity is what the depth costs you, so reading a row
-     is reading severity rather than decoding a palette. */
-  .line-sq[data-state="pre"] { background: transparent; }
-  .line-sq[data-state="blank"] {
-    background: transparent;
-    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-ink) 9%, transparent);
+  .movebar-no {
+    margin-top: 0.3rem;
+    font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600;
+    color: var(--color-ink-faint); font-variant-numeric: tabular-nums;
+    text-align: center;
   }
-  .line-sq[data-state="thin"] { background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-2)); }
-  /* Played, unjudged. Deliberately off the ramp and not empty either: hatching
-     says "there is something here and it has not been read", which is the one
-     thing neither an empty square nor a coloured one can say. Ink at low alpha,
-     so it cannot be mistaken for a faint step of the accent. */
-  .line-sq[data-state="unjudged"] {
-    background:
-      repeating-linear-gradient(
-        -45deg,
-        color-mix(in srgb, var(--color-ink) 13%, transparent) 0 2px,
-        transparent 2px 5px
-      ),
-      var(--color-surface-2);
-  }
-  .line-sq[data-heat="holds"] { background: color-mix(in srgb, var(--color-accent) 24%, var(--color-surface)); }
-  .line-sq[data-heat="shaky"] { background: color-mix(in srgb, var(--color-accent) 60%, var(--color-surface)); }
-  .line-sq[data-heat="tears"] { background: color-mix(in srgb, var(--color-accent) 88%, var(--color-ink)); }
+  .movebar.is-marked .movebar-no,
+  .movebar.is-picked .movebar-no { color: var(--color-ink); font-weight: 700; }
 
-  /* The field is accent, so the marker cannot be: ink reads as the one
-     deliberate square on a strip of warm ones. */
-  .line-sq.is-marked { box-shadow: 0 0 0 2px var(--color-ink); }
-  .line-sq.is-marked::after {
-    content: ""; position: absolute; inset: 0; border-radius: inherit;
-    box-shadow: 0 0 0 2px var(--color-ink);
-    animation: line-pulse 2.4s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    .movebar-fill { animation: none; }
   }
 
-  /* Opened, the same squares become the instrument: bigger, pressable, and
-     numbered on approach. A closed row is a claim you scan; an open row is
-     something you point at. */
-  .line-instrument .line-strip { gap: 5px; max-width: 32rem; }
-  .line-instrument .line-sq {
-    max-height: 2.1rem; max-width: 2.1rem;
-    box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.12);
-    transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 140ms ease;
+  /* The picked strip inside an open row: same bars, taller, with a real hit
+     target on each. */
+  .line-instrument .movebars { height: 3.4rem; gap: 4px; max-width: 32rem; }
+  .line-instrument .movebar { cursor: pointer; }
+  .line-instrument .movebar:disabled { cursor: default; }
+  .line-instrument .movebar:not(:disabled):hover .movebar-fill,
+  .line-instrument .movebar:not(:disabled):focus-visible .movebar-fill {
+    background: color-mix(in srgb, var(--color-accent) 60%, var(--color-surface));
   }
-  .line-instrument .line-sq[data-state="pre"] { box-shadow: none; }
-  .line-instrument .line-sq[data-state="blank"] {
-    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-ink) 12%, transparent);
+  .line-instrument .movebar.is-picked .movebar-fill { background: var(--color-accent); }
+  /* A finger needs the whole column, not the bar. The target spans the full
+     height of the strip whatever the bar's own height happens to be. */
+  .line-instrument .movebar::before {
+    content: ""; position: absolute; inset: 0 -1px; border-radius: 4px;
   }
-  .line-instrument .line-sq:not(:disabled):hover,
-  .line-instrument .line-sq:not(:disabled):focus-visible {
-    transform: translateY(-2px) scale(1.08);
-    box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.12), 0 6px 14px rgb(35 33 29 / 0.16);
-    z-index: 2;
+  .line-instrument .movebar:not(:disabled):hover::before {
+    background: color-mix(in srgb, var(--color-ink) 4%, transparent);
   }
-  .line-instrument .line-sq:not(:disabled):active {
-    transform: translateY(1px);
-    box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.1);
-  }
-  .line-instrument .line-sq.is-picked {
-    box-shadow: 0 0 0 2px var(--color-ink), inset 0 -2px 0 rgb(0 0 0 / 0.12);
-  }
-  .line-sq-no {
-    position: absolute; inset: 0; display: grid; place-items: center;
-    font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600;
-    color: var(--color-ink); opacity: 0; transition: opacity 120ms ease;
-  }
-  .line-sq[data-heat="tears"] .line-sq-no { color: var(--color-bg); }
-  .line-instrument .line-sq:hover .line-sq-no,
-  .line-instrument .line-sq:focus-visible .line-sq-no,
-  .line-instrument .line-sq.is-picked .line-sq-no { opacity: 0.78; }
 
-  /* -- the practice control ---------------------------------------------
-     Present on every row so the action is never buried, quiet on every row but
-     one so the page never reads as a column of buttons. It fills on approach,
-     and it is already filled on the line the marker names. */
   .line-practice {
     flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
     height: 2.15rem; padding-inline: 1.05rem;
@@ -1250,7 +1322,6 @@
     font-size: 0.95rem; line-height: 1.65; color: var(--color-ink-muted);
   }
 
-  .shape-chart { margin-top: clamp(1.5rem, 3.5vw, 2.25rem); }
   /* Capped independently of the page: twelve bars stretched across the full
      shell width read as slabs, not as a distribution. */
   .shape-bars {
@@ -1287,53 +1358,121 @@
     color: var(--color-ink-faint); font-variant-numeric: tabular-nums;
   }
   .shape-bar.is-peak .shape-tick { color: var(--color-ink); font-weight: 620; }
-  .shape-chart figcaption {
-    margin-top: 0.85rem; max-width: 58ch;
-    font-size: 0.78rem; line-height: 1.5; color: var(--color-ink-muted);
-  }
 
   /* -- the one thing ----------------------------------------------------- */
-  .today-lead {
+
+  /* -- the one action -----------------------------------------------------
+     On the paper, not in a box. The page's weight comes from the accent
+     control and the mascot beside it, which is plenty — a white card under a
+     row of unboxed dials was the only box on the screen and it read as a
+     panel somebody forgot to take out rather than as the thing to do.
+
+     Everything in the column starts at the same x: the eyebrow, the heading,
+     the mascot and the button. The version this replaced put the button inside
+     the bubble's own column, so the three lines began at three different
+     places and the control ended up indented under the mascot. */
+  .today-act {
     display: grid; grid-template-columns: minmax(0, 1fr) auto;
-    gap: clamp(1.5rem, 4vw, 3rem); align-items: center;
-    margin-top: clamp(2.5rem, 6vw, 4rem);
-    border-radius: var(--radius-xl);
-    background: var(--color-surface); box-shadow: var(--shadow-lift);
+    gap: clamp(1.5rem, 4vw, 3.5rem); align-items: center;
+    /* The one box on the page. It had none while three deck cards below it
+       did, so the only lifted objects on the hub were the secondary ones. */
     padding: clamp(1.5rem, 3.5vw, 2.25rem);
+    border-radius: var(--radius-xl);
+    background: var(--color-surface);
+    /* The canvas's object language, brought back to the hub: a drawn outline
+       and a plinth under it. The two screens are one product, and the ring
+       and the stop are the same kind of object at two sizes. */
+    box-shadow:
+      0 0 0 3px var(--color-ink-block),
+      0 8px 0 0 var(--color-ink-block),
+      0 26px 44px -22px rgba(35, 33, 29, 0.4);
+    /* The page's one large break. Above it is the reading; below it is the
+       decision. */
+    margin-top: clamp(3.25rem, 7vw, 5.5rem);
   }
-  .today-lead-copy { min-width: 0; }
-  .today-lead-copy .cap { color: var(--color-accent); }
-  .today-lead-copy h2 {
-    margin-top: 0.55rem; max-width: 18ch;
-    font-size: clamp(1.35rem, 2.8vw, 1.85rem); font-weight: 650;
-    line-height: 1.15; letter-spacing: -0.025em; color: var(--color-ink);
+  .today-act-copy { min-width: 0; display: grid; justify-items: start; }
+  .today-act-copy .cap { color: var(--color-accent); }
+  .today-act-copy h2 {
+    margin-top: 0.5rem; max-width: 18ch;
+    font-size: clamp(1.5rem, 3.2vw, 2.1rem); font-weight: 650;
+    line-height: 1.12; letter-spacing: -0.028em; color: var(--color-ink);
     text-wrap: balance;
   }
-  .today-lead-copy > p {
-    margin-top: 0.7rem; max-width: 46ch;
-    font-size: 0.92rem; line-height: 1.6; color: var(--color-ink-muted);
+  .today-act-why {
+    margin-top: 0.7rem; max-width: 44ch;
+    font-size: 0.98rem; line-height: 1.55; color: var(--color-ink-muted);
+    text-wrap: pretty;
   }
-  .today-go { margin-top: 1.5rem; }
+  .today-act-why p { margin: 0; }
+  /* A count in a sentence is still a figure. */
+  .today-act-why strong {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-weight: 700; color: var(--color-ink);
+  }
+  .today-go { margin-top: 1.35rem; }
 
   .today-board { justify-self: end; }
+  @media (max-width: 860px) {
+    .today-act { grid-template-columns: minmax(0, 1fr); }
+    .today-act-copy h2 { max-width: none; }
+    .today-board { justify-self: start; }
+  }
+
+  /* -- what moved ---------------------------------------------------------
+     The milestone strip. Wins and losses in one shape on purpose: a wall that
+     only fills up is a wall nobody reads twice. */
+  .today-moved { margin-top: clamp(2.75rem, 6vw, 4.25rem); }
+  .moved-grid {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 1fr;
+  }
+  @media (max-width: 900px) { .moved-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .moved-grid { grid-template-columns: minmax(0, 1fr); } }
+  /* `align-content: start`, so a card whose name wraps to two lines does not
+     push the chip, the rates and the sample apart on every shorter card in
+     its row. Same failure `.phase-node` documents. */
+  .moved-card {
+    display: grid; justify-items: start; align-content: start; gap: 0.3rem;
+    padding: 0.25rem 0 0.5rem;
+  }
+  .moved-card .move-chip { margin-top: 0; }
+  .moved-card strong {
+    margin-top: 0.25rem;
+    font-size: 0.98rem; font-weight: 650; line-height: 1.25;
+    color: var(--color-ink); letter-spacing: -0.015em; text-wrap: balance;
+  }
+  .moved-figures {
+    display: inline-flex; align-items: baseline; gap: 0.4rem;
+    font-size: 1.1rem; font-weight: 700; color: var(--color-ink);
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+  }
+  /* The arrow is a connector between two rates, not a reading. It used to
+     take the tone, which put a 2.16:1 amber glyph on paper for a slipping
+     measure and, worse, implied the arrow itself carried the verdict — the
+     chip above it already does. */
+  .moved-figures i { font-style: normal; color: var(--color-ink-faint); }
+  .moved-card small {
+    font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
   .today-board figcaption {
     margin-top: 0.6rem; text-align: center;
     font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-ink-muted);
   }
 
-  /* -- then -------------------------------------------------------------- */
-  .today-next { margin-top: clamp(2.5rem, 6vw, 4rem); }
-  .today-next .cap { margin-bottom: 0.7rem; }
-  .today-next ul { display: flex; flex-direction: column; gap: 8px; }
+  /* -- rows, still used by the onboarding and phase surfaces ------------- */
   .today-row {
     display: grid; grid-template-columns: minmax(0, 1fr) auto;
     align-items: center; gap: 1rem;
     padding: 0.85rem 0.85rem 0.85rem 1.1rem;
     border-radius: var(--radius-panel);
-    background: var(--color-surface); box-shadow: var(--shadow-soft);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-soft), inset 0 -2.5px 0 rgb(35 33 29 / 0.07);
     transition: box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .today-row:hover { box-shadow: var(--shadow-lift); }
+  .today-row:hover { box-shadow: var(--shadow-lift), inset 0 -2.5px 0 rgb(35 33 29 / 0.07); }
   .today-row-copy { min-width: 0; }
   .today-row-copy strong {
     display: block; font-size: 0.92rem; font-weight: 620;
@@ -1383,7 +1522,11 @@
   .today-rank-row + .today-rank-row { margin-top: 2px; }
 
   .today-rank-head {
-    display: grid; grid-template-columns: 1.6rem minmax(0, 1fr) auto;
+    /* The first column is the dial's real width. It was 1.6rem, sized for a
+       numeral, and every ring drawn in it since has overflowed into the name
+       beside it — at 52px the dial was sitting on top of the words. A column
+       has to be as wide as the thing in it. */
+    display: grid; grid-template-columns: 52px minmax(0, 1fr) auto;
     align-items: center; gap: 0.9rem; width: 100%; text-align: left;
     padding: 0.8rem 0.9rem;
     border-radius: var(--radius-control);
@@ -1439,7 +1582,7 @@
 
   .today-rank-detail {
     display: grid; gap: 0.6rem;
-    padding: 0.9rem 0.9rem 1.1rem 4.1rem; max-width: 72ch;
+    padding: 0.9rem 0.9rem 1.1rem calc(52px + 1.8rem); max-width: 72ch;
   }
   .today-rank-rate, .today-rank-change {
     font-size: 0.88rem; line-height: 1.6; color: var(--color-ink-muted);
@@ -1450,30 +1593,6 @@
   }
   .today-rank-definition, .today-rank-none {
     font-size: 0.8rem; line-height: 1.6; color: var(--color-ink-faint);
-  }
-
-  /* The interval, on the full 0–100 scale it is a share of. Scaling it to its
-     own width would make a two-point interval and a twenty-point one look
-     identical, which is the single thing this mark exists to tell apart. */
-  .today-interval-row {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center; gap: 0.55rem; max-width: 34rem;
-  }
-  .today-interval-end {
-    font-family: var(--font-mono); font-size: 0.62rem;
-    color: var(--color-ink-faint); font-variant-numeric: tabular-nums;
-  }
-  .today-interval {
-    position: relative; display: block; height: 6px;
-    border-radius: 999px; background: var(--color-surface-2);
-  }
-  .today-interval-band {
-    position: absolute; top: 0; bottom: 0; border-radius: 999px;
-    background: color-mix(in srgb, var(--color-accent) 30%, var(--color-surface-2));
-  }
-  .today-interval-point {
-    position: absolute; top: -2px; width: 2px; height: 10px;
-    border-radius: 1px; background: var(--color-ink);
   }
 
   .today-stack-key {
@@ -1487,29 +1606,17 @@
   }
 
   /* -- progress ------------------------------------------------------------ */
-  .today-progress { margin-top: clamp(2.5rem, 6vw, 4rem); }
+  .today-progress { margin-top: clamp(2.25rem, 4.5vw, 3rem); }
   .today-progress .cap { margin-bottom: 0.7rem; }
-  .today-progress-card {
-    border-radius: var(--radius-panel);
-    background: var(--color-surface); box-shadow: var(--shadow-soft);
-    padding: clamp(1.25rem, 3vw, 1.75rem);
-  }
+  /* On the paper, like the dials. The goal is a reading, not a control. */
+  .today-progress-card { display: grid; justify-items: start; gap: 0.5rem; }
   .today-progress-card h2 {
     font-size: 1.05rem; font-weight: 630; letter-spacing: -0.015em;
     color: var(--color-ink);
   }
-  .today-progress-metrics {
-    margin-top: 1rem; display: flex; flex-direction: column; gap: 0.6rem;
-  }
-  .today-progress-metrics li {
-    display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
-  }
-  .today-progress-metric-key {
-    font-family: var(--font-mono); font-size: 0.78rem; color: var(--color-ink-muted);
-  }
-  .today-progress-readiness {
-    font-size: 0.78rem; color: var(--color-ink-muted); font-variant-numeric: tabular-nums;
-  }
+  .today-progress-targets { display: flex; align-items: baseline; gap: 0.4rem;
+    font-size: 0.92rem; color: var(--color-ink-muted); }
+  .today-progress-targets b { font-size: 1.4rem; color: var(--color-ink); letter-spacing: -0.02em; }
   .today-progress-note {
     margin-top: 1rem; font-size: 0.82rem; line-height: 1.6; color: var(--color-ink-muted);
   }
@@ -1535,19 +1642,752 @@
   .shape-bar:nth-child(12) .shape-fill { animation-delay: 385ms; }
 
   @media (max-width: 800px) {
-    .today-lead { grid-template-columns: minmax(0, 1fr); }
-    .today-lead-copy h2 { max-width: none; }
-    .today-board { justify-self: start; }
   }
   @media (prefers-reduced-motion: reduce) {
     .shape-fill { animation: none; }
     .today-row-go:hover, .today-row-go:active { transform: none; }
   }
 
-  /* -- the phase pages, before they have a surface -----------------------
-     Middlegame and Endgame say they are not built rather than showing an
-     empty dataset. "No mistakes found" would be a claim about the player's
-     chess, and it would be false. */
+  /* -- the instruments ----------------------------------------------------
+     Small marks that each draw one published figure: the gauge, the row bar,
+     the chance split, the phase band. Shared by the hub and the phase pages
+     so the same quantity is never drawn two different ways. Colour follows
+     the standing rule: the accent means "your figure", the result colours
+     mean a result, and everything uncertain stays ink. */
+
+  /* -- labelled figures ---------------------------------------------------
+     The chip is how a stat is reported everywhere in the product now: the
+     value in the numeral face, its label under it in the micro face. It
+     replaced sentences with bold numbers inside them, which read as prose to
+     skim rather than figures to scan. A chip is a well by default; `on-paper`
+     lifts it onto a surface when the row sits on the page ground. */
+  .figchips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .figchip {
+    display: inline-grid; gap: 0.28rem; align-content: center;
+    padding: 0.5rem 0.7rem; border-radius: var(--radius-control);
+    background: var(--color-surface-2);
+  }
+  .figchip b {
+    font-family: var(--font-mono); font-weight: 700; font-size: 0.95rem;
+    line-height: 1; color: var(--color-ink); font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  .figchip small {
+    font: 620 0.58rem/1 var(--font-mono); letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--color-ink-faint); white-space: nowrap;
+  }
+  .figchips.on-paper .figchip {
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+  }
+
+  .gauge { display: grid; justify-items: center; }
+  .gauge svg { display: block; }
+  .gauge-track { stroke: var(--color-surface-3); }
+  .gauge-interval { stroke: color-mix(in srgb, var(--color-ink) 22%, transparent); }
+  .gauge-value { stroke: var(--color-accent); }
+  /* The value growing to its size is the one job motion has on a measurement.
+     Drawn by dashoffset from its own length, so the final state needs no
+     animation to be true. */
+  .gauge-value.is-grown {
+    stroke-dashoffset: 0;
+    animation: gauge-grow 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes gauge-grow {
+    from { stroke-dashoffset: var(--gauge-length); }
+    to { stroke-dashoffset: 0; }
+  }
+  .gauge-copy {
+    display: grid; justify-items: center; gap: 0.2rem;
+    margin-top: -3.6rem; padding-bottom: 1.5rem; text-align: center;
+  }
+  .gauge-copy b { font-size: 1.8rem; font-weight: 700; color: var(--color-ink); letter-spacing: -0.02em; }
+  .gauge-copy span {
+    font: 620 0.6rem/1 var(--font-mono); letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--color-ink-faint);
+  }
+  .gauge-copy small { font-size: 0.68rem; color: var(--color-ink-muted); font-variant-numeric: tabular-nums; }
+
+  /* -- the ring -----------------------------------------------------------
+     A share, closed. The bar this replaced measured the same thing and read
+     as a loading indicator: a track that fills is a thing waiting to finish,
+     which is the wrong idea for a standing measurement, and cutting it into
+     cells changed the texture without changing that. A ring is a proportion
+     of a whole, and it gives the figure a place to sit at the centre of its
+     own evidence. */
+  .donut { position: relative; display: inline-grid; place-items: center; }
+  .donut svg { display: block; grid-area: 1 / 1; }
+  .donut-mid {
+    grid-area: 1 / 1; display: grid; place-items: center; text-align: center;
+    line-height: 1;
+  }
+  .donut-track { stroke: var(--color-surface-3); }
+  .donut-value { stroke: var(--color-accent); }
+  /* Job: the value is the animation, so the ring draws to its own length. */
+  .donut-value.is-grown {
+    animation: donut-draw 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes donut-draw {
+    from { stroke-dasharray: 0 9999; }
+    to { stroke-dasharray: var(--donut-length) 9999; }
+  }
+
+  /* -- the trajectory line ------------------------------------------------
+     One line, drawn properly. It went through a shaded band and then a field
+     of quantile capsules, and both carried every quantile at once: a research
+     figure rather than something read at a glance. The line is the reading,
+     and the wash under it gives it weight without adding a second shape. */
+  .trajline { display: block; width: 100%; height: 100%; }
+  .trajline-grid { stroke: var(--color-line); stroke-width: 1; }
+  .trajline-level { stroke: var(--color-line-strong); stroke-width: 1; }
+  .trajline-divider {
+    stroke: var(--color-line-strong); stroke-width: 1; stroke-dasharray: 3 4;
+  }
+  .trajline-band { fill: color-mix(in srgb, var(--color-ink) 7%, transparent); }
+  .trajline-path {
+    stroke: var(--color-accent); stroke-width: 2.5;
+    stroke-linejoin: round; stroke-linecap: round;
+  }
+  /* Job: a game is read from the first move to the last, so the line arrives
+     that way. No fill mode: the final state renders if it never runs. */
+  .trajline.is-drawn .trajline-path,
+  .trajline.is-drawn .trajline-area,
+  .trajline.is-drawn .trajline-band {
+    animation: traj-sweep 750ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes traj-sweep {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .donut-value.is-grown { animation: none; }
+    .trajline.is-drawn .trajline-path,
+    .trajline.is-drawn .trajline-area,
+    .trajline.is-drawn .trajline-band { animation: none; }
+  }
+
+  /* -- the marks ----------------------------------------------------------
+     One line weight, one grid, taking currentColor: ink where a mark is
+     labelling something, accent where it is the live one. They never carry a
+     fill and never draw a piece: pieces are the board's Cburnett vectors, and
+     a second hand-drawn set beside them is how a product starts looking like
+     two products. */
+  /* -- the marks ----------------------------------------------------------
+     Streamline Plump Color, retoned. The set ships two hardcoded colours per
+     icon; they are rewritten as these two tokens, so every mark is two tints
+     of one hue. Accent where the mark labels something live, ink where it is
+     only naming a row: same drawing, no second set. */
+  .plumpmark {
+    display: block;
+    --mark-wash: color-mix(in srgb, var(--color-accent) 32%, var(--color-surface));
+    --mark-ink: var(--color-accent);
+  }
+  .is-quiet .plumpmark {
+    --mark-wash: color-mix(in srgb, var(--color-ink) 14%, var(--color-surface));
+    --mark-ink: var(--color-ink-faint);
+  }
+  /* The rank ring's own mark colours are gone: the ring is a dial now, so the
+     mark is knocked out of a filled disc and the dial owns that treatment.
+     Tinting it quiet ink on hover put dark-on-dark inside a coloured disc, and
+     it was a second rule deciding something one component already decides. */
+
+  .deck-mark .plumpmark { width: 1.85rem; height: 1.85rem; }
+
+  /* The mark at the centre of a ring, which is what these are for. */
+  /* One circle, and the edge is the track. The reading used to be a `Dial`
+     inside a drawn disc, which put four concentric rings around one icon: the
+     ring the eye read first was the furthest from the figure, and the figure
+     was a thin arc buried between them.
+
+     The whole object is now drawn inside one SVG, plinth included. It was a
+     `box-shadow` plinth behind a white disc with an SVG ring on top, and the
+     two were laid out by different systems: there was a white seam under the
+     ring wherever their rounding disagreed. The shadow here is a
+     `drop-shadow`, which follows the drawn shape rather than the box. */
+  .phase-node-mark {
+    display: block; width: 152px;
+    /* Clearance for the plinth, which is drawn inside the SVG and so is not
+       part of the box the grid gap measures from. */
+    margin-bottom: 0.55rem;
+    filter: drop-shadow(0 18px 22px rgba(35, 33, 29, 0.28));
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .phase-node:hover .phase-node-mark { transform: translateY(-4px); }
+  .phase-node:active .phase-node-mark { transform: translateY(6px); }
+  .phase-orb { position: relative; display: block; }
+  .phase-orb svg { display: block; width: 100%; height: auto; }
+  .phase-orb-band { stroke: color-mix(in srgb, var(--color-accent) 34%, transparent); }
+  .phase-orb-value {
+    stroke: var(--color-accent);
+    animation: orb-draw 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .phase-orb-value.is-still { animation: none; }
+  @keyframes orb-draw {
+    from { stroke-dasharray: 0 9999; }
+  }
+  /* Centred on the face, not on the whole drawing: the plinth adds depth
+     below, and splitting the difference would ride the mark low. */
+  .phase-orb-mark {
+    position: absolute; left: 0; right: 0; top: 0;
+    height: 152px; display: grid; place-items: center;
+  }
+  .phase-orb-mark .pathmark { width: 3.4rem; height: 3.4rem; }
+  .phase-node:hover .phase-node-mark { transform: translateY(-4px); }
+
+  .rank-ring { display: grid; place-items: center; width: 52px; height: 52px; }
+  .lessons-standing { margin: 0.9rem 0 0.2rem; }
+  .today-rank-what { margin-bottom: 0.2rem; }
+  .lesson-ring-figure {
+    font-family: var(--font-mono); font-size: 0.68rem; font-weight: 700;
+    color: var(--color-ink-muted); font-variant-numeric: tabular-nums;
+  }
+  .rank-count { display: grid; justify-items: end; gap: 0.1rem; text-align: right; }
+  .rank-count b {
+    font-size: 1.05rem; font-weight: 700; line-height: 1.1; color: var(--color-ink);
+  }
+  .rank-count small {
+    font-size: 0.66rem; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--color-ink-faint); white-space: nowrap;
+  }
+
+  .chancesplit { display: grid; gap: 0.55rem; }
+  .chancesplit-bar {
+    display: flex; gap: 2px; height: 10px;
+  }
+  .chancesplit-bar span { border-radius: 3px; min-width: 3px; }
+  .chancesplit-bar .is-taken { background: var(--color-win); }
+  .chancesplit-bar .is-missed { background: var(--color-loss); }
+  /* Set aside is the hatched mark, the product's own sign for "not judged". */
+  .chancesplit-bar .is-aside {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--color-line-strong) 0 2px,
+      var(--color-surface-2) 2px 5px
+    );
+  }
+  .chancesplit-key {
+    display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem;
+    font-family: var(--font-mono); font-size: 0.7rem; color: var(--color-ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .chancesplit-key i {
+    display: inline-block; width: 0.55rem; height: 0.55rem;
+    margin-right: 0.3rem; border-radius: 2px; vertical-align: -1px;
+  }
+  .chancesplit-key .is-taken i { background: var(--color-win); }
+  .chancesplit-key .is-missed i { background: var(--color-loss); }
+  .chancesplit-key .is-aside i {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--color-line-strong) 0 2px,
+      var(--color-surface-2) 2px 4px
+    );
+  }
+
+  /* One phase's slice of the trajectory, at row scale: the same capsules the
+     hub draws, so the slice and the whole are one instrument. */
+  .phaseband { position: relative; }
+  .phaseband-plot {
+    position: relative; height: clamp(96px, 13vw, 132px);
+    border-radius: var(--radius-control);
+    background: var(--color-surface-2);
+    overflow: hidden;
+  }
+  /* Explicit width and height: the SVG carries a 1:1 viewBox, and `auto`
+     let it size to that intrinsic ratio, so a 468x132 well was handed a
+     460x460 drawing and showed an empty corner of it. */
+  .phaseband-plot .trajline {
+    position: absolute; top: 6px; bottom: 6px; left: 2.6rem; right: 4px;
+    width: calc(100% - 2.6rem - 4px); height: calc(100% - 12px);
+  }
+  .phaseband-axis {
+    position: absolute; inset: 6px auto 6px 0.5rem; z-index: 1;
+    display: flex; flex-direction: column; justify-content: space-between;
+    font-family: var(--font-mono); font-size: 0.6rem; color: var(--color-ink-faint);
+    pointer-events: none;
+  }
+  .phaseband-ends {
+    display: flex; justify-content: space-between; margin-top: 0.3rem;
+    font-family: var(--font-mono); font-size: 0.6rem; color: var(--color-ink-faint);
+  }
+
+  /* -- the phase rings, as the graph legend -------------------------------
+     Each ring sits under the stretch of the game it measures, so the phases
+     appear on the hub exactly once and the ring is the way into its page.
+     The tiles these replaced carried a figure, a caption, a filling bar and
+     an evidence line each: a third full-width strip of text under a picture
+     that had already said where the games go. */
+  .cone-phases.is-tiles { gap: 12px; margin-top: 1.6rem; align-items: start; }
+  .cone-phase-tile { min-width: 0; display: grid; justify-items: center; }
+
+  /* -- the phase row -------------------------------------------------------
+     Three nodes and nothing over them. Each is a filled disc with a cream
+     mark, the ring outside it, and the ring's colour is the reading: green
+     holds, amber is worth watching, red is where the games go. Colour is the
+     first thing read, which is the whole point of it. */
+  /* -- the phase row -----------------------------------------------------
+     Three dials, one unit, one scale. Every figure on them is chances taken
+     over chances observed, so the row can be compared left to right; the
+     colour is movement against this player's own earlier games and is the
+     only thing on the row allowed a hue.
+
+     Nothing here is hover-only. The version this replaced hid the actual
+     number behind `:hover`, which meant the measurement did not exist on a
+     touch device and did not exist for anybody walking past — and, because
+     the hidden block still took part in layout at three wildly different
+     wrapped heights, it also pushed the three discs to three different
+     vertical positions. Both problems had the same cause. */
+  /* The rating and the dials are one block — your standing — so the gap
+     between them is a group gap, not a section gap. The step down from there
+     is the page's rhythm: the largest break separates how you are doing from
+     what to do about it, and everything after the action is secondary and
+     spaced evenly. */
+  /* The hub's own conclusion heading. Named apart from `.today-verdict`,
+     which is the report block's wrapper further down this file and styles an
+     `h1` inside itself - two rules with one name and two different jobs, and
+     the later one wins wherever both apply. */
+  .today-headline {
+    max-width: 22ch; margin-bottom: clamp(1.5rem, 3vw, 2.25rem);
+    font-size: clamp(1.5rem, 3.2vw, 2.1rem); font-weight: 650;
+    letter-spacing: -0.03em; line-height: 1.1; color: var(--color-ink);
+    text-wrap: balance;
+  }
+  .today-phases { margin-top: 1.25rem; }
+  .today-phases-note { display: flex; justify-content: center; margin-top: 1.6rem; }
+
+  .phase-row {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(0.5rem, 2vw, 1.25rem);
+  }
+  .phase-row > li { min-width: 0; display: grid; justify-items: center; }
+  @media (max-width: 700px) {
+    .phase-row { grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+  }
+
+  /* The node is not a card. It sits on the paper, like a piece on a board —
+     three white boxes in a row turned the one thing the reader is meant to
+     compare into three things they have to look past first, and a page where
+     every object is in its own box has no hierarchy left to spend on the one
+     object that matters. The dial is the affordance; the ground stays ground. */
+  .phase-node {
+    position: relative;
+    /* `start`, not the default. Grid's default `align-content: stretch`
+       distributes a stretched row's spare height *between* auto rows, so a
+       column with shorter copy grew its own internal gaps and floated its
+       dial away from its neighbours'. */
+    display: grid; justify-items: center; align-content: start; gap: 0.1rem;
+    padding: 0.75rem 0.5rem 1rem; border-radius: var(--radius-xl);
+    text-align: center; width: 100%;
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .phase-node:focus-visible { outline: none; }
+  .phase-node:focus-visible .phase-node-mark {
+    outline: 3px solid var(--color-accent); outline-offset: 5px;
+  }
+
+  /* The tone is movement, never level. A phase Forma has not compared against
+     this player's earlier games is ink — "not judged yet" is not "steady", and
+     neither is painted as good news. */
+
+  /* -- the tone map, defined once ----------------------------------------
+     Ten components each carried their own copy of these four values, which is
+     ten places to edit and ten chances to drift. An `is-<movement>` class now
+     means the same thing wherever it lands.
+
+     Two variables, not one, and the reason is the state that matters most.
+     `--tone` is the SURFACE colour: a disc's wash, a chip's ground, something
+     sensed rather than read. `--tone-ink` is the INK colour: the arc, the
+     mark, anything that carries a figure and therefore has to be legible.
+     They are the same value for three of the four states and differ for
+     `unclear` - which is the commonest state on a young account, and the one
+     where a single variable forced a choice between a quiet ground and a
+     readable arc. It got the quiet ground, and the measurement disappeared. */
+  .is-improved, .is-gaining { --tone: var(--color-win); --tone-ink: var(--color-win); }
+  .is-unclear { --tone: var(--color-ink-faint); --tone-ink: var(--color-ink); }
+  .is-slipping { --tone: var(--color-inaccuracy); --tone-ink: var(--color-mistake); }
+  .is-declined { --tone: var(--color-loss); --tone-ink: var(--color-loss); }
+
+  /* -- the dial ----------------------------------------------------------- */
+  .dial { position: relative; display: inline-grid; place-items: center; }
+  .dial svg { display: block; grid-area: 1 / 1; }
+  .dial-mark { grid-area: 1 / 1; display: grid; place-items: center; z-index: 1; }
+  /* The mark is a fixed share of the dial it sits in, at every size the dial
+     is drawn at. Nothing outside this rule sets it. */
+  .dial-mark .plumpmark {
+    width: calc(var(--dial-size, 132px) * 0.36);
+    height: calc(var(--dial-size, 132px) * 0.36);
+    /* The wash is the mark's mass and the ink is its detail, so on a disc
+       that is itself a wash the mass has to come up or the mark reads as a
+       ghost. Both tints are taken from `--tone-ink` rather than `--tone`, for
+       the same reason the arc is: this has to be seen. */
+    --mark-wash: color-mix(in srgb, var(--tone-ink, var(--color-ink)) 46%, var(--color-surface));
+    --mark-ink: var(--tone-ink, var(--color-ink));
+  }
+  /* The disc is a ground, not the object.
+     It used to be a near-solid fill of the tone, which meant four fifths of
+     the mark's ink went to the one bit it carries - which way you are going -
+     while the arc, which carries the actual measurement, was a mid grey on a
+     light grey track and could not be read at all. On a young account, where
+     every phase is `unclear`, that produced three heavy grey coins that said
+     nothing.
+
+     So the weight is the other way round now: the disc is a wash, the arc is
+     full-strength ink, and the mark is drawn in the tone rather than knocked
+     white out of it. The rate is loud, the movement is quiet but present, and
+     the chip beside it carries the movement in a word regardless. */
+  .dial-disc { fill: color-mix(in srgb, var(--tone, var(--color-ink)) 16%, var(--color-surface)); }
+  /* Neutral, not a tint of the tone. A green arc on a green track is a ring
+     you cannot read the length of, which turns the one quantitative channel on
+     the mark back into decoration. The track is the recessed surface the rest
+     of the product uses for an empty well. */
+  .dial-track { stroke: var(--color-surface-3); }
+  /* `--tone-ink`, never `--tone`: the arc is the figure and has to be read.
+     See the tone map for why the two differ. */
+  .dial-value { stroke: var(--tone-ink, var(--color-accent)); }
+  /* The interval, as an ink window over the value arc: the same mark `Gauge`
+     uses, so the two instruments say "how sure" the same way. */
+  .dial-interval { stroke: color-mix(in srgb, var(--color-ink) 26%, transparent); }
+  .dial-value.is-grown {
+    animation: dial-draw 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes dial-draw {
+    from { stroke-dasharray: 0 9999; }
+    to { stroke-dasharray: var(--dial-length) 9999; }
+  }
+  .phase-node .dial { transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+  .phase-node:hover .dial { transform: scale(1.02); }
+  .phase-node-name {
+    margin-top: 0.7rem;
+    font-size: 1.15rem; font-weight: 680; color: var(--color-ink);
+    letter-spacing: -0.02em;
+  }
+  /* The figure, always. Number first, unit second: a reader takes the count
+     before the word, and the word is four syllables at most. */
+  /* The evidence, on one line, under the claim. Small on purpose: the rate is
+     context for the movement rather than a score, and 58% over a hundred
+     chances and 58% over a thousand must not look like the same claim — hence
+     the count travelling with it, and the interval drawn on the arc. */
+  /* One height, measured or not. A node with nothing published renders the
+     same shape as one that has a figure, so a row mixing the two keeps its
+     baseline instead of stepping down at whichever phase is thin. */
+  /* Two stacked lines: the claim ("Handled 59%") and the count behind it.
+     The label and the value share a baseline with real space between them —
+     the read spent one revision unstyled and printed "Handled59%876 of
+     1,484" as one run of characters, which is a figure chip with the chip
+     missing. */
+  .phase-node-read {
+    min-height: 2.6em;
+    margin-top: 0.5rem;
+    display: grid; justify-items: center; row-gap: 0.15rem;
+  }
+  .phase-node-read-head {
+    display: flex; align-items: baseline; gap: 0.4rem;
+    font-size: 0.86rem;
+  }
+  .phase-node-read-head span { font-weight: 500; color: var(--color-ink-muted); }
+  .phase-node-read-head b {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.95rem; font-weight: 700; color: var(--color-ink);
+    letter-spacing: -0.01em;
+  }
+  .phase-node-read small {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.74rem; font-weight: 500; color: var(--color-ink-faint);
+  }
+  /* The reason in place of the percentage: same height as a measured node,
+     so a row mixing the two keeps its baseline instead of stepping down at
+     whichever phase is thin. Sentence case, wrapping, never a fake score. */
+  .phase-node-read.is-none { align-content: center; }
+  .phase-node-read.is-none small {
+    font-family: var(--font-sans);
+    font-size: 0.78rem; line-height: 1.35;
+    max-width: 18ch; text-align: center; text-wrap: balance;
+  }
+  /* -- the phase hero -----------------------------------------------------
+     The hub's dial, bigger, at the top of the page it links to. One object at
+     two levels of detail rather than two designs of one figure — a reader who
+     pressed a red dial has to land on the same red dial or the two screens
+     read as two opinions. Shared by /openings, /middlegame and /endgame.
+
+     The tone classes live here and are inherited by the dial, the chip and
+     the rule under the figure, so a phase is one colour on its own page. */
+  .phase-hero {
+    display: grid; grid-template-columns: auto minmax(0, 1fr);
+    gap: clamp(1.25rem, 4vw, 2.75rem); align-items: center;
+    padding-top: clamp(1rem, 3vw, 2rem);
+  }
+  .phase-hero-dial { display: grid; place-items: center; }
+  .phase-hero-copy { min-width: 0; display: grid; justify-items: start; }
+  /* `h2`, not `h1`. The hero used to emit an `h1` and became a section
+     heading when the three phases moved onto one page; the selector did not
+     follow, and with Tailwind preflight resetting headings and no generic
+     `h2` rule here, the three headings the whole page is organised around
+     were rendering at body size beside a 168px dial. */
+  .phase-hero-copy h2 {
+    font-size: clamp(1.9rem, 4.4vw, 2.8rem); font-weight: 660;
+    letter-spacing: -0.035em; line-height: 1.05; color: var(--color-ink);
+  }
+  .phase-hero-sub {
+    margin-top: 0.35rem; max-width: 40ch;
+    font-size: 0.92rem; line-height: 1.5; color: var(--color-ink-muted);
+  }
+  .phase-hero .move-chip { margin-top: 0.9rem; }
+  .phase-hero-figure {
+    display: flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap;
+    margin-top: 0.9rem;
+  }
+  .phase-hero-figure-label {
+    font-family: var(--font-sans) !important; font-size: 0.95rem !important;
+    color: var(--color-ink-muted) !important;
+  }
+  .phase-hero-figure b {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 2rem; font-weight: 700; letter-spacing: -0.04em;
+    color: var(--color-ink); line-height: 1;
+  }
+  .phase-hero-figure span {
+    font-family: var(--font-mono); font-size: 0.78rem; color: var(--color-ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .phase-hero-figure.is-none span { font-size: 0.9rem; }
+  .phase-hero-change {
+    margin-top: 0.3rem; font-size: 0.76rem; color: var(--color-ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .phase-hero-coverage { margin-top: 0.9rem; }
+  .phase-hero-action { margin-top: 1.4rem; }
+  @media (max-width: 720px) {
+    .phase-hero { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+    .phase-hero-dial { justify-items: start; }
+  }
+
+  /* A row's dial takes the concept's own movement, so a row going wrong is
+     coloured by the same rule as the phase above it. */
+  .rank-ring .dial svg { filter: none; }
+  .rank-move .move-chip { margin-top: 0.3rem; font-size: 0.68rem; padding: 0.18rem 0.55rem 0.2rem; }
+
+  /* The same chip on a measure row in the wall. */
+  .rate-move .move-chip {
+    margin-top: 0; font-size: 0.66rem; padding: 0.16rem 0.5rem 0.18rem;
+  }
+
+  /* On `/profile` the milestone strip is the page's spine rather than a
+     three-card summary, so it holds every measure that moved and wraps
+     instead of being capped at a row. */
+  .moved-grid.is-wide {
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    gap: 1.25rem 10px;
+  }
+
+  /* The caveat and its note mark on one line. The mark used to sit under the
+     row on its own, where it read as a stray control rather than as the way
+     into the sentence beside it. */
+  .today-phases-caveat {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0.4rem; flex-wrap: wrap;
+    margin-top: 1.25rem; text-align: center; text-wrap: balance;
+    font-size: 0.78rem; line-height: 1.5; color: var(--color-ink-faint);
+  }
+  .today-phases-caveat span { max-width: 46ch; }
+  .phase-node-label {
+    font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase;
+    font-family: var(--font-mono); color: var(--color-ink-faint);
+  }
+
+  /* The gallery's tone swatch. Not a node: a node is a link with a name and
+     a figure, and drawing one here without those would be a fourth version of
+     the same object for the gallery's own convenience. */
+  .dial-swatch { display: grid; justify-items: center; gap: 0.1rem; }
+
+  /* -- the movement chip --------------------------------------------------
+     The one thing on the hub that is a state rather than a number, drawn as
+     an enamel tab: filled in the tone, with the tone's own darker lip under
+     it. It always carries a word, so the colour is never the whole claim. */
+  .move-chip {
+    display: inline-flex; align-items: center;
+    margin-top: 0.55rem; padding: 0.3rem 0.8rem 0.34rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.8rem; font-weight: 700; letter-spacing: -0.005em;
+    color: var(--color-accent-ink);
+    background: var(--tone, var(--color-ink));
+    box-shadow: 0 2px 0 color-mix(in srgb, var(--tone, var(--color-ink)) 62%, #000);
+  }
+  /* The amber is a mid tone, so light text on it measures 2.33:1. A chip is
+     small text and has to clear 4.5, so this one takes ink instead of the
+     accent's own paper white. The rule is per ground, not per state: any tone
+     light enough to fail the light ink gets the dark one. */
+  .move-chip.is-slipping { color: var(--color-ink); }
+
+  /* "No clear change" is the absence of a verdict, and a filled dark pill is
+     what a verdict looks like. Three of them across a row of dials gave the
+     one state that says nothing more weight than the figures beside it. It
+     keeps the word - the meaning never rides on the colour - and gives up the
+     ground and the plinth. */
+  .move-chip.is-unclear {
+    color: var(--color-ink-muted);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-ink) 20%, transparent);
+    font-weight: 620;
+  }
+
+  /* -- the rating ---------------------------------------------------------
+     One figure, no graph. The first thing any chess player looks for, and the
+     one number on this page that needs no explaining. There is no line under
+     it because there is no history on the wire to draw one from. */
+  /* Present, not dominant. It was the largest figure on the page, which put
+     the one number Forma did not compute above the three it did — and it is
+     also the number the reader already knows. It is context for the dials. */
+  .today-rating {
+    display: flex; align-items: baseline; justify-content: center; gap: 0.5rem;
+    margin-bottom: 0;
+  }
+  .today-rating b {
+    font-size: 1.5rem; font-weight: 700;
+    letter-spacing: -0.03em; color: var(--color-ink); line-height: 1;
+  }
+  /* Sans, sentence case. The numeral face is for figures; a pool name is a
+     word, and setting it in tracked uppercase mono was the face doing duty as
+     a costume for "technical" rather than marking a measurement. */
+  .today-rating span {
+    font-size: 0.88rem; color: var(--color-ink-muted);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .phase-node:hover, .phase-node:active { transform: none; }
+    .phase-node:hover .dial { transform: none; }
+    .dial-value.is-grown { animation: none; }
+  }
+
+  /* -- the rook, speaking -------------------------------------------------
+     The product's one prose channel. A bubble on the white surface with a
+     tail into the mascot, and a tone that never touches the ground — a red
+     bubble would make the sentence look like an error message when it is
+     usually a correction, which is a different thing and a kinder one. */
+  .rooksays {
+    display: grid; grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.7rem; align-items: center;
+    margin-top: clamp(1.25rem, 3vw, 2rem);
+  }
+  /* The mascot sits low in its own box — it is a piece standing on a floor,
+     so its mass is at the bottom. Nudged down so the optical centre lines up
+     with the bubble rather than the bounding box. */
+  .rooksays-rook { display: block; margin-bottom: -0.5rem; }
+  .rooksays-bubble {
+    position: relative;
+    background: var(--color-surface); border-radius: var(--radius-panel);
+    padding: 0.85rem 1.15rem 0.9rem;
+    box-shadow: 0 0 0 1px rgb(35 33 29 / 0.06), 0 3px 10px rgb(35 33 29 / 0.07);
+    font-size: 0.98rem; line-height: 1.5; color: var(--color-ink);
+    text-wrap: pretty;
+  }
+  .rooksays-bubble > :first-child { margin-top: 0; }
+  .rooksays-bubble > :last-child { margin-bottom: 0; }
+  .rooksays-bubble strong { font-weight: 680; }
+  /* The tail, as a rotated square sharing the bubble's ground and its ring.
+     Clipped to its outer half so the ring reads as one continuous edge
+     instead of a seam across the bubble's side. */
+  .rooksays-bubble::before {
+    content: ""; position: absolute; left: -5px; top: 50%;
+    width: 13px; height: 13px; margin-top: -6.5px; border-radius: 2px;
+    background: var(--color-surface);
+    box-shadow: 0 0 0 1px rgb(35 33 29 / 0.06);
+    transform: rotate(45deg);
+    clip-path: polygon(0 0, 0 100%, 100% 100%);
+  }
+  /* Tone touches the edge, never the ground. A bubble filled red reads as an
+     error; a correction is not an error, and the words inside it are usually
+     the most useful thing on the screen. */
+  .rooksays.is-good .rooksays-bubble {
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-win) 40%, transparent),
+                0 3px 10px color-mix(in srgb, var(--color-win) 16%, transparent);
+  }
+  .rooksays.is-bad .rooksays-bubble {
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-loss) 40%, transparent),
+                0 3px 10px color-mix(in srgb, var(--color-loss) 16%, transparent);
+  }
+  .rooksays.is-good .rooksays-bubble::before {
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-win) 40%, transparent);
+  }
+  .rooksays.is-bad .rooksays-bubble::before {
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-loss) 40%, transparent);
+  }
+  @media (max-width: 560px) {
+    .rooksays { grid-template-columns: minmax(0, 1fr); gap: 0; justify-items: start; }
+    .rooksays-rook { margin-left: 0.6rem; margin-bottom: -0.35rem; }
+    .rooksays-bubble::before {
+      left: 1.6rem; top: -6px; margin-top: 0;
+      clip-path: polygon(0 0, 100% 0, 0 100%);
+    }
+  }
+
+  /* -- the deck -----------------------------------------------------------
+     Everything else worth doing, as marked cards rather than rows. The rows
+     these replaced were the fourth identical full-width strip on the page:
+     same height, same title over a grey line, same pill on the right, four
+     times. A grid of cards with a piece mark each can be told apart before
+     any of them is read. */
+  .today-deck { margin-top: clamp(2.25rem, 4.5vw, 3rem); }
+  /* Three across, not as many as fit. `auto-fit` packed five cards as four
+     and one, which leaves an orphan on its own row and squeezes every title
+     onto two lines; three columns gives the same five cards a 3 + 2 rhythm
+     and room for a title to sit on one line. */
+  .deck-grid {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 1fr;
+  }
+  @media (max-width: 900px) {
+    .deck-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    .deck-grid { grid-template-columns: minmax(0, 1fr); }
+  }
+  /* Three children, three columns. It declared two, so a card carrying a
+     badge wrapped it onto a second row under the mark - which is why "Every
+     measurement" sat lower than the cards beside it. */
+  .deck-card {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.9rem;
+    align-items: center;
+    padding: 1rem 1.1rem;
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    /* On the paper. These are the page's secondary destinations, and while
+       they were the only lifted objects on the hub they read as the important
+       ones. The mark's own well and a hover that changes ground carry the
+       affordance without another edge. */
+    background: transparent; box-shadow: none;
+    transition: background 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .deck-card:hover { background: color-mix(in srgb, var(--color-ink) 4%, transparent); }
+  .deck-card.is-inert { cursor: default; }
+  .deck-mark {
+    display: grid; place-items: center;
+    width: 3.3rem; height: 3.3rem;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    box-shadow: 0 0 0 2.5px var(--color-ink-block), 0 4px 0 0 var(--color-ink-block);
+  }
+  .deck-mark svg { width: 1.9rem; height: 1.9rem; display: block; }
+  .deck-copy { display: grid; gap: 0.15rem; min-width: 0; }
+  .deck-copy strong {
+    font-size: 1.02rem; font-weight: 650; color: var(--color-ink);
+    letter-spacing: -0.015em; text-wrap: balance;
+  }
+  .deck-copy small { font-size: 0.82rem; line-height: 1.4; color: var(--color-ink-muted); }
+  .deck-badge {
+    grid-column: 3; justify-self: end; align-self: center;
+    padding: 0.28rem 0.58rem; border-radius: var(--radius-pill);
+    background: var(--color-surface-2);
+    font-size: 0.72rem; font-weight: 700; color: var(--color-ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The publication date, as provenance rather than as a statistic. */
+  .today-provenance {
+    margin-top: 0.6rem;
+    font-size: 0.72rem; color: var(--color-ink-faint);
+  }
+
+  /* -- the phase pages ---------------------------------------------------- */
   .phase-shell {
     max-width: 1160px; margin: 0 auto; padding: clamp(2rem, 5vw, 3.5rem) 1.5rem 7rem;
   }
@@ -1556,34 +2396,638 @@
     font-size: clamp(1.6rem, 3.4vw, 2.1rem); font-weight: 650; letter-spacing: -0.028em;
     color: var(--color-ink);
   }
-  .phase-head p {
-    margin-top: 0.7rem; font-size: 0.95rem; line-height: 1.6; color: var(--color-ink-muted);
+
+  /* The pooled figure is the heading, the hub's own move applied to a third
+     of the game. The number sits in the numeral face inside the sentence. */
+  .phase-report-head h1 {
+    max-width: 24ch;
+    font-size: clamp(1.75rem, 4vw, 2.6rem); font-weight: 660;
+    line-height: 1.1; letter-spacing: -0.032em; color: var(--color-ink);
+    text-wrap: balance;
   }
-  .phase-pending {
-    margin-top: clamp(1.75rem, 4vw, 2.5rem); max-width: 60ch;
-    border-radius: var(--radius-panel);
+  .phase-report-head h1 b { font-weight: 700; }
+  .phase-report-standing { margin-top: 1rem; }
+  .phase-report-none {
+    margin-top: 0.8rem; max-width: 52ch;
+    font-size: 0.9rem; line-height: 1.6; color: var(--color-ink-muted);
+  }
+
+  .phase-instruments {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.3fr);
+    gap: clamp(1.25rem, 3vw, 2.25rem); align-items: start;
+    margin-top: clamp(1.75rem, 4vw, 2.5rem);
+    border-radius: var(--radius-xl);
+    background: var(--color-surface); box-shadow: var(--shadow-lift);
+    padding: clamp(1.25rem, 3vw, 2rem);
+  }
+  .phase-instrument { min-width: 0; display: grid; gap: 0.7rem; align-content: start; }
+  .phase-instrument > .cap { margin-bottom: 0.1rem; }
+  .phase-instrument-note {
+    font-size: 0.75rem; line-height: 1.55; color: var(--color-ink-faint); max-width: 40ch;
+  }
+  .phase-instrument-badge { display: grid; justify-items: center; }
+
+  .phase-contrast {
+    margin-top: clamp(1.5rem, 3.5vw, 2rem); max-width: 62ch;
+    font-size: 1.02rem; line-height: 1.65; color: var(--color-ink);
+  }
+  .phase-contrast-more { margin-top: 0.6rem; }
+  .phase-contrast-more summary {
+    width: max-content; cursor: pointer;
+    font-size: 0.78rem; font-weight: 650; color: var(--color-ink-muted);
+    transition: color 130ms ease;
+  }
+  .phase-contrast-more summary:hover { color: var(--color-ink); }
+  .phase-contrast-more p {
+    margin-top: 0.5rem; font-size: 0.85rem; line-height: 1.6; color: var(--color-ink-muted);
+  }
+
+  .phase-stack { margin-top: clamp(2.25rem, 5vw, 3.25rem); }
+  .phase-stack > .cap { display: block; margin-bottom: 0.75rem; }
+
+  .phase-example {
+    display: grid; grid-template-columns: auto minmax(0, 1fr);
+    gap: 1.1rem; align-items: start; margin-top: 0.4rem;
+  }
+  .phase-example figcaption { display: grid; gap: 0.35rem; align-content: start; }
+  .phase-example p {
+    max-width: 38ch; font-size: 0.85rem; line-height: 1.6; color: var(--color-ink-muted);
+  }
+  .phase-example p b { font-weight: 680; color: var(--color-ink); }
+
+  .phase-when { margin-top: clamp(2.25rem, 5vw, 3.25rem); }
+  .phase-when h2 {
+    max-width: 30ch;
+    font-size: clamp(1.15rem, 2.4vw, 1.5rem); font-weight: 650;
+    letter-spacing: -0.022em; line-height: 1.2; color: var(--color-ink);
+    text-wrap: balance; font-variant-numeric: tabular-nums;
+  }
+  .phase-when .shape-bars { margin-top: 1.25rem; }
+  .shape-bars.is-compact { height: clamp(72px, 10vw, 104px); max-width: 42rem; }
+  .shape-note {
+    margin-top: 0.7rem; max-width: 52ch;
+    font-size: 0.75rem; line-height: 1.5; color: var(--color-ink-faint);
+  }
+
+  .phase-act { margin-top: clamp(2.25rem, 5vw, 3.25rem); max-width: 46rem; }
+
+  @media (max-width: 900px) {
+    .phase-instruments { grid-template-columns: minmax(0, 1fr); }
+    .phase-instrument-badge { justify-items: start; }
+  }
+  @media (max-width: 720px) {
+    .cone-phases.is-tiles { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .phase-example { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gauge-value.is-grown { animation: none; }
+    .phase-node:hover { transform: none; }
+    .deck-card:hover, .deck-card:active { transform: none; }
+  }
+
+
+  /* -- where your games go wrong ------------------------------------------
+     One page, opening to endgame, and the scroll is the shape of a game. Each
+     phase is the same three things in the same order, so the second and third
+     are read without being learned again. */
+  .path-shell {
+    max-width: 1160px; margin: 0 auto;
+    padding: clamp(2rem, 5vw, 3rem) 1.5rem 7rem;
+  }
+  .path-head { max-width: 34ch; }
+  .path-head h1 {
+    font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 660;
+    letter-spacing: -0.035em; line-height: 1.08; color: var(--color-ink);
+    text-wrap: balance;
+  }
+  .path-head p {
+    margin-top: 0.6rem; font-size: 0.95rem; color: var(--color-ink-muted);
+  }
+  .path-empty { margin-top: 2.5rem; max-width: 34rem; }
+
+  /* The break between phases is the largest on the page, because it is the
+     one place the reader moves from one part of a game to the next. Anchored
+     scrolling lands under the sticky bar rather than behind it. */
+  .path-part {
+    margin-top: clamp(3.5rem, 8vw, 6rem);
+    scroll-margin-top: 5rem;
+  }
+  .path-part-empty { margin-top: 1.5rem; max-width: 34rem; }
+  .path-part-split { margin-top: clamp(2rem, 4vw, 2.75rem); max-width: 34rem; }
+  .path-part-when { margin-top: clamp(2rem, 4vw, 2.75rem); }
+  .path-part-when h3 {
+    margin-bottom: 0.9rem;
+    font-size: 0.95rem; font-weight: 620; color: var(--color-ink);
+    letter-spacing: -0.01em;
+  }
+  .path-part-more { margin-top: 1.5rem; }
+  .path-part-more a {
+    font-size: 0.92rem; font-weight: 620; color: var(--color-accent);
+  }
+  .path-part-more a:hover { text-decoration: underline; }
+
+  /* -- the canvas ---------------------------------------------------------
+     `/path` is not a document. One space, three places in it, and a camera
+     that travels between them. Nothing scrolls: the viewport is pinned and
+     the world moves under it.
+
+     The world is anchored at its own origin (`left/top: 50%`,
+     `transform-origin: 0 0`) so a world coordinate maps to the viewport
+     centre plus `translate(x, y) scale(s)`. Everything inside is placed at a
+     plain world coordinate, and `PathCanvas` derives all three transform
+     channels from one progress value so the framing holds mid-flight.
+
+     The route carries no product nav, so the canvas owns the whole screen. */
+  .path-main { position: relative; }
+  .canvas {
+    position: relative; overflow: hidden;
+    height: 100dvh;
+    touch-action: none;
+    /* Ground rather than page: a warm field, a soft centre, and a fine grid
+       that gives the space somewhere to be. The grid is the only texture -
+       it reads as a surface at every zoom and never competes with a mark. */
+    background:
+      radial-gradient(ellipse 70% 55% at 50% 42%, rgba(255, 255, 255, 0.85) 0%, transparent 70%),
+      linear-gradient(var(--color-line) 1px, transparent 1px) 0 0 / 64px 64px,
+      linear-gradient(90deg, var(--color-line) 1px, transparent 1px) 0 0 / 64px 64px,
+      var(--color-bg);
+  }
+  .canvas-world {
+    position: absolute; left: 50%; top: 50%;
+    transform-origin: 0 0;
+    will-change: transform;
+  }
+  .canvas-wires { position: absolute; overflow: visible; pointer-events: none; }
+  /* The road out of a place. Dashed because it is a route rather than a
+     measurement, and painted with a gradient that fades it to nothing before
+     it reaches anywhere - see `roadOut` for why it never arrives. */
+  .canvas-road {
+    stroke-width: 4; stroke-dasharray: 2 22; stroke-linecap: round;
+  }
+  /* The climb, drawn as a made road: a wide bed with a lighter surface on
+     top, so a path has edges instead of being one stroke. */
+  /* The route: one dotted line in the brand's colour, and nothing else.
+     It was a wide grey bed under a white surface under a centre-line - a lot
+     of road for a canvas whose only other marks are circles, and the stops
+     sat on top of it rather than being threaded onto it. A single dotted line
+     running behind every face reads as one object. Round caps make the dots
+     dots rather than dashes. */
+  .canvas-route {
+    stroke: var(--color-accent); stroke-width: 4.5;
+    stroke-linecap: round; stroke-dasharray: 0.1 14;
+    opacity: 0.9;
+  }
+  .canvas-route.is-locked { stroke: var(--color-line-strong); opacity: 0.8; }
+
+  /* -- an entrance --------------------------------------------------------
+     Big, round, pressable, and standing on a plinth. It counts this player's
+     own waiting evidence and never a percentage: a ring filled to 72% under
+     the word "Opening" says the opening is 72% complete, and nothing here is
+     completable. The measured rate is on the panel instead. */
+  .orb {
+    position: absolute; transform: translate(-50%, -50%);
+    display: grid; justify-items: center; row-gap: 1rem;
+    width: 16rem; padding: 0; border: 0; background: none; cursor: pointer;
+  }
+  .orb-face {
+    display: grid; place-items: center;
+    width: 208px; height: 208px; border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    box-shadow:
+      0 0 0 3px var(--color-ink-block),
+      0 10px 0 0 var(--color-ink-block),
+      0 26px 44px -18px rgba(35, 33, 29, 0.45);
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .orb-face .pathmark { width: 6.5rem; height: 6.5rem; }
+  .orb:hover .orb-face { transform: translateY(-5px); }
+  .orb:active .orb-face {
+    transform: translateY(6px);
+    box-shadow: 0 0 0 3px var(--color-ink-block), 0 4px 0 0 var(--color-ink-block);
+  }
+  .orb:focus-visible { outline: none; }
+  .orb:focus-visible .orb-face { outline: 3px solid var(--color-accent); outline-offset: 6px; }
+  .orb.is-here .orb-face { background: var(--color-accent-wash); }
+  .orb-label { display: grid; justify-items: center; row-gap: 0.2rem; text-align: center; }
+  .orb-label b {
+    font-size: 1.6rem; font-weight: 680; letter-spacing: -0.03em; color: var(--color-ink);
+  }
+  .orb-label small { font-size: 0.92rem; color: var(--color-ink-faint); }
+
+  /* -- a territory --------------------------------------------------------
+     Its name and everything measured about it, standing at the head of its
+     own path. This was a card pinned to the corner of the screen - the shape
+     of a default modal, hovering over the world rather than belonging to it
+     and saying nothing about where you were. It is still not among the stops:
+     a measurement set on the route would read as a thing to complete. */
+  .region {
+    position: absolute; transform: translate(-50%, -50%);
+    width: 30rem; display: grid; justify-items: center; row-gap: 0.5rem;
+  }
+  .region h2 {
+    font-size: 2.6rem; font-weight: 680; letter-spacing: -0.04em; color: var(--color-ink);
+  }
+  .region > p { font-size: 1rem; color: var(--color-ink-faint); }
+  .region-none { font-size: 0.95rem; color: var(--color-ink-muted); }
+  .region-stats {
+    margin-top: 0.9rem; width: 100%;
+    display: grid; row-gap: 1rem;
+    padding: 1.25rem 1.4rem;
+    background: var(--color-surface); border-radius: var(--radius-panel);
+    /* The canvas's own object language: outline and plinth, like a stop. */
+    box-shadow:
+      0 0 0 3px var(--color-ink-block),
+      0 8px 0 0 var(--color-ink-block),
+      0 22px 34px -18px rgba(35, 33, 29, 0.4);
+  }
+  .region-figure {
+    display: grid; grid-template-columns: auto minmax(0, 1fr);
+    align-items: center; gap: 1rem;
+  }
+  .region-read { display: grid; row-gap: 0.1rem; text-align: left; }
+  .region-read span { font-size: 0.85rem; color: var(--color-ink-muted); }
+  .region-read b {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 1.9rem; font-weight: 700; letter-spacing: -0.025em; color: var(--color-ink);
+  }
+  .region-read small {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.76rem; color: var(--color-ink-faint);
+  }
+  .region-split { display: grid; row-gap: 0.5rem; }
+  .region-bar {
+    display: flex; height: 0.65rem; border-radius: var(--radius-pill);
+    overflow: hidden; background: var(--color-surface-2);
+    box-shadow: 0 0 0 2px var(--color-ink-block);
+  }
+  .region-bar .is-handled { background: var(--color-win); }
+  .region-bar .is-missed { background: var(--color-loss); }
+  /* Hatched: colouring a moment nobody got to answer either way counts it. */
+  .region-bar .is-aside {
+    background: repeating-linear-gradient(
+      45deg, var(--color-line-strong) 0 3px, transparent 3px 6px
+    );
+  }
+  .region-key {
+    display: flex; flex-wrap: wrap; gap: 0.25rem 0.9rem;
+    font-size: 0.76rem; color: var(--color-ink-faint);
+  }
+  .region-key li { display: flex; align-items: center; gap: 0.35rem; }
+  .region-key i { width: 0.55rem; height: 0.55rem; border-radius: 2px; flex: none; }
+  .region-key .is-handled { background: var(--color-win); }
+  .region-key .is-missed { background: var(--color-loss); }
+  .region-key .is-aside {
+    background: repeating-linear-gradient(
+      45deg, var(--color-line-strong) 0 2px, transparent 2px 4px
+    );
+  }
+  .region-facts { display: grid; row-gap: 0.4rem; }
+  .region-facts > div {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+    font-size: 0.82rem; color: var(--color-ink-muted);
+  }
+  .region-facts dd { font-weight: 640; color: var(--color-ink); }
+  .region-facts dd.is-improved, .region-facts dd.is-gaining { color: var(--color-win); }
+  .region-facts dd.is-declined, .region-facts dd.is-slipping { color: var(--color-loss); }
+
+  /* -- a stop -------------------------------------------------------------
+     A face, and its name BESIDE it. The route swings left and right down the
+     middle of a territory, and a name centred under each face sits directly
+     on the line to the next stop, so the type ran through the road at every
+     step. Hanging the name off the outer side of the swing keeps the middle
+     clear and gives the eye one column of text rather than a zigzag. */
+  /* The slot is a point in the world; the face is centred on it and the name
+     hangs outside. Laying the two out as a flex row instead centred the *pair*
+     on the coordinate, which pushed every face off its own stop - and, because
+     an absolutely positioned row shrink-wraps, squeezed the names down to
+     four characters a line. */
+  .stop-slot { position: absolute; width: 0; height: 0; }
+  .stop {
+    position: absolute; transform: translate(-50%, -50%);
+    width: 90px; height: 90px;
+    padding: 0; border: 0; background: none; cursor: pointer;
+  }
+  .stop.is-inert { cursor: default; }
+  .stop-face {
+    position: relative;
+    display: grid; place-items: center;
+    width: 100%; height: 100%; border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    box-shadow:
+      0 0 0 3px var(--color-ink-block),
+      0 8px 0 0 var(--color-ink-block),
+      0 20px 30px -16px rgba(35, 33, 29, 0.4);
+    transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .pathmark { width: 2.7rem; height: 2.7rem; }
+  .stop:not(.is-inert):hover .stop-face { transform: translateY(-4px); }
+  .stop:not(.is-inert):active .stop-face {
+    transform: translateY(5px);
+    box-shadow: 0 0 0 3px var(--color-ink-block), 0 3px 0 0 var(--color-ink-block);
+  }
+  .stop:focus-visible { outline: none; }
+  .stop:focus-visible .stop-face { outline: 3px solid var(--color-accent); outline-offset: 6px; }
+  .stop-name {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 11.5rem;
+    font-size: 1.02rem; font-weight: 640; letter-spacing: -0.02em;
+    color: var(--color-ink); line-height: 1.25; text-wrap: balance;
+  }
+  .stop-stars { display: flex; gap: 0.15rem; margin-top: 0.3rem; }
+  .stop.is-left .stop-stars { justify-content: flex-end; }
+  .pathstar { width: 0.95rem; height: 0.95rem; }
+  .stop.is-right .stop-name { left: calc(100% + 1rem); text-align: left; }
+  .stop.is-left .stop-name { right: calc(100% + 1rem); text-align: right; }
+
+  /* Where you are: the start of the path, in the brand's own colour. Exactly
+     one accented stop per territory - an active node and a quiet path. */
+  .stop.is-first .stop-face {
+    background: var(--color-accent-wash);
+    box-shadow:
+      0 0 0 3px var(--color-accent),
+      0 8px 0 0 var(--color-accent),
+      0 20px 34px -14px rgba(184, 68, 29, 0.5);
+  }
+
+  /* Finished, and only ever from stored progress. Nothing here is awarded for
+     effort: a stop goes green because something recorded that it was done. */
+  .stop.is-done .stop-face { background: var(--color-surface); }
+  .stop-done {
+    position: absolute; right: -4px; bottom: -4px;
+    display: grid; place-items: center;
+    width: 34px; height: 34px; border-radius: var(--radius-pill);
+    background: var(--color-win);
+    box-shadow: 0 0 0 3px var(--color-ink-block);
+  }
+  .stop-done .pathmark { width: 1.15rem; height: 1.15rem; }
+  .stop-done .pathmark path { stroke: #ffffff; }
+
+  /* Locked ground: the path continues, and Forma will not pretend to know
+     with what. Faded rather than hidden, so the route has somewhere to go. */
+  .stop.is-locked { opacity: 0.4; }
+  .stop.is-locked .stop-face {
+    background: var(--color-surface-2);
+    box-shadow: 0 0 0 3px var(--color-line-strong), 0 6px 0 0 var(--color-line-strong);
+  }
+  .stop.is-locked .stop-name { color: var(--color-ink-faint); font-weight: 560; }
+
+  /* -- chrome over the canvas --------------------------------------------- */
+  .canvas-back {
+    position: absolute; left: 1.5rem; top: 1.5rem;
+    display: grid; place-items: center;
+    width: 3rem; height: 3rem; border: 0; border-radius: var(--radius-pill);
     background: var(--color-surface); box-shadow: var(--shadow-soft);
-    padding: clamp(1.25rem, 3vw, 1.9rem);
+    color: var(--color-ink); cursor: pointer;
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms ease;
   }
-  .phase-pending h2 {
-    font-size: 1.02rem; font-weight: 640; letter-spacing: -0.018em; color: var(--color-ink);
+  .canvas-back .pathmark { width: 1.5rem; height: 1.5rem; }
+  .canvas-back:hover { transform: translateX(-2px); box-shadow: var(--shadow-lift); }
+  .canvas-head { position: absolute; left: 5.4rem; top: 1.6rem; max-width: 22rem; }
+  .canvas-head h1 {
+    font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 680;
+    letter-spacing: -0.03em; color: var(--color-ink);
   }
-  .phase-pending > p {
-    margin-top: 0.5rem; font-size: 0.88rem; line-height: 1.6; color: var(--color-ink-muted);
+  .canvas-head p { margin-top: 0.25rem; font-size: 0.95rem; color: var(--color-ink-faint); }
+
+  /* A stop, opened.
+     Three quarters of the screen, with the canvas sliding left rather than
+     shrinking - a column the width of a sidebar could not hold a board at
+     reading size, and a board is the whole point of a review. */
+  /* `overflow: visible` so the edge control can straddle the seam; the
+     scrolling moved inside to the content. */
+  .stop-sheet {
+    position: absolute; right: 0; top: 0; bottom: 0;
+    width: 75%; min-width: 22rem;
+    background: var(--color-surface);
+    box-shadow: -30px 0 60px -30px rgba(35, 33, 29, 0.35);
   }
-  .phase-pending ul {
-    margin-top: 1.1rem; display: flex; flex-direction: column; gap: 0.55rem;
+  .stop-sheet-inner {
+    height: 100%; overflow-y: auto;
+    padding: clamp(2rem, 5vw, 3.5rem) clamp(1.5rem, 4vw, 3rem);
+    display: grid; row-gap: clamp(1.5rem, 3vw, 2.25rem); align-content: start;
+    justify-items: start;
   }
-  .phase-pending li {
-    position: relative; padding-left: 1.1rem;
-    font-size: 0.85rem; line-height: 1.5; color: var(--color-ink-muted);
+  .stop-sheet-inner > * { max-width: 58rem; width: 100%; }
+  /* On the seam, in the canvas's own object language: outline and plinth, the
+     same as a stop. It is the way back to the path, so it looks like the path. */
+  .stop-sheet-edge {
+    position: absolute; left: -26px; top: 50%; z-index: 3;
+    display: grid; place-items: center;
+    width: 52px; height: 52px; border: 0; border-radius: var(--radius-pill);
+    background: var(--color-surface); color: var(--color-ink);
+    box-shadow:
+      0 0 0 3px var(--color-ink-block),
+      0 6px 0 0 var(--color-ink-block),
+      0 16px 26px -14px rgba(35, 33, 29, 0.45);
+    cursor: pointer;
+    transform: translateY(-50%);
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .phase-pending li::before {
-    content: ""; position: absolute; left: 0; top: 0.55em;
-    width: 0.3rem; height: 0.3rem; border-radius: 2px;
-    background: color-mix(in srgb, var(--color-accent) 55%, var(--color-surface));
+  .stop-sheet-edge .pathmark { width: 1.5rem; height: 1.5rem; transform: rotate(180deg); }
+  .stop-sheet-edge:hover { transform: translateY(-50%) translateX(3px); }
+  .stop-sheet-edge:active { transform: translateY(calc(-50% + 4px)); }
+  .stop-sheet-edge:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 4px; }
+  .stop-sheet-head { display: grid; row-gap: 0.5rem; justify-items: start; }
+  .stop-sheet-head h2 {
+    font-size: clamp(1.8rem, 3.4vw, 2.6rem); font-weight: 680;
+    letter-spacing: -0.035em; line-height: 1.05; color: var(--color-ink);
+    text-wrap: balance;
   }
-  .phase-pending .secondary-button { margin-top: 1.4rem; }
+  .stop-sheet-sub {
+    font-size: 1.02rem; line-height: 1.5; color: var(--color-ink-muted);
+    max-width: 46ch;
+  }
+  .stop-sheet-body {
+    display: grid; grid-template-columns: auto minmax(0, 1fr);
+    gap: clamp(1.5rem, 4vw, 3rem); align-items: start;
+  }
+  .stop-sheet-board figcaption {
+    margin-top: 0.85rem; max-width: 420px;
+    font-size: 0.86rem; line-height: 1.55; color: var(--color-ink-faint);
+  }
+  .stop-sheet-side { display: grid; row-gap: 1.1rem; align-content: start; }
+  .stop-sheet-detail {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 0.86rem; color: var(--color-ink-muted);
+  }
+  .stop-sheet-def {
+    font-size: 0.98rem; line-height: 1.6; color: var(--color-ink-muted);
+    max-width: 44ch;
+  }
+  .stop-sheet-facts { display: grid; row-gap: 0.6rem; }
+  .stop-sheet-facts > div {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 1rem; padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .stop-sheet-facts dt { font-size: 0.88rem; color: var(--color-ink-muted); }
+  .stop-sheet-facts dd { font-size: 0.95rem; font-weight: 640; color: var(--color-ink); }
+  .stop-sheet-go { justify-self: start; margin-top: 0.35rem; }
+
+  @media (max-width: 900px) {
+    .stop-sheet { width: 100%; min-width: 0; }
+    .stop-sheet-body { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .stop-sheet-done {
+    justify-self: start;
+    padding: 0.25rem 0.7rem; border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--color-win) 15%, transparent);
+    color: var(--color-win); font-size: 0.78rem; font-weight: 640;
+  }
+  .stop-sheet-caption {
+    font-size: 0.82rem; line-height: 1.5; color: var(--color-ink-faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orb-face, .stop-face, .canvas-back { transition: none; }
+    .orb:hover .orb-face, .stop:hover .stop-face, .canvas-back:hover { transform: none; }
+  }
+
+  /* -- one phase, as one block --------------------------------------------
+     The reading and the position that illustrates it, side by side. They were
+     two stacked two-column grids, one hugging the left edge and one hugging
+     the right, with a column of empty page down the middle of both; pairing
+     them puts the board beside the thing it is evidence for. */
+  .phase-block {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    gap: clamp(1.5rem, 4vw, 3.5rem); align-items: start;
+  }
+  .phase-block-copy { min-width: 0; max-width: 44ch; }
+  .phase-block-board { justify-self: end; }
+  .phase-block-board figcaption {
+    margin-top: 0.85rem; max-width: 300px;
+    font-size: 0.84rem; line-height: 1.55; color: var(--color-ink-muted);
+    text-wrap: pretty;
+  }
+  .phase-block-board figcaption b {
+    font-family: var(--font-mono); font-weight: 700; color: var(--color-ink);
+  }
+  @media (max-width: 940px) {
+    .phase-block { grid-template-columns: minmax(0, 1fr); }
+    .phase-block-copy { max-width: none; }
+    .phase-block-board { justify-self: start; }
+  }
+
+  /* The chance this phase costs you most. Sits under the phase reading in the
+     same column, so the two read as one statement narrowing. */
+  .lead-chance { margin-top: clamp(1.5rem, 3vw, 2.25rem); }
+  .lead-chance-kicker {
+    font-size: 0.86rem; font-weight: 500; color: var(--color-ink-muted);
+  }
+  .lead-chance h3 {
+    margin-top: 0.35rem; max-width: 20ch;
+    font-size: clamp(1.25rem, 2.6vw, 1.6rem); font-weight: 650;
+    letter-spacing: -0.026em; line-height: 1.14; color: var(--color-ink);
+    text-wrap: balance;
+  }
+  .lead-chance h3 small {
+    display: block; margin-top: 0.2rem;
+    font-size: 0.86rem; font-weight: 500; letter-spacing: 0;
+    color: var(--color-ink-muted);
+  }
+  .lead-chance .move-chip { margin-top: 0.75rem; }
+  .lead-chance-figure {
+    display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap;
+    margin-top: 0.7rem;
+  }
+  .lead-chance-figure b {
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+    font-size: 1.8rem; font-weight: 700; letter-spacing: -0.04em;
+    color: var(--color-ink); line-height: 1;
+  }
+  .lead-chance-figure span {
+    font-family: var(--font-mono); font-size: 0.78rem;
+    color: var(--color-ink-faint); font-variant-numeric: tabular-nums;
+  }
+
+  /* -- everything else in this phase, closed ------------------------------- */
+  .phase-rest { margin-top: clamp(1.75rem, 4vw, 2.5rem); }
+  .phase-rest-toggle {
+    display: inline-flex; align-items: center; min-height: 2.75rem;
+    padding: 0 1.1rem; border-radius: var(--radius-pill);
+    background: var(--color-surface); box-shadow: var(--shadow-soft);
+    font-size: 0.84rem; font-weight: 620; color: var(--color-ink);
+    transition: background 150ms ease, box-shadow 150ms ease;
+  }
+  .phase-rest-toggle:hover { background: var(--color-surface-2); box-shadow: var(--shadow-lift); }
+  .phase-rest-list { margin-top: 0.9rem; display: grid; gap: 2px; }
+  .phase-rest-row {
+    display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto;
+    align-items: center; gap: 0.9rem;
+    padding: 0.65rem 0.9rem; border-radius: var(--radius-control);
+    background: var(--color-surface);
+  }
+  .phase-rest-dial { display: grid; place-items: center; width: 44px; height: 44px; }
+  .phase-rest-dial .dial svg { filter: none; }
+  .phase-rest-name {
+    min-width: 0; font-size: 0.92rem; font-weight: 620;
+    letter-spacing: -0.012em; color: var(--color-ink);
+  }
+  .phase-rest-name small {
+    display: block; margin-top: 0.08rem;
+    font-size: 0.72rem; font-weight: 500; letter-spacing: 0;
+    color: var(--color-ink-faint);
+  }
+  .phase-rest-move { display: grid; }
+  .phase-rest-move .move-chip { margin-top: 0; font-size: 0.68rem; padding: 0.18rem 0.55rem 0.2rem; }
+  .phase-rest-count {
+    font-size: 0.8rem; color: var(--color-ink-faint); white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .phase-rest-count b { font-size: 0.95rem; color: var(--color-ink); }
+  @media (max-width: 620px) {
+    .phase-rest-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
+    .phase-rest-move { grid-column: 2 / -1; }
+  }
+
+  /* -- the one action at the foot of the page ------------------------------ */
+  .path-act {
+    margin-top: clamp(3.5rem, 8vw, 6rem);
+    display: grid; justify-items: start;
+  }
+  .path-act h2 {
+    font-size: clamp(1.3rem, 2.6vw, 1.7rem); font-weight: 650;
+    letter-spacing: -0.025em; color: var(--color-ink);
+  }
+  .path-act p {
+    margin-top: 0.5rem; font-size: 0.95rem; color: var(--color-ink-muted);
+  }
+  .path-act .primary-button { margin-top: 1.35rem; }
+
+  /* The lines page names itself now that it is a detail rather than the
+     opening's own front door. */
+  .tsheet-head { max-width: 34ch; margin-bottom: clamp(1.5rem, 3vw, 2.25rem); }
+  .tsheet-head h1 {
+    font-size: clamp(1.6rem, 3.4vw, 2.2rem); font-weight: 660;
+    letter-spacing: -0.032em; line-height: 1.1; color: var(--color-ink);
+  }
+  .tsheet-head p {
+    margin-top: 0.5rem; font-size: 0.95rem; color: var(--color-ink-muted);
+  }
+
+  /* -- practice ----------------------------------------------------------- */
+  .practice-shell {
+    max-width: 1160px; margin: 0 auto; padding: clamp(2rem, 5vw, 3.25rem) 1.5rem 7rem;
+  }
+  .practice-head h1 {
+    font-size: clamp(1.6rem, 3.4vw, 2.1rem); font-weight: 650;
+    letter-spacing: -0.028em; color: var(--color-ink);
+  }
+  .practice-head p {
+    margin-top: 0.55rem; font-size: 0.92rem; color: var(--color-ink-muted);
+  }
+  .practice-head .figure {
+    font-family: var(--font-mono); font-weight: 700; color: var(--color-ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .practice-empty { margin-top: clamp(1.75rem, 4vw, 2.5rem); max-width: 34rem; }
+  .practice-review-note {
+    margin-top: 0.5rem; font-family: var(--font-mono); font-size: 0.7rem;
+    color: var(--color-ink-faint);
+  }
 
   .line-showmore {
     margin-top: 0.9rem; padding: 0.45rem 0.9rem;
@@ -1593,10 +3037,6 @@
   }
   .line-showmore:hover { color: var(--color-ink); background: var(--color-surface); }
 
-  @keyframes line-sq-in {
-    from { opacity: 0; transform: translateY(-2px) scale(0.86); }
-    to { opacity: 1; transform: none; }
-  }
   @keyframes line-panel-in {
     from { opacity: 0; transform: translateY(-6px); }
     to { opacity: 1; transform: none; }
@@ -1652,10 +3092,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .line-sq, .line-panel-inner { animation: none; }
-    .line-sq.is-marked::after { animation: none; opacity: 0.22; }
-    .line-instrument .line-sq:not(:disabled):hover,
-    .line-instrument .line-sq:not(:disabled):focus-visible { transform: none; }
+    .line-panel-inner { animation: none; }
     .line-practice:hover, .line-practice:active { transform: none; }
   }
 
@@ -1948,11 +3385,17 @@
     border-radius: 12px;
     box-shadow: var(--shadow-float);
   }
+  /* Outline only.
+     This rule used to add a `box-shadow` halo and a `border-radius: 4px`, and
+     both were destructive rather than additive: `box-shadow` replaces the
+     element's own, so a focused button lost its plinth and appeared to drop
+     four pixels, a focused card lost its elevation, and every rounded control
+     squared off to 4px for as long as it held focus. An outline is drawn
+     outside the box, follows the element's real radius on its own, and cannot
+     disturb anything it rings. */
   :is(a, button, summary, select):focus-visible {
-    outline: 2px solid var(--color-ink);
+    outline: 3px solid var(--color-accent);
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 55%, transparent);
-    border-radius: 4px;
   }
 }
 
@@ -1977,7 +3420,9 @@
   .dashboard-main { padding-inline: 1rem; }
   .product-header > div { gap: 0.4rem; padding: 0 0.75rem; }
   .product-mark { font-size: 0.72rem; }
-  .product-header nav a { padding: 0 0.55rem; font-size: 0.68rem; }
+  /* Narrower, not shorter. Zeroing the vertical padding collapsed the three
+     most-pressed controls in the product to the height of their 17px icon. */
+  .product-header nav a { padding: 0.5rem 0.55rem; font-size: 0.68rem; }
   .opening-review-shell { padding: 2rem 1rem 5rem; }
   .opening-review-header { display: block; }
   .opening-review-header > .text-link { margin-top: 1.5rem; }
@@ -2257,10 +3702,13 @@
   .play-status.is-yours { box-shadow: inset 0 0 0 1.5px var(--color-accent), var(--shadow-soft); }
   .play-turn { font-size: 0.95rem; font-weight: 650; }
   .play-you { color: var(--color-ink-faint); font-size: 0.72rem; text-transform: capitalize; }
+  /* Ink on the wash. `--color-accent-ink` is the text colour for a SOLID
+     accent fill; on a 12% wash it computed to near-white on near-white, about
+     1.1:1, so every game-over message on this page was invisible. */
   .play-result {
-    margin-top: 0.75rem; border: 1px solid var(--color-accent); border-radius: var(--radius-control);
-    background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
-    color: var(--color-accent-ink); padding: 0.7rem 0.9rem; font-weight: 800; font-size: 0.88rem;
+    margin-top: 0.75rem; border-radius: var(--radius-control);
+    background: var(--color-accent-wash);
+    color: var(--color-ink); padding: 0.7rem 0.9rem; font-weight: 700; font-size: 0.88rem;
   }
   .play-strength {
     display: grid; gap: 0.35rem; margin-top: 1rem;
@@ -2271,7 +3719,7 @@
     background: var(--color-surface-2); color: var(--color-ink); padding: 0 0.7rem; font-size: 0.85rem;
     box-shadow: var(--shadow-flat);
   }
-  .play-strength select:focus { outline: 0; box-shadow: 0 0 0 2px var(--color-accent); }
+  .play-strength select:focus { outline: 2px solid var(--color-accent); outline-offset: 2px; }
   .play-moves { margin-top: 1rem; }
   .play-moves .movelist-cell.is-empty { pointer-events: none; }
   .play-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.1rem; }
@@ -2337,9 +3785,12 @@
     background: var(--color-surface-2); color: var(--color-ink); padding: 0 0.7rem; font-size: 0.85rem;
     font-variant-numeric: tabular-nums; box-shadow: var(--shadow-flat);
   }
-  .move-input-field:focus { outline: 0; box-shadow: 0 0 0 2px var(--color-accent); }
+  .move-input-field:focus { outline: 2px solid var(--color-accent); outline-offset: 2px; }
   .move-input-field:disabled { opacity: 0.5; }
-  .move-input .secondary-button { height: 2.4rem; padding-inline: 1rem; }
+  /* No height override. `.secondary-button`'s own 2.75rem minimum exists so
+     a finger can hit it; forcing 2.4rem here put the Play control back under
+     the touch floor. */
+  .move-input .secondary-button { padding-inline: 1rem; }
   .move-input-err { flex-basis: 100%; color: oklch(0.52 0.17 28); font-size: 0.76rem; font-weight: 600; }
   .train-result-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
   .train-score {
@@ -2386,17 +3837,27 @@
   .lessons-group-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-ink-muted); margin-bottom: 0.9rem; }
   .lessons-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 0.9rem; }
   .lesson-card {
-    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
-    border-radius: var(--radius-control); background: var(--color-surface);
-    padding: 1rem 1.1rem; box-shadow: var(--shadow-soft); transition: transform 120ms ease, box-shadow 120ms ease;
+    display: flex; align-items: center; gap: 0.9rem;
+    border-radius: var(--radius-panel); background: var(--color-surface);
+    padding: 1rem 1.1rem; box-shadow: var(--shadow-soft);
+    transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
   }
   .lesson-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); }
-  .lesson-card-body { min-width: 0; }
-  .lesson-family { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-ink-faint); }
-  .lesson-card strong { display: block; margin-top: 0.2rem; font-size: 1.02rem; font-weight: 800; }
+  /* The piece, in a recessed well: the app's own vectors, so the library
+     never reads as a different product from the board it teaches. */
+  .lesson-mark {
+    flex-shrink: 0; display: grid; place-items: center;
+    width: 2.9rem; height: 2.9rem;
+    border-radius: var(--radius-control); background: var(--color-surface-2);
+  }
+  .lesson-mark svg { width: 2.1rem; height: 2.1rem; display: block; }
+  .lesson-card-body { min-width: 0; flex: 1; }
+  .lesson-family { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-ink-faint); font-family: var(--font-mono); }
+  .lesson-card strong { display: block; margin-top: 0.2rem; font-size: 1.02rem; font-weight: 650; letter-spacing: -0.015em; }
   .lesson-card p { margin-top: 0.2rem; color: var(--color-ink-muted); font-size: 0.82rem; line-height: 1.45; }
-  .lesson-cta { display: inline-block; margin-top: 0.55rem; font-size: 0.78rem; font-weight: 800; color: #a85400; }
-  .lesson-cta.is-done { color: #2f7d0b; }
+  .lesson-cta { display: inline-block; margin-top: 0.55rem; font-size: 0.78rem; font-weight: 650; color: var(--color-accent); }
+  .lesson-cta.is-done { color: var(--color-win); }
   .lesson-ring { flex-shrink: 0; }
   .lesson-ideas { margin: 0.75rem 0 0; padding-left: 1.1rem; display: grid; gap: 0.35rem; color: var(--color-ink-muted); font-size: 0.83rem; line-height: 1.5; }
   .lesson-ideas li { list-style: disc; }
@@ -2411,14 +3872,6 @@
     flex-shrink: 0; width: 3.4rem; height: 3.4rem; border-radius: 50%; display: grid; place-items: center;
     background: var(--color-accent); color: #fff; font-weight: 650; font-size: 1.4rem;
   }
-  .account-streak {
-    margin-left: auto; flex-shrink: 0; display: grid; justify-items: center; gap: 0.05rem; text-align: center;
-    border: 1px solid var(--color-line); border-radius: var(--radius-control); padding: 0.55rem 1rem; min-width: 7.5rem;
-  }
-  .account-streak.is-active { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, transparent); }
-  .account-streak strong { font-size: 1.45rem; font-weight: 650; line-height: 1.1; }
-  .account-streak span { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--color-ink-muted); }
-  .account-streak small { margin-top: 0.15rem; font-size: 0.68rem; color: var(--color-ink-faint); }
   .account-empty { margin-top: 2rem; border: 1px dashed var(--color-line); border-radius: var(--radius-control); padding: 1.5rem; color: var(--color-ink-muted); line-height: 1.6; }
   .account-fix {
     display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap;
@@ -2807,9 +4260,13 @@
     padding: 0 0.85rem; font-size: 0.9rem;
     box-shadow: var(--shadow-flat);
   }
+  /* Outline, not box-shadow. `box-shadow` replaces the field's own
+     `--shadow-flat`, so focusing an input stripped its ring and flattened it
+     against the page for as long as it was focused. An outline is drawn
+     outside the box and cannot disturb what it rings. */
   .auth-form input:not([type="radio"]):not([type="checkbox"]):focus {
-    outline: 0; background: var(--color-surface);
-    box-shadow: 0 0 0 2px var(--color-accent);
+    background: var(--color-surface);
+    outline: 2px solid var(--color-accent); outline-offset: 2px;
   }
   .auth-form input::placeholder { color: var(--color-ink-faint); }
   .auth-submit { width: 100%; margin-top: 0.4rem; }
@@ -2833,8 +4290,8 @@
     box-shadow: var(--shadow-flat); resize: vertical; min-height: 6rem;
   }
   .auth-form textarea:focus {
-    outline: 0; background: var(--color-surface);
-    box-shadow: 0 0 0 2px var(--color-accent);
+    background: var(--color-surface);
+    outline: 2px solid var(--color-accent); outline-offset: 2px;
   }
   .auth-form textarea::placeholder { color: var(--color-ink-faint); }
   /* Left, not centred: it sits under the field it explains, and a centred
@@ -2948,7 +4405,7 @@
     box-shadow: var(--shadow-flat);
   }
   .admin-decide input[type="text"]:focus {
-    outline: 0; background: var(--color-surface); box-shadow: 0 0 0 2px var(--color-accent);
+    background: var(--color-surface); outline: 2px solid var(--color-accent); outline-offset: 2px;
   }
   .admin-decide-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
@@ -3058,7 +4515,13 @@
 @media (max-width: 640px) {
   .account-usage-head, .account-usage-accounts li { align-items: flex-start; flex-direction: column; }
   .account-usage-grid { grid-template-columns: 1fr; }
-  .product-header nav a span:not(.nav-ico) { display: none; }
+  /* The labels stay.
+     Hiding them left three tabs identified only by icons that are themselves
+     `aria-hidden`, so on a phone the primary navigation had no accessible
+     name and no visible one either. Three tabs fit at 640px; the type comes
+     down instead. */
+  .product-header nav a span:not(.nav-ico) { font-size: 0.66rem; }
+  .product-header nav a { padding: 0.5rem 0.45rem; gap: 0.3rem; }
   .nav-account small { display: none; }
   .product-back { padding: 0.4rem 0.55rem; }
   .product-back > span:last-child { display: none; }
@@ -3252,7 +4715,11 @@
   }
   .result-win { background: var(--color-win); }
   .result-loss { background: var(--color-loss); }
-  .result-draw { background: var(--color-draw); }
+  /* Its own ink. The shared accent ink measured ~2.9:1 on the draw grey, so
+     a draw was the one result nobody could read - the same per-ground rule the
+     amber chip already takes. The token itself is tuned for board and bar use
+     and is not the thing to change. */
+  .result-draw { background: var(--color-draw); color: var(--color-ink); }
 
   .profile-provenance {
     margin-top: clamp(2.25rem, 5vw, 3.25rem); display: grid; gap: 0.45rem; max-width: 68ch;
@@ -3293,6 +4760,9 @@
 /* ------------------------------------------------------------------ */
 @layer components {
   .cone { margin-top: 1.4rem; display: grid; gap: 1rem; }
+  /* The hub's cut: a shorter plot and a caption that is a mark, not prose. */
+  .cone.is-compact .cone-plot { aspect-ratio: 2.9; }
+  .cone-caption-compact { display: grid; gap: 0.4rem; }
 
   .cone-frame {
     display: grid;
@@ -3324,65 +4794,6 @@
     overflow: hidden;
   }
   .cone-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-
-  .cone-grid { stroke: var(--color-line); stroke-width: 1; }
-  /* Level is the only gridline that means anything, and the band is coloured
-     by which side of it a game has landed on, so it is drawn as a real edge. */
-  .cone-level { stroke: var(--color-line-strong); stroke-width: 1; }
-  .cone-divider {
-    stroke: var(--color-line-strong); stroke-width: 1; stroke-dasharray: 3 4;
-  }
-
-  /* The two semantic colours DESIGN.md allows, and nothing else on this page
-     is coloured. Above level is a game being won, below it a game being lost;
-     the split is what makes an asymmetric band readable as asymmetric. */
-  /* One band, fill plus a same-colour round-joined stroke. The corners are the
-     sampling interval rather than anything that happened in a game, and the
-     spikes where a quarter of the archive swings hard are where a mitre is
-     ugliest — a needle point instead of the turn the data makes. Opaque stroke,
-     so the overlap with the fill does not darken its edge. */
-  /* The distribution takes the accent, the datum stays ink.
-     DESIGN.md lets two things carry colour: the accent, and a semantic result.
-     The band is the spread of an expected score, which is the product's own
-     measure rather than a win or a loss, so it takes the accent — one hue,
-     the same one the cost ramp and the spread row already use. The median and
-     its interval stay ink, because a line a reader is asked to check against
-     level should not be competing with the field it sits in. */
-  .cone-band {
-    fill: color-mix(in srgb, var(--color-accent) 13%, var(--color-surface));
-    stroke: color-mix(in srgb, var(--color-accent) 13%, var(--color-surface));
-    stroke-width: 2; stroke-linejoin: round;
-  }
-  /* The median's interval: the same ink as the line, kept light enough that
-     the line stays the figure and the ribbon qualifies it.
-     A touch above the band's own 13%, never past it — the interval is a
-     secondary reading (how precisely the median is known) sitting inside a
-     primary one (how wide the middle half is), and at the 34% this carried
-     before, a second bin-by-bin-noisy layer outweighed the band it was meant
-     to qualify: two competing textures instead of one shape with a footnote. */
-  .cone-median-interval {
-    fill: color-mix(in srgb, var(--color-accent) 20%, var(--color-surface));
-    stroke: color-mix(in srgb, var(--color-accent) 20%, var(--color-surface));
-    stroke-width: 1.5; stroke-linejoin: round;
-  }
-  .cone-median {
-    stroke: var(--color-ink); stroke-width: 1.5;
-    stroke-linejoin: round; stroke-linecap: round;
-  }
-  .cone-rail-area { fill: color-mix(in srgb, var(--color-accent) 9%, transparent); }
-  .cone-rail-edge {
-    fill: none; stroke: color-mix(in srgb, var(--color-accent) 34%, transparent);
-    stroke-width: 1.25; stroke-linejoin: round; stroke-linecap: round;
-  }
-
-  /* Job: a game is read from the first move to the last, so the graph arrives
-     that way. No fill mode, so the final state is what renders if the
-     animation never runs. */
-  .cone-sweep { animation: cone-sweep 700ms cubic-bezier(0.16, 1, 0.3, 1); }
-  @keyframes cone-sweep {
-    from { clip-path: inset(0 100% 0 0); }
-    to { clip-path: inset(0 0 0 0); }
-  }
 
   .cone figcaption { display: grid; gap: 0.6rem; max-width: 68ch; }
   .cone-finding { font-size: 0.94rem; line-height: 1.65; color: var(--color-ink); }
@@ -3495,12 +4906,19 @@
     font-style: normal; color: var(--color-ink-faint);
   }
 
-  .rate-list { display: grid; gap: 8px; }
+  .rate-list { display: grid; gap: 0.9rem; }
+  /* On the paper, not in cards.
+     `groupMeasures` collapses some sixty estimates into about twenty groups,
+     so this stack was twenty white shadowed cards in a row, then a second
+     stack of finding cards, then a grid of pool cards. Reading down the
+     column for shape is the stated reason the rows are aligned at all, and
+     twenty competing card edges is exactly what stops it. The print
+     stylesheet already stripped them; this is that rule promoted to screen. */
   .rate-row {
-    row-gap: 0.5rem;
-    border-radius: var(--radius-control); padding: 0.95rem 1.1rem;
-    background: var(--color-surface); box-shadow: var(--shadow-soft);
+    row-gap: 0.5rem; padding: 0.85rem 1.1rem;
+    border-radius: var(--radius-control);
   }
+  .rate-row:hover { background: color-mix(in srgb, var(--color-ink) 3%, transparent); }
   .rate-name { display: grid; gap: 0.25rem; justify-items: start; }
   .rate-name strong { font-size: 0.95rem; font-weight: 650; }
 
@@ -3549,12 +4967,8 @@
   }
 
   /* -- conclusions ------------------------------------------------------ */
-  .finding-list { margin-top: 1.1rem; display: grid; gap: 8px; }
-  .finding {
-    display: grid; gap: 0.4rem;
-    border-radius: var(--radius-control); padding: 0.95rem 1.1rem;
-    background: var(--color-surface); box-shadow: var(--shadow-soft);
-  }
+  .finding-list { margin-top: 1.1rem; display: grid; gap: 1.35rem; }
+  .finding { display: grid; gap: 0.4rem; padding: 0.2rem 0; }
   .finding-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; }
   .finding-text { max-width: 68ch; font-size: 0.94rem; line-height: 1.65; }
   .finding-evidence { font-size: 0.76rem; color: var(--color-ink-faint); }
@@ -3564,11 +4978,7 @@
     margin-top: 1.1rem; display: grid; gap: 8px;
     grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   }
-  .pool {
-    display: grid; gap: 0.3rem;
-    border-radius: var(--radius-control); padding: 0.9rem 1rem;
-    background: var(--color-surface); box-shadow: var(--shadow-soft);
-  }
+  .pool { display: grid; gap: 0.3rem; padding: 0.2rem 0; }
   .pool-head { display: flex; align-items: baseline; gap: 0.5rem; }
   .pool-head strong { font-size: 0.9rem; font-weight: 650; text-transform: capitalize; }
   .pool-figure { display: grid; gap: 0.15rem; }
@@ -3604,11 +5014,10 @@
 @layer components {
   .today-verdict { display: grid; gap: 0.7rem; justify-items: start; }
   .today-verdict h1 {
-    max-width: 22ch; font-size: clamp(1.9rem, 4.4vw, 2.9rem);
+    max-width: 20ch; font-size: clamp(2.15rem, 5vw, 3.4rem);
     font-weight: 650; letter-spacing: -0.03em; line-height: 1.08;
   }
-  .today-verdict-standing { font-size: 0.85rem; color: var(--color-ink-muted); }
-  .today-verdict-standing .figure { font-weight: 650; color: var(--color-ink); }
+  .today-verdict-standing { margin-top: 0.35rem; }
   .today-verdict-detail,
   .today-verdict-finding {
     max-width: 68ch; font-size: 0.94rem; line-height: 1.7; color: var(--color-ink);
@@ -3722,7 +5131,13 @@
      The mark sits at the end of the one sentence the figure cannot be read
      without, so it reads as "and the rest is here" rather than as a control
      bolted to the bottom of an instrument. */
+  /* The glyph stays a mark; the target does not.
+     At 17px square this was well under half the 44px a finger needs, and it
+     sits inline in a line of small type where there is no room to grow the
+     visible circle. `::after` gives it a real target without taking any
+     layout, so the mark reads at its own size and still catches a thumb. */
   .fignote-open {
+    position: relative;
     display: inline-grid; place-items: center; vertical-align: -0.18em;
     width: 1.05rem; height: 1.05rem; margin-left: 0.35rem; padding: 0;
     border-radius: 50%; color: var(--color-ink-faint);
@@ -3732,6 +5147,9 @@
   .fignote-open svg {
     width: 100%; height: 100%; fill: none; stroke: currentColor;
     stroke-width: 1.4; stroke-linecap: round;
+  }
+  .fignote-open::after {
+    content: ""; position: absolute; inset: -14px; border-radius: 50%;
   }
   .fignote-open:hover { color: var(--color-ink); background: var(--color-surface-2); }
   .fignote-open:focus-visible {
@@ -3933,10 +5351,20 @@
      to its column up to a cap, so a fourteen column lane does not become a row
      of slabs and a thirty five column one does not become confetti. */
   .today-cell { flex: 1 1 0; min-width: 0; display: flex; justify-content: center; }
+  /* Self-contained now.
+     These squares used to inherit the openings sheet's heat ramp, which has
+     been replaced there by counted bars - so the shared rules went with it.
+     `EngineGraph` draws a different reading (the engine's own evaluation per
+     move, not a mistake rate) and renders only on `/dev/graph`, so it keeps
+     its own squares here rather than reviving a grammar the product dropped. */
   .today-lane .line-sq {
     width: 100%; max-width: 1.35rem; height: auto; aspect-ratio: 1;
     margin: 0 1px; border-radius: 5px;
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-2));
   }
+  .today-lane .line-sq[data-heat="holds"] { background: color-mix(in srgb, var(--color-accent) 24%, var(--color-surface)); }
+  .today-lane .line-sq[data-heat="shaky"] { background: color-mix(in srgb, var(--color-accent) 60%, var(--color-surface)); }
+  .today-lane .line-sq[data-heat="tears"] { background: color-mix(in srgb, var(--color-accent) 88%, var(--color-ink)); }
   .today-lane .line-sq.is-picked { box-shadow: 0 0 0 2px var(--color-line-strong); }
   /* The run the heading names, underlined rather than boxed. A box around each
      of three squares says "these three things"; a rule under them says "this
@@ -4262,7 +5690,7 @@
     background: var(--color-surface); color: var(--color-ink);
     padding: 0 0.85rem; font-size: 0.9rem; box-shadow: var(--shadow-flat);
   }
-  .connect-field input:focus { outline: 0; box-shadow: 0 0 0 2px var(--color-accent); }
+  .connect-field input:focus { outline: 2px solid var(--color-accent); outline-offset: 2px; }
   .connect-field input::placeholder { color: var(--color-ink-faint); }
   .connect-add-go { width: 100%; }
 
@@ -4410,7 +5838,29 @@
 
   /* Job: says the panel is waiting rather than empty. One shared pulse, so
      four ghosts read as one state changing and not four things moving. */
-  .ghost-line, .ghost-board { animation: ghost-breathe 2.4s ease-in-out infinite; }
+  .ghost-line, .ghost-board, .ghost-block {
+    animation: ghost-breathe 2.4s ease-in-out infinite;
+  }
+
+  /* -- the first paint ----------------------------------------------------
+     The root fallback, on the product shell's own measure. See root.tsx for
+     what it replaced and why. */
+  .hydrate-bar {
+    height: 3.5rem;
+    background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  }
+  .hydrate-shell {
+    max-width: 1160px; margin: 0 auto;
+    padding: clamp(2rem, 5vw, 3rem) 1.5rem 0;
+    display: grid; gap: 1.1rem; justify-items: start;
+  }
+  .ghost-block {
+    display: block; border-radius: var(--radius-control);
+    background: var(--color-surface-2);
+  }
+  .ghost-block.is-head { width: min(22ch, 100%); height: 2.4rem; }
+  .ghost-block.is-lead { width: min(34ch, 100%); height: 1.1rem; }
+  .ghost-block.is-body { width: 100%; height: clamp(12rem, 30vh, 20rem); margin-top: 1.5rem; }
   @keyframes ghost-breathe {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.55; }
@@ -4426,14 +5876,14 @@
     align-items: center; gap: 0.9rem;
     padding: 0.9rem 1rem;
   }
-  .today-lead.is-pending h2 { color: var(--color-ink-muted); }
+  .today-act.is-pending h2 { color: var(--color-ink-muted); }
   .today-board.is-pending { display: grid; place-items: center; }
 
   @media (prefers-reduced-motion: reduce) {
     .exam-seg-fill { transition: none; }
     .exam-seg-fill.is-unknown { animation: none; width: 100%; opacity: 0.45; }
     .exam-bar-watch svg { transition: none; }
-    .ghost-line, .ghost-board { animation: none; }
+    .ghost-line, .ghost-board, .ghost-block { animation: none; }
   }
 
   /* -- the introduction --------------------------------------------- */

@@ -3,6 +3,7 @@ import { Today, type LeadTask } from "../components/Today";
 import { Primer } from "../components/onboarding/Primer";
 import { buildCone } from "../lib/trajectory";
 import type { TrajectoryBin } from "../lib/v1/types";
+import { milestones } from "../lib/v1/dashboard";
 import type { Measure, TodayReport } from "../lib/v1/dashboard";
 import type { RecentGame } from "../lib/v1/games";
 import type { GoalProgress, GoalView } from "../lib/v1/goals";
@@ -53,11 +54,14 @@ const BINS: TrajectoryBin[] = [
 
 const measure = (over: Partial<Measure> & { baseKey: string; name: string }): Measure => ({
   role: null,
+  category: "tactical",
   definition: null,
   rate: null,
   intervalLow: null,
   intervalHigh: null,
   sample: 0,
+  took: 0,
+  missed: 0,
   coverageStatus: "sufficient",
   unavailableReason: null,
   change: null,
@@ -123,6 +127,29 @@ const REPORT: TodayReport = {
   finding:
     "You lose more material to a single unguarded piece than to any tactic, most often on the move right after your last minor piece comes out.",
   cone: buildCone(BINS),
+  phases: [],
+  accuracy: [],
+  readings: [
+    {
+      phase: "opening", rate: 0.72, intervalLow: 0.69, intervalHigh: 0.75,
+      took: 604, chances: 839, setAside: 41, gamesReaching: 204,
+      coverageStatus: "sufficient", unavailableReason: null,
+      movement: "gaining", change: { from: 0.68, to: 0.73, improvementProbability: 0.87 },
+    },
+    {
+      phase: "middlegame", rate: 0.41, intervalLow: 0.37, intervalHigh: 0.45,
+      took: 232, chances: 566, setAside: 88, gamesReaching: 191,
+      coverageStatus: "sufficient", unavailableReason: null,
+      movement: "declined", change: { from: 0.48, to: 0.39, improvementProbability: 0.03 },
+    },
+    {
+      phase: "endgame", rate: 0.58, intervalLow: 0.49, intervalHigh: 0.66,
+      took: 71, chances: 122, setAside: 19, gamesReaching: 96,
+      coverageStatus: "limited", unavailableReason: null,
+      movement: "unclear", change: null,
+    },
+  ],
+  milestones: milestones(MEASURES),
   measured: 7,
   conclusions: 3,
   games: 204,
@@ -228,6 +255,7 @@ export default function PreviewToday() {
         run={{ kind: "wait", reason: "importing your games" }}
         runStage="syncing"
         report={null}
+        queue={null}
         goal={null}
         goalProgress={null}
       />
@@ -247,6 +275,7 @@ export default function PreviewToday() {
         lastGame={LAST_GAME}
         run={null}
         report={REPORT}
+        queue={{ due: 10, overdue: 0 }}
         goal={GOAL}
         goalProgress={PROGRESS}
       />

@@ -14,6 +14,7 @@ import { GOAL_ROUTES } from "./goals.js";
 import { ONBOARDING_ROUTES } from "./onboarding.js";
 import { OPENING_BOOK_ROUTES } from "./opening-book.js";
 import { OPENING_ROUTES } from "./openings.js";
+import { PHASE_ROUTES } from "./phases.js";
 import { PLAY_ROUTES } from "./play.js";
 import { PRACTICE_ROUTES } from "./practice.js";
 import { PUBLIC_ROUTES } from "./public.js";
@@ -47,6 +48,7 @@ const PRODUCT_ROUTES = [
   ...OPENING_ROUTES,
   ...OPENING_BOOK_ROUTES,
   ...DASHBOARD_ROUTES,
+  ...PHASE_ROUTES,
   ...CONTINUATION_ROUTES,
 ] as unknown as RouteDefinition<never, never, never>[];
 

@@ -2820,13 +2820,43 @@
                               "items": {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "baselineRate": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
                                   "chances": {
                                     "type": "number"
                                   },
                                   "coverageStatus": {
                                     "type": "string"
                                   },
+                                  "delta": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
                                   "gamesReaching": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "improvementProbability": {
                                     "anyOf": [
                                       {
                                         "type": "number"
@@ -2882,6 +2912,16 @@
                                       }
                                     ]
                                   },
+                                  "recentRate": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
                                   "setAside": {
                                     "type": "number"
                                   },
@@ -2910,6 +2950,10 @@
                                   "intervalHigh",
                                   "coverageStatus",
                                   "unavailableReason",
+                                  "baselineRate",
+                                  "recentRate",
+                                  "delta",
+                                  "improvementProbability",
                                   "gamesReaching",
                                   "phaseReachRate"
                                 ],
@@ -11371,6 +11415,624 @@
         "summary": "Your opening tree, from the positions your games actually reached"
       }
     },
+    "/v1/phases/{phase}": {
+      "get": {
+        "description": "The published pooled figure for one phase of the game, and the same frozen chances split by the concept and role each belonged to, with where in the game the misses fall. Everything is read through the live publication's snapshot, so these counts sum to the dashboard card's chances and the two screens quote one date. Each concept row carries estimator-published objective and personal-current readings at this exact phase grain. Thin evidence remains present with a null estimate and an unavailable reason; `share` remains only a raw count ratio.",
+        "operationId": "getPhaseDetail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "phase",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "$schema": "https://json-schema.org/draft/2020-12/schema",
+                      "additionalProperties": false,
+                      "properties": {
+                        "card": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "baselineRate": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "chances": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                },
+                                "coverageStatus": {
+                                  "type": "string"
+                                },
+                                "delta": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "improvementProbability": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "intervalHigh": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "intervalLow": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "observed": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                },
+                                "rate": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "recentRate": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "setAside": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                },
+                                "taken": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": -9007199254740991,
+                                  "type": "integer"
+                                },
+                                "unavailableReason": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "chances",
+                                "observed",
+                                "taken",
+                                "setAside",
+                                "rate",
+                                "intervalLow",
+                                "intervalHigh",
+                                "coverageStatus",
+                                "unavailableReason",
+                                "baselineRate",
+                                "recentRate",
+                                "delta",
+                                "improvementProbability"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "concepts": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "category": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "chances": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "definition": {
+                                "type": "string"
+                              },
+                              "estimates": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "coverage": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "censored": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": -9007199254740991,
+                                          "type": "integer"
+                                        },
+                                        "failure": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": -9007199254740991,
+                                          "type": "integer"
+                                        },
+                                        "graded": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": -9007199254740991,
+                                          "type": "integer"
+                                        },
+                                        "success": {
+                                          "maximum": 9007199254740991,
+                                          "minimum": -9007199254740991,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "success",
+                                        "failure",
+                                        "graded",
+                                        "censored"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "coverageStatus": {
+                                      "type": "string"
+                                    },
+                                    "delta": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "effectiveSampleSize": {
+                                      "type": "number"
+                                    },
+                                    "estimate": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "frame": {
+                                      "enum": [
+                                        "objective",
+                                        "personal_current"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "improvementProbability": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "intervalHigh": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "intervalLow": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "rawSampleSize": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": -9007199254740991,
+                                      "type": "integer"
+                                    },
+                                    "unavailableReason": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "windowKind": {
+                                      "enum": [
+                                        "lifetime",
+                                        "recent_form"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "frame",
+                                    "windowKind",
+                                    "estimate",
+                                    "intervalLow",
+                                    "intervalHigh",
+                                    "rawSampleSize",
+                                    "effectiveSampleSize",
+                                    "coverage",
+                                    "coverageStatus",
+                                    "unavailableReason",
+                                    "delta",
+                                    "improvementProbability"
+                                  ],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "example": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "bestMoveUci": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "fen": {
+                                        "type": "string"
+                                      },
+                                      "moveNumber": {
+                                        "maximum": 9007199254740991,
+                                        "minimum": -9007199254740991,
+                                        "type": "integer"
+                                      },
+                                      "playedMoveUci": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "side": {
+                                        "enum": [
+                                          "white",
+                                          "black"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "subjectGameId": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "subjectGameId",
+                                      "moveNumber",
+                                      "side",
+                                      "fen",
+                                      "playedMoveUci",
+                                      "bestMoveUci"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "observed": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "role": {
+                                "type": "string"
+                              },
+                              "roleLabel": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "setAside": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "share": {
+                                "anyOf": [
+                                  {
+                                    "type": "number"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "slug": {
+                                "type": "string"
+                              },
+                              "taken": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "slug",
+                              "role",
+                              "label",
+                              "roleLabel",
+                              "category",
+                              "definition",
+                              "chances",
+                              "observed",
+                              "taken",
+                              "setAside",
+                              "share",
+                              "estimates",
+                              "example"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "gamesInCohort": {
+                          "maximum": 9007199254740991,
+                          "minimum": -9007199254740991,
+                          "type": "integer"
+                        },
+                        "missesByMove": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "missed": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "moveNumber": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              },
+                              "observed": {
+                                "maximum": 9007199254740991,
+                                "minimum": -9007199254740991,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "moveNumber",
+                              "missed",
+                              "observed"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "phase": {
+                          "enum": [
+                            "opening",
+                            "middlegame",
+                            "endgame"
+                          ],
+                          "type": "string"
+                        },
+                        "publicationId": {
+                          "type": "string"
+                        },
+                        "publishedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "phase",
+                        "publicationId",
+                        "publishedAt",
+                        "gamesInCohort",
+                        "card",
+                        "concepts",
+                        "missesByMove"
+                      ],
+                      "type": "object"
+                    },
+                    "meta": {
+                      "properties": {
+                        "redactions": {
+                          "items": {
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "entitlement",
+                                  "projection"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requestId"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "What is inside one phase's published figure",
+            "headers": {
+              "ETag": {
+                "description": "Strong validator for If-None-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlates with the structured log.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "The caller's copy is current."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Sign in to continue"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Something went wrong"
+          }
+        },
+        "security": [
+          {
+            "supabaseBearer": []
+          }
+        ],
+        "summary": "What is inside one phase's published figure"
+      }
+    },
     "/v1/play/moves": {
       "post": {
         "description": "Validates the position and every supplied move server-side, then returns one bounded opponent move. Stockfish answers immediately; Maia can return a scheduled workflow before the completed move is cached. No game is stored: it lives in the client, and a game against the engine is never part of the player's archive or of any analysis. The reply carries no evaluation, and there is no depth, time or MultiPV parameter. A family the deployment cannot serve is refused rather than answered by a different engine.",
@@ -12963,7 +13625,7 @@
     },
     "/v1/practice/queue": {
       "get": {
-        "description": "Overdue work first, capped so a queue is never only a backlog. Each item says which of your own games it came from. The expected move is never in this response.",
+        "description": "Overdue work first, capped so a queue is never only a backlog. Each item carries its source game, pattern, role, phase, move number and side beside the rendered reason. Legacy assignments may have null provenance. The expected move is never in this response.",
         "operationId": "getPracticeQueue",
         "responses": {
           "200": {
@@ -12998,6 +13660,16 @@
                               "assignmentId": {
                                 "type": "string"
                               },
+                              "conceptSlug": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "dueAt": {
                                 "anyOf": [
                                   {
@@ -13010,6 +13682,43 @@
                               },
                               "fen": {
                                 "type": "string"
+                              },
+                              "gameId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "moveNumber": {
+                                "anyOf": [
+                                  {
+                                    "maximum": 9007199254740991,
+                                    "minimum": -9007199254740991,
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "phase": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "opening",
+                                      "middlegame",
+                                      "endgame"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               },
                               "priority": {
                                 "maximum": 9007199254740991,
@@ -13026,6 +13735,36 @@
                                 "maximum": 9007199254740991,
                                 "minimum": -9007199254740991,
                                 "type": "integer"
+                              },
+                              "role": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "recognize",
+                                      "execute",
+                                      "respond",
+                                      "convert"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "side": {
+                                "anyOf": [
+                                  {
+                                    "enum": [
+                                      "white",
+                                      "black"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
                               }
                             },
                             "required": [
@@ -13033,6 +13772,12 @@
                               "fen",
                               "prompt",
                               "reason",
+                              "gameId",
+                              "conceptSlug",
+                              "role",
+                              "phase",
+                              "moveNumber",
+                              "side",
                               "priority",
                               "dueAt",
                               "reviewNumber"

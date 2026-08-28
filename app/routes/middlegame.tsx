@@ -1,17 +1,18 @@
-import { PhasePage } from "./phase";
+import { redirect } from "react-router";
 
-export { clientLoader } from "./phase";
-
-export function meta() {
-  return [
-    { title: "Middlegame · Forma" },
-    {
-      name: "description",
-      content: "Your middlegame mistakes, grouped by the idea you missed.",
-    },
-  ];
+/**
+ * `/middlegame` is now a section of `/patterns`, not a page.
+ *
+ * Three routes for three thirds of a game was three tabs saying the same
+ * thing, and two of them were the same component with a different noun. The
+ * route survives as a redirect because links to it exist - in the hub's own
+ * history, in anything anybody has bookmarked - and a dead URL is a worse
+ * answer than the section it used to be.
+ */
+export function clientLoader() {
+  return redirect("/path#middlegame");
 }
 
 export default function Middlegame() {
-  return <PhasePage phase="middlegame" />;
+  return null;
 }

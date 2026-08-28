@@ -733,6 +733,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/phases/{phase}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What is inside one phase's published figure
+         * @description The published pooled figure for one phase of the game, and the same frozen chances split by the concept and role each belonged to, with where in the game the misses fall. Everything is read through the live publication's snapshot, so these counts sum to the dashboard card's chances and the two screens quote one date. Each concept row carries estimator-published objective and personal-current readings at this exact phase grain. Thin evidence remains present with a null estimate and an unavailable reason; `share` remains only a raw count ratio.
+         */
+        get: operations["getPhaseDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/play/moves": {
         parameters: {
             query?: never;
@@ -744,7 +764,7 @@ export interface paths {
         put?: never;
         /**
          * The opponent's reply in a game against the engine
-         * @description Validates the position and every supplied move server-side, then returns one bounded engine move. No game is stored: it lives in the client, and a game against the engine is never part of the player's archive or of any analysis. The reply carries no evaluation, and there is no depth, time or MultiPV parameter. A family the deployment cannot serve is refused rather than answered by a different engine.
+         * @description Validates the position and every supplied move server-side, then returns one bounded opponent move. Stockfish answers immediately; Maia can return a scheduled workflow before the completed move is cached. No game is stored: it lives in the client, and a game against the engine is never part of the player's archive or of any analysis. The reply carries no evaluation, and there is no depth, time or MultiPV parameter. A family the deployment cannot serve is refused rather than answered by a different engine.
          */
         post: operations["requestOpponentMove"];
         delete?: never;
@@ -862,7 +882,7 @@ export interface paths {
         };
         /**
          * What to practise now, and why
-         * @description Overdue work first, capped so a queue is never only a backlog. Each item says which of your own games it came from. The expected move is never in this response.
+         * @description Overdue work first, capped so a queue is never only a backlog. Each item carries its source game, pattern, role, phase, move number and side beside the rendered reason. Legacy assignments may have null provenance. The expected move is never in this response.
          */
         get: operations["getPracticeQueue"];
         put?: never;
@@ -2003,15 +2023,19 @@ export interface operations {
                             phases: {
                                 gamesInCohort: number;
                                 phases: {
+                                    baselineRate: number | null;
                                     chances: number;
                                     coverageStatus: string;
+                                    delta: number | null;
                                     gamesReaching: number | null;
+                                    improvementProbability: number | null;
                                     intervalHigh: number | null;
                                     intervalLow: number | null;
                                     observed: number;
                                     phase: string;
                                     phaseReachRate: number | null;
                                     rate: number | null;
+                                    recentRate: number | null;
                                     setAside: number;
                                     taken: number;
                                     unavailableReason: string | null;
@@ -4942,6 +4966,156 @@ export interface operations {
             };
         };
     };
+    getPhaseDetail: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-None-Match"?: string;
+            };
+            path: {
+                phase: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What is inside one phase's published figure */
+            200: {
+                headers: {
+                    /** @description Strong validator for If-None-Match. */
+                    ETag?: string;
+                    /** @description Correlates with the structured log. */
+                    "X-Request-Id"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            card: {
+                                baselineRate: number | null;
+                                chances: number;
+                                coverageStatus: string;
+                                delta: number | null;
+                                improvementProbability: number | null;
+                                intervalHigh: number | null;
+                                intervalLow: number | null;
+                                observed: number;
+                                rate: number | null;
+                                recentRate: number | null;
+                                setAside: number;
+                                taken: number;
+                                unavailableReason: string | null;
+                            } | null;
+                            concepts: {
+                                category: string | null;
+                                chances: number;
+                                definition: string;
+                                estimates: {
+                                    coverage: {
+                                        censored: number;
+                                        failure: number;
+                                        graded: number;
+                                        success: number;
+                                    };
+                                    coverageStatus: string;
+                                    delta: number | null;
+                                    effectiveSampleSize: number;
+                                    estimate: number | null;
+                                    /** @enum {string} */
+                                    frame: "objective" | "personal_current";
+                                    improvementProbability: number | null;
+                                    intervalHigh: number | null;
+                                    intervalLow: number | null;
+                                    rawSampleSize: number;
+                                    unavailableReason: string | null;
+                                    /** @enum {string} */
+                                    windowKind: "lifetime" | "recent_form";
+                                }[];
+                                example: {
+                                    bestMoveUci: string | null;
+                                    fen: string;
+                                    moveNumber: number;
+                                    playedMoveUci: string | null;
+                                    /** @enum {string} */
+                                    side: "white" | "black";
+                                    subjectGameId: string;
+                                } | null;
+                                label: string;
+                                observed: number;
+                                role: string;
+                                roleLabel: string | null;
+                                setAside: number;
+                                share: number | null;
+                                slug: string;
+                                taken: number;
+                            }[];
+                            gamesInCohort: number;
+                            missesByMove: {
+                                missed: number;
+                                moveNumber: number;
+                                observed: number;
+                            }[];
+                            /** @enum {string} */
+                            phase: "opening" | "middlegame" | "endgame";
+                            publicationId: string;
+                            publishedAt: string;
+                        };
+                        meta: {
+                            redactions?: {
+                                path: string;
+                                /** @enum {string} */
+                                reason: "entitlement" | "projection";
+                            }[];
+                            requestId: string;
+                        };
+                    };
+                };
+            };
+            /** @description The caller's copy is current. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Sign in to continue */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Too many requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Something went wrong */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     requestOpponentMove: {
         parameters: {
             query?: never;
@@ -5575,12 +5749,18 @@ export interface operations {
                             emptyReason: ("none" | "nothing_due" | "no_material" | "queue_full") | null;
                             items: {
                                 assignmentId: string;
+                                conceptSlug: string | null;
                                 dueAt: string | null;
                                 fen: string;
+                                gameId: string | null;
+                                moveNumber: number | null;
+                                phase: ("opening" | "middlegame" | "endgame") | null;
                                 priority: number;
                                 prompt: string;
                                 reason: string;
                                 reviewNumber: number;
+                                role: ("recognize" | "execute" | "respond" | "convert") | null;
+                                side: ("white" | "black") | null;
                             }[];
                             overdue: number;
                             remaining: number;
@@ -6003,7 +6183,7 @@ export interface operations {
         parameters: {
             query?: {
                 state?: "queued" | "running" | "succeeded" | "failed" | "cancelling" | "cancelled";
-                kind?: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation";
+                kind?: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation" | "game_rating";
                 cursor?: string;
                 limit?: string;
             };
@@ -6032,7 +6212,7 @@ export interface operations {
                             } | null;
                             id: string;
                             /** @enum {string} */
-                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation";
+                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation" | "game_rating";
                             progress: {
                                 completedWeight: number;
                                 message: string | null;
@@ -6136,7 +6316,7 @@ export interface operations {
                             } | null;
                             id: string;
                             /** @enum {string} */
-                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation";
+                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation" | "game_rating";
                             progress: {
                                 completedWeight: number;
                                 message: string | null;
@@ -6237,7 +6417,7 @@ export interface operations {
                             } | null;
                             id: string;
                             /** @enum {string} */
-                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation";
+                            kind: "account_sync" | "game_import" | "initial_examination" | "game_analysis" | "model_backfill" | "subject_estimation" | "maintenance" | "position_evaluation" | "position_continuation" | "game_rating";
                             progress: {
                                 completedWeight: number;
                                 message: string | null;

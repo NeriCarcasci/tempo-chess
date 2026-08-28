@@ -128,6 +128,23 @@ export interface ConePhase {
   /** And at the last bin of the phase. */
   spreadOut: number;
   /**
+   * Expected score the median game gives up across this phase.
+   *
+   * The one figure that is comparable *between* phases, and the one that
+   * answers "where do my games actually go". The pooled per-phase hit rate is
+   * not it, and cannot be made into it: `server/src/estimates/phases.ts` says
+   * so in as many words, because the concepts fire in different mixes in each
+   * phase, so a phase holding the easier chances scores higher whoever is
+   * playing. On the account this was built against, the pooled rates rank the
+   * phases 59 / 76 / 86 (opening worst) while the median gives up 0.4 points
+   * in the opening, 47 in the middlegame and 0.2 in the endgame. Those are
+   * opposite answers, and this is the one that agrees with the picture.
+   *
+   * Measured from arrival to exit, exactly like `spreadIn`, and positive means
+   * ground lost.
+   */
+  givenUp: number;
+  /**
    * How much the middle half opened across this phase.
    *
    * The closest thing the published numbers have to "this is where the games
@@ -253,6 +270,7 @@ export function buildCone(bins: readonly TrajectoryBin[]): Cone | null {
       spreadIn: arrival.spread,
       spreadOut: exit.spread,
       growth: round(exit.spread - arrival.spread),
+      givenUp: round(arrival.median - exit.median),
       exit,
       points: phasePoints,
     });
@@ -601,6 +619,29 @@ export interface ConeFinding {
  * so picking the *widest* point would name the last phase every time; growth is
  * what "decided here" actually means.
  */
+/**
+ * The phase the median game actually loses its ground in.
+ *
+ * `cone.decisive` answers a different question: where the games *separate*,
+ * measured on the spread. Both are real readings and on this account they
+ * disagree — the opening is where the middle half opens from 4 points to 88,
+ * and the middlegame is where the median falls from level to nothing. The hub
+ * draws the median and its nodes count points given up, so the sentence over
+ * that picture has to be about the median too, or the page argues with
+ * itself.
+ *
+ * Null unless one phase clearly leads: a claim about where games are decided
+ * is worth nothing if two phases are within a few points of each other.
+ */
+export function costliestPhase(cone: Cone): ConePhase | null {
+  const ranked = [...cone.phases].sort((a, b) => b.givenUp - a.givenUp);
+  const top = ranked[0];
+  if (!top || top.givenUp < 0.05) return null;
+  const next = ranked[1];
+  if (next && top.givenUp - next.givenUp < 0.03) return null;
+  return top;
+}
+
 export function coneFinding(cone: Cone): ConeFinding {
   const { first, widest, decisive } = cone;
 
@@ -717,6 +758,8 @@ export interface PhaseCard {
 
   /** How much the middle half opened across this phase, in points. */
   growth: number;
+  /** Expected score the median game gives up here. See `ConePhase.givenUp`. */
+  givenUp: number;
   /** The one-line reading of that figure. */
   reading: string;
   reachRate: number;
@@ -812,6 +855,7 @@ export function phaseCards(
       accuracy: rate,
       standing,
       growth: phase.growth,
+      givenUp: phase.givenUp,
       reading,
       reachRate: phase.reachRate,
       games: phase.games,

@@ -19,6 +19,7 @@
 import { createHash } from "node:crypto";
 import type { Sql } from "postgres";
 import { registerComponent, registerComponentVersion } from "../analysis/versions.js";
+import { moveNumberOf, sideOf } from "../estimates/specificity.js";
 import { QUEUE_POLICY, SCHEDULER_POLICY } from "./contract.js";
 import { shouldAssignMore } from "./scheduler.js";
 
@@ -31,7 +32,7 @@ export const PRACTICE_COMPONENT_KEY = "practice_selector";
  * has an answer that survives the rule changing.
  */
 export const SELECTOR_POLICY = Object.freeze({
-  version: "practice_selector_v1",
+  version: "practice_selector_v2",
   /** Below this decision loss, the move was a shade rather than a mistake. */
   minDecisionLoss: 0.08,
   /** One drill per position: the same mistake twice is not two lessons. */
@@ -47,7 +48,7 @@ export async function registerPracticeComponents(sql: Sql): Promise<{ selectorVe
     description:
       "Chooses practice from the decisions a player got wrong in their own games, ranked by what it cost them.",
     inputContract: "transition_assessment.v1",
-    outputContract: "learning_assignment.v1",
+    outputContract: "learning_assignment.v2",
   });
   const version = await registerComponentVersion(sql, {
     componentKey: PRACTICE_COMPONENT_KEY,
@@ -61,6 +62,26 @@ export async function registerPracticeComponents(sql: Sql): Promise<{ selectorVe
   return { selectorVersionId: version.id };
 }
 
+/**
+ * One atomic step, whether the caller handed us the pool or a transaction.
+ *
+ * The refill route runs the selector inside `withActorContext`, which is
+ * itself a transaction (the actor GUC is transaction-local), and postgres.js
+ * puts `begin` on the pooled client only — inside a transaction the same
+ * boundary is a savepoint. Detecting which we were given keeps the
+ * per-mistake atomicity in both worlds instead of throwing in one of them.
+ */
+export async function atomic<T>(sql: Sql, fn: (tx: Sql) => Promise<T>): Promise<T> {
+  const scoped = sql as unknown as {
+    begin?: (fn: (tx: Sql) => Promise<T>) => Promise<T>;
+    savepoint?: (fn: (tx: Sql) => Promise<T>) => Promise<T>;
+  };
+  if (typeof scoped.begin === "function") return scoped.begin(fn);
+  if (typeof scoped.savepoint === "function") return scoped.savepoint(fn);
+  // A queryable with neither is a test double; the step is still one call.
+  return fn(sql);
+}
+
 interface MistakeRow {
   core_position_id: string;
   fen: string;
@@ -68,8 +89,12 @@ interface MistakeRow {
   played_move_uci: string;
   decision_loss: string;
   criticality: string | null;
-  phase: string | null;
+  phase: "opening" | "middlegame" | "endgame";
   subject_game_id: string;
+  concept_slug: string;
+  role: "recognize" | "execute" | "respond" | "convert";
+  opportunity_ply: number;
+  evidence_item_id: string;
 }
 
 export interface SelectionResult {
@@ -88,7 +113,18 @@ export interface SelectionResult {
  */
 export async function assignPractice(
   sql: Sql,
-  input: { subjectId: string; cycleId: string | null; limit?: number },
+  input: {
+    subjectId: string;
+    cycleId: string | null;
+    limit?: number;
+    /**
+     * A selector version registered by the caller, when the caller cannot
+     * register here: registration opens its own transaction, and a caller
+     * already inside one (the refill route, which runs in the actor context)
+     * has to register on the pool before entering it.
+     */
+    selectorVersionId?: string;
+  },
 ): Promise<SelectionResult> {
   const [outstandingRow] = await sql<{ count: string }[]>`
     select count(*)::text as count
@@ -105,9 +141,11 @@ export async function assignPractice(
     QUEUE_POLICY.maxOutstanding - outstanding,
   );
 
-  // The player's own mistakes, worst first, one per position, and only from
-  // games this subject owns. `distinct on` keeps the costliest instance of a
-  // repeated position rather than an arbitrary one.
+  // The player's own measured misses, worst first, one per position, and only
+  // from games this subject owns. A transition without a catalogue opportunity
+  // is not practice material yet: it has no honest pattern or role to attach.
+  // `distinct on` keeps the costliest instance of a repeated position rather
+  // than an arbitrary one.
   const mistakes = await sql<MistakeRow[]>`
     select distinct on (po.core_position_id)
            po.core_position_id::text as core_position_id,
@@ -116,15 +154,39 @@ export async function assignPractice(
            ta.played_move_uci,
            ta.decision_loss::text as decision_loss,
            ta.criticality::text as criticality,
-           ta.phase,
-           sg.id as subject_game_id
+           selected.phase,
+           sg.id as subject_game_id,
+           selected.concept_slug,
+           selected.role,
+           selected.opportunity_ply,
+           selected.evidence_item_id::text as evidence_item_id
     from analysis.transition_assessments ta
     join chess.position_occurrences po
       on po.run_id = ta.materialization_run_id and po.ply = ta.from_ply
     join analysis.runs r on r.id = ta.analysis_run_id
     join chess.subject_games sg on sg.id = r.subject_game_id
+    join lateral (
+      select c.slug as concept_slug, o.role, o.phase, o.opportunity_ply,
+             coalesce(o.evidence_item_id, (o.context->>'evidenceItemId')::bigint)
+               as evidence_item_id
+      from analysis.concept_opportunities o
+      join analysis.concept_versions cv on cv.id = o.concept_version_id
+      join analysis.concepts c on c.id = cv.concept_id
+      where o.subject_id = ${input.subjectId}
+        and o.subject_game_id = sg.id
+        and o.run_id = ta.materialization_run_id
+        and o.opportunity_ply = ta.from_ply
+        and o.success = false
+        and o.role in ('recognize', 'execute', 'respond', 'convert')
+        and o.phase in ('opening', 'middlegame', 'endgame')
+        and coalesce(o.evidence_item_id, (o.context->>'evidenceItemId')::bigint) is not null
+      order by o.confidence desc nulls last, c.slug, o.role, o.id
+      limit 1
+    ) selected on true
     where sg.subject_id = ${input.subjectId}
       and sg.status = 'included'
+      and sg.subject_color is not null
+      and ta.actor_color = sg.subject_color
       and ta.played_move_acceptable = false
       and ta.best_move_uci is not null
       and ta.best_move_uci <> ta.played_move_uci
@@ -144,7 +206,8 @@ export async function assignPractice(
     .sort((a, b) => Number(b.decision_loss) - Number(a.decision_loss))
     .slice(0, want);
 
-  const { selectorVersionId } = await registerPracticeComponents(sql);
+  const selectorVersionId =
+    input.selectorVersionId ?? (await registerPracticeComponents(sql)).selectorVersionId;
   let assigned = 0;
 
   for (const [index, mistake] of ranked.entries()) {
@@ -152,7 +215,7 @@ export async function assignPractice(
       .update(`${mistake.fen}|${mistake.best_move_uci}|${SELECTOR_POLICY.version}`)
       .digest("hex");
 
-    const written = await sql.begin(async (tx) => {
+    const written = await atomic(sql, async (tx) => {
       const [item] = await tx<{ id: string }[]>`
         insert into coaching.training_items (
           source_kind, owner_subject_id, provenance, retention_class
@@ -188,26 +251,28 @@ export async function assignPractice(
           subject_id, cycle_id, evidence_item_id, intervention_type,
           training_item_version_id, channel
         )
-        select ${input.subjectId}, ${input.cycleId}, e.id, 'drill', ${version.id}, 'in_app'
-        from analysis.evidence_items e
-        where e.subject_id = ${input.subjectId}
-          and e.subject_game_id = ${mistake.subject_game_id}
-        order by e.id
-        limit 1
+        values (
+          ${input.subjectId}, ${input.cycleId}, ${mistake.evidence_item_id}::bigint,
+          'drill', ${version.id}, 'in_app'
+        )
         returning id
       `;
 
       await tx`
         insert into coaching.learning_assignments (
           subject_id, cycle_id, training_item_version_id, intervention_id, reason,
-          selection_component_version_id, priority, due_at
+          selection_component_version_id, priority, due_at,
+          source_game_id, concept_slug, role, phase, move_number, side
         ) values (
           ${input.subjectId}, ${input.cycleId}, ${version.id},
           ${intervention?.id ?? null},
           ${`In one of your games you played ${mistake.played_move_uci} in this position and it cost you ${Number(mistake.decision_loss).toFixed(2)} of expected score${mistake.phase ? ` in the ${mistake.phase}` : ""}.`},
           ${selectorVersionId},
           ${Math.max(0, Math.min(100, 100 - index * 5))},
-          now() + make_interval(days => ${SELECTOR_POLICY.dueInDays})
+          now() + make_interval(days => ${SELECTOR_POLICY.dueInDays}),
+          ${mistake.subject_game_id}, ${mistake.concept_slug}, ${mistake.role},
+          ${mistake.phase}, ${moveNumberOf(mistake.opportunity_ply)},
+          ${sideOf(mistake.opportunity_ply)}
         )
       `;
       return 1;

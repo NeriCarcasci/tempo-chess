@@ -13,6 +13,7 @@ import { getOnboarding, getWorkflow } from "../lib/onboarding/api";
 import { nextScreen, type Destination } from "../lib/onboarding/nextScreen";
 import { fetchRecentGames, type RecentGame } from "../lib/v1/games";
 import { getDashboard, todayReport, type TodayReport } from "../lib/v1/dashboard";
+import { getPracticeQueue } from "../lib/v1/practice";
 import { activeGoal, getGoalProgress, listGoals, type GoalProgress, type GoalView } from "../lib/v1/goals";
 import {
   explorerEmptyReason,
@@ -68,6 +69,8 @@ interface TodayData {
   userId: string;
   /** What the published report concludes, or null when nothing is published. */
   report: TodayReport | null;
+  /** What is due in the practice queue, or null when it could not be read. */
+  queue: { due: number; overdue: number } | null;
   /** The goal this account is actively working, or null with none set. */
   goal: GoalView | null;
   /** That goal's progress, or null when nothing has been measured on it yet. */
@@ -132,6 +135,23 @@ async function readReport(): Promise<TodayReport | null> {
 }
 
 /**
+ * What is due for practice, as two counts, or null.
+ *
+ * Swallowed on failure like the run and the report: the row this feeds is one
+ * of several on the page, and "we could not check the queue" is not a reason
+ * to fail a hub. `/practice` reads the same endpoint and does let it throw.
+ */
+async function readQueue(): Promise<{ due: number; overdue: number } | null> {
+  try {
+    const queue = await getPracticeQueue();
+    return { due: queue.items.length, overdue: queue.overdue };
+  } catch (error) {
+    if (error instanceof Response) throw error; // a 401 redirect must land
+    return null;
+  }
+}
+
+/**
  * The goal this account is working, and what has been measured on it.
  *
  * `/v1/goals` has no active-goal filter, so the whole list is read and the
@@ -167,12 +187,13 @@ export async function clientLoader(): Promise<TodayData> {
    * a pooled graph cannot. `walkable` is the whole adapter: the v1 graph and
    * the legacy one differ only in a loss field the tear sheet never reads.
    */
-  const [white, black, recent, run, report, { goal, progress }] = await Promise.all([
+  const [white, black, recent, run, report, queue, { goal, progress }] = await Promise.all([
     getOpeningExplorer({ color: "white" }),
     getOpeningExplorer({ color: "black" }),
     fetchRecentGames(1),
     readRun(),
     readReport(),
+    readQueue(),
     readGoal(),
   ]);
 
@@ -225,6 +246,7 @@ export async function clientLoader(): Promise<TodayData> {
     runStage: run.stage,
     userId: session.userId,
     report,
+    queue,
     goal,
     goalProgress: progress,
   };

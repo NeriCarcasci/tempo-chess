@@ -171,6 +171,45 @@ try {
     assert.ok(row, "the fixture's censored opportunity did not reach an estimate");
   });
 
+  await report.check("concept estimates are published separately inside each phase", async () => {
+    const rows = await sql<
+      {
+        phase: string;
+        frame: string;
+        window_kind: string;
+        estimate: string | null;
+        unavailable_reason: string | null;
+        raw_sample_size: number;
+        delta: string | null;
+        improvement_probability: string | null;
+      }[]
+    >`
+      select d.phase, d.frame, e.window_kind, e.estimate, e.unavailable_reason,
+             e.raw_sample_size, e.delta, e.improvement_probability
+      from analysis.player_skill_estimates e
+      join analysis.skill_dimensions d on d.id = e.skill_dimension_id
+      where e.analysis_run_id = ${run.id}
+        and d.concept_version_id = ${conceptVersionId}
+        and d.phase is not null
+      order by d.phase, d.frame, e.window_kind
+    `;
+    const openingLifetime = rows.find(
+      (row) => row.phase === "opening" && row.frame === "objective" && row.window_kind === "lifetime",
+    );
+    const openingRecent = rows.find(
+      (row) => row.phase === "opening" && row.frame === "personal_current" && row.window_kind === "recent_form",
+    );
+    const thinEndgame = rows.find(
+      (row) => row.phase === "endgame" && row.frame === "objective" && row.window_kind === "lifetime",
+    );
+    assert.equal(openingLifetime?.raw_sample_size, 58);
+    assert.ok(openingLifetime?.estimate !== null, "the supported phase slice was withheld");
+    assert.ok(openingRecent?.delta !== null && openingRecent?.improvement_probability !== null);
+    assert.equal(thinEndgame?.raw_sample_size, 2);
+    assert.equal(thinEndgame?.estimate, null, "a thin phase slice published a rate");
+    assert.equal(thinEndgame?.unavailable_reason, "below_minimum_sample");
+  });
+
   await report.check("an unreached phase produced no bin at all", async () => {
     const rows = await sql<{ phase: string }[]>`
       select distinct b.phase from analysis.player_trajectory_bins b
@@ -313,6 +352,11 @@ try {
       return;
     }
     assert.ok(dashboard!.phases.gamesInCohort > 0, "the phase cards name no denominator");
+    assert.equal(
+      new Set(dashboard!.phases.phases.map((phase) => phase.phase)).size,
+      dashboard!.phases.phases.length,
+      "phase-scoped concept estimates leaked into the pooled card list",
+    );
     for (const phase of dashboard!.phases.phases) {
       assert.equal(
         phase.rate === null,
@@ -329,6 +373,9 @@ try {
       );
       assert.ok(phase.taken <= phase.observed, "more chances taken than were observed");
     }
+    const opening = dashboard!.phases.phases.find((phase) => phase.phase === "opening");
+    assert.ok(opening?.baselineRate !== null && opening?.recentRate !== null);
+    assert.ok(opening?.delta !== null && opening?.improvementProbability !== null);
   });
 
   await report.check("nothing a reader sees is a database key", async () => {
@@ -513,14 +560,14 @@ async function seedOpportunities(
       insert into analysis.concept_opportunities (
         run_id, subject_id, subject_game_id, event_id, concept_version_id, role,
         opportunity_ply, response_ply, response_observed, censored_reason, success,
-        evidence_source_kind, occurred_at
+        phase, evidence_item_id, evidence_source_kind, occurred_at
       ) values (
         ${game.materializationRunId}, ${game.subjectId}, ${game.subjectGameId},
         ${event!.id}, ${conceptVersionId}, 'recognize', ${i},
         ${censored ? null : i + 1}, ${!censored},
         ${censored ? "subject_never_on_move" : null},
         ${censored ? null : i % 20 !== 0},
-        'deterministic', now()
+        ${i < 2 ? "endgame" : "opening"}, ${evidence!.id}, 'deterministic', now()
       )
     `;
   }

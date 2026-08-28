@@ -125,6 +125,19 @@ export type RatingProfile = Dashboard["ratingProfile"];
 export type RatingPool = RatingProfile["pools"][number];
 export type DashboardVersion = Dashboard["version"];
 
+// --- phases -----------------------------------------------------------------
+
+/**
+ * One phase's published figure and what is inside it: the same frozen chances
+ * split by concept and role, with where in the game the misses fall. The read
+ * behind `/middlegame` and `/endgame`.
+ */
+export type PhaseDetail = Data<"getPhaseDetail">;
+export type PhaseConcept = PhaseDetail["concepts"][number];
+export type PhaseConceptExample = NonNullable<PhaseConcept["example"]>;
+export type PhaseCardFigure = NonNullable<PhaseDetail["card"]>;
+export type PhaseMissBin = PhaseDetail["missesByMove"][number];
+
 // --- work -------------------------------------------------------------------
 
 export type Workflow = Data<"getWorkflow">;

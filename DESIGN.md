@@ -39,10 +39,10 @@ two is what makes a card legible, so cards are not outlined):
 Ink:
 - `--color-ink`       `#23211d` — primary text
 - `--color-ink-muted` `#5f5a52` — secondary
-- `--color-ink-faint` `#8a847a` — labels, captions
+- `--color-ink-faint` `#736d64` — labels, captions
 
 Accent + semantics (one accent; data colours are semantic, not decorative):
-- `--color-accent`      `#cf5730` — brand, primary action, "your move"
+- `--color-accent`      `#b8441d` — brand, primary action, "your move"
 - `--color-accent-ink`  `#fffaf6` — text on accent
 - `--color-accent-wash` `#fbe9e1` — active nav chip, toggled control
 - `--color-signal`      `#277c86` — informational highlight
@@ -62,6 +62,15 @@ Board: `--color-board-light` `#e9e2d4`, `--color-board-dark` `#65716f`
 
 Meaning is never colour-only: results and severities also carry a letter, glyph,
 or label.
+
+**Every token above clears WCAG AA at the size it is used.** Two of them did
+not, and both were load-bearing: `--color-ink-faint` at `#8a847a` measured
+3.32:1 on the paper ground, and it is the token every caption, unit and sample
+count on the product uses; `--color-accent` at `#cf5730` put white button text
+at 4.00:1 and accent-as-text at 3.71. A palette that fails at the two values
+used most often is not a palette with an accessibility gap, it is a palette
+that does not work. `--color-inaccuracy` is the one tone light enough that
+light text cannot sit on it, so the chip that uses it takes ink instead.
 
 ## Typography
 
@@ -91,7 +100,10 @@ carries one of these; the two stack into a harder edge than either intends.
 
 The one hard edge left is `--shadow-key` on buttons: a bottom edge *inside*
 the shape, pressing to `--shadow-key-down` on `:active`. It survives on a pill
-and leaves nothing hard-edged sitting on the background.
+and leaves nothing hard-edged sitting on the background. **A tile that goes
+somewhere is a control**, so navigation tiles (the phase strip, the task
+rows) carry a quieter cut of the same edge and press the same way — the
+tactility is one system, not a per-surface effect.
 
 **If you reach for a 1px border to separate two things, use space, a surface
 change, or space instead.** Borders are for real edges only: fields,
@@ -143,10 +155,116 @@ states teach ("connect an account", "analyse to unlock blunders").
 
 Product:
 - **Stat tile** — mono metric + label + optional delta (▲/▼ with semantic colour).
-- **Ring / arc gauge** — single value 0–100, accent arc on a track.
 - **Sparkline** — rating trend, 1px accent line, no axes chrome.
 - **Record bar** — W/L/D as one proportional bar with counts.
 - **Data table** — recent games; tabular-nums; result as a coloured letter chip.
+- **The instruments** (`instruments.tsx`) — small marks that each draw one
+  published figure, shared by the hub and the phase pages so the same quantity
+  is never drawn two different ways. Every number they draw arrived on the
+  wire; the only arithmetic is geometry, and an interval is always drawn on
+  the full scale it is a share of, never scaled to its own width.
+  - **Gauge** — the arc gauge, finally built: one rate on an accent arc with
+    the interval as a quieter arc on the same track, the figure in the middle
+    in the numeral face, the label under it saying what the figure is of. The
+    value growing to its size is the one animation, and reduced motion gets
+    the final state outright.
+  - **Dial** — the hub's own mark; see [The hub](#the-hub). Arc for the rate
+    and its interval, filled disc for the movement, mark knocked out of the
+    disc, and the three are never mixed.
+  - **Ring** (`Donut`) — the way a share is drawn anywhere it is not the
+    page's hero figure: a closed accent ring with its figure at the centre.
+    It replaced a filling bar, and the reason is the idea each mark carries.
+    A track that fills is a thing waiting to finish, which is exactly wrong
+    for a standing measurement; cutting that track into cells changed its
+    texture and not its meaning. A ring is a proportion of a whole. On the
+    hub it carries the phase rates at 104px; on a stack row it shrinks to
+    40px and takes the row's rank inside it, so two marks become one.
+  - **A filling track means work, never a measurement.** This is the line the
+    ring drew, and it settles where each mark belongs: a bar that fills is a
+    thing waiting to finish, so it is right for the examination bar and the
+    sync steps, where something really is running and will end. A standing
+    figure — a rate, a share, a lesson's completion — is not waiting for
+    anything, and drawing it as a track that fills tells the reader it is
+    incomplete. Those take the ring. Nothing in the product draws the same
+    quantity two ways: `/lessons` kept its own hand-rolled progress circle
+    until this pass and now uses the kit's ring like everything else.
+  - **The marks** (`marks.tsx`) — Forma's own icon set: Target, Shield,
+    Crown, Book, Chart, Board, Clock, Fork, Flag, on one 24 grid, filled with
+    their counters knocked out, taking `currentColor`. **Solid, not drawn.**
+    The first set was line art at a hairline weight and had no mass at the
+    size a mark actually appears: it read as a faint diagram of an icon
+    rather than an icon. **Marks never draw pieces.** The piece artwork is
+    the Cburnett vectors the boards use, and a second hand-drawn set beside
+    them is how a product starts looking like two products. Piece glyphs were
+    tried inside the phase rings and were the weakest thing on the page:
+    board artwork shrunk into a ring is a pale outline. The phases take
+    marks instead: the book you are still in, the crossroads where it stops
+    being theory, and the finish.
+  - **Figure chip** — how a stat is reported everywhere in the product: the
+    value in the numeral face over its label in the micro face, on a well
+    (or lifted onto a surface when the row sits on the page ground). It
+    replaced sentences with bold numbers inside them, which read as prose to
+    skim rather than figures to scan; a chip is never a bare number, because
+    the label is part of the chip. **Provenance is not a statistic, and it
+    does not get a chip at all.** A rating, a cohort size and a publication
+    date stood under the hub's heading as three chips for one revision, and
+    the phase pages carried the same row: they are not what those pages are
+    about, they are how to read what those pages are about, and as chips they
+    were the first thing the eye hit on every screen. Provenance lives inside
+    the figure's own note, behind the mark, on the figure it qualifies.
+
+    **Method prose lives behind the mark too.** `/openings` opened on four
+    paragraphs stating the counts, the tolerance a mistake is judged by, how
+    much of the repertoire had been analysed and which graph Practice drills
+    from. Every one of them is true and load-bearing, and all four sat above
+    the picture that is the page's actual argument. A reader who has read
+    them once reads past them forever. They are in the note now; nothing was
+    deleted, and the one disclosure that belongs to a control (what Practice
+    selects by) travels on that control instead.
+  - **Chance split** — taken, missed and set aside as one proportional bar.
+    Taken and missed carry the two result colours; a chance that ended before
+    the player was on move is hatched, the openings page's own mark for "not
+    judged", because colouring it either way would count a chance nobody got.
+    The counts print beside the bar, so colour never carries it alone.
+  - **Miss histogram** — where in the game the misses fall, as the hub's
+    shape chart at row scale. Adjacent move numbers pool into at most
+    fourteen buckets (counts summed, never rescaled), and the run the
+    headline names is the coloured one.
+  - **Trajectory line** — the trajectory's mark: the median, from the first
+    move to the last, as one accent line over a wash of its own colour. It
+    went through a shaded quartile band and then a field of quantile
+    capsules, and both were the same mistake in different clothes: a picture
+    carrying every quantile at once is a research figure, not something read
+    at a glance. The line passes through every published point and the curve
+    between them only says how it travels. The spread is a deep reading, so
+    it is drawn only where deep reading happens (`spread`, on the profile
+    and the report); the hub gets the line alone.
+  - **Phase band** — one phase's slice of the trajectory: the same line,
+    built by the same `buildCone` over that phase's bins only, so the slice
+    cannot disagree with the whole.
+- **Phase pages** (`phase.tsx`, `/middlegame` and `/endgame`) — the hub's
+  shape applied to a third of the game. They read `GET /v1/phases/{phase}`,
+  which goes through the same live-publication pointer as the dashboard, so
+  the two screens quote one figure, one date and one denominator. The order
+  is: the pooled figure as the heading with its evidence; the instruments
+  (gauge, chance split, phase band); the concept stack, most costly first,
+  each row a counted split with the position it last went wrong in behind the
+  disclosure; the miss histogram; one action, the practice queue. The
+  per-concept rows are counts with a raw share — the estimator publishes no
+  posterior at that grain, and the key under the stack says so once. Stacks
+  fold past eight rows with the count named; the long tail of one-chance rows
+  is the stat dump PRODUCT.md refuses.
+- **Practice** (`practice.tsx`, `/practice`) — the drill queue, on `/v1` and
+  in the primary nav. Every item is a position from the player's own games
+  where the engine preferred another move, and each carries its own reason
+  with the cost it measured. Three rules from the API's contract shape the
+  screen: the queue never contains the solution (the board is a test; the
+  expected move exists client-side only after an attempt); one committed
+  answer per position, no retry, because the attempt advanced the spaced
+  schedule and the honest consequence of a miss is that the position comes
+  back sooner, which the page says; and a revealed answer is never a success.
+  The verdict draws the played move in the loss colour and the engine's in
+  the win colour, both named in words beside the board.
 - **Line row** (`TearSheet.tsx`) — the `/openings` page is a list of these and
   nothing else. One repertoire line per row: its name, a **move strip** of its
   own move numbers on the heat ramp, the count in a fixed two-part shape
@@ -253,6 +371,51 @@ Product:
   found. Each still states that threshold under its own figure: a stated
   measurement is worth keeping even when there is no longer a second one to
   tell it apart from.
+
+  **The page is a desk, not a stack of strips.** Four revisions of this hub
+  were one full-width band after another — graph strip, tile strip, rank
+  rows, task rows — and however each band was polished the page read as a
+  report. The architecture that finally broke the rhythm follows what the
+  products doing this well actually do: few, distinct, aggregated units, and
+  a mark vocabulary a reader can tell apart before reading any of it.
+
+  - **The hero**: the verdict headline, then **the three phase rings and no
+    graph**. The trajectory was drawn here for one revision, with the rings
+    as its legend, and the two instruments disagreed on sight: the line reads
+    the median evaluation (collapsing in the middlegame), the rings count key
+    moments handled (highest in the middlegame, whose moments are a different
+    mix), and a hero that needs a footnote to hold its own two pictures apart
+    is arguing with itself. The graph's conclusion survives as the headline
+    sentence — the part a reader takes away — and the picture itself lives on
+    `/profile` and `/report`, where reading the evidence behind a sentence is
+    the point. Each ring is the way into its `/patterns` section, and the
+    provenance is one quiet line inside the figure's note.
+  - **Start here**: the worst line, its board, and the page's single accent
+    control. It is the only large block of type on the hub, which is what
+    lets it read as the thing to do without a badge saying so.
+  - **The deck** ("Then"): everything else worth doing, as marked cards in an
+    auto-fitting grid — the examination, the drill queue, the openings sheet,
+    the profile, the last game. Each carries a piece glyph in a ring, a title,
+    a counted reason and, where there is one, a figure as a badge. A card
+    that cannot state its reason does not render.
+  - **Progress**: the goal, still honestly empty until goal-setting ships.
+
+  **What the hub does not carry.** No ranked measure stack, no per-measure
+  movement, no finding paragraph, and no family cards summarising either.
+  Every one of those was a list wearing a page, and the deep reading they
+  wanted already exists on `/profile` and `/report`, where reading every
+  measure is the point. A hub is a glance: every claim on it is a headline,
+  a chip, a ring or a card.
+
+  **The trajectory's compact cut** survives in `Trajectory` (`compact`) but
+  no longer has a caller: the hub dropped the graph (see the hero note
+  above), and the full reading on `/profile` and `/report` is not compact.
+  **The archive is graphite and the measurement is the accent**: everything
+  structural stays ink, and the one hue means "your figure". The picture
+  spent one revision as a pale accent band that read as a washed pink field
+  sitting alien on the paper, and one as a field of quantile capsules that
+  was accurate, dense and unreadable at a glance. The line is what a person
+  actually reads.
 
 The landing is exactly six beats: hero, statement, scale, showcase, beta note,
 closer.
@@ -451,6 +614,334 @@ Public (one layout family per section, never repeated):
   says how early this is more credibly than a paragraph admitting it. Give it a
   home before using it again; do not add stand-ins.
 
+## The hub
+
+The authenticated pages are a different problem from the marketing site, and
+for one revision they were designed as though they were not: a signed-in page
+carried the same restraint, the same air, and none of the tactility, so a
+product somebody uses every day read like a page they were meant to admire once.
+
+Five rules, and they are the ones that keep breaking.
+
+**One unit per screen.** Everything measured on the hub is key moments handled
+over key moments seen, because that is what the estimator publishes for a phase
+and for every concept in the catalogue alike. The words are the contract's
+(PAGES.md): **handled** is the universal positive, **missed** the universal
+negative, **set aside** is neither, and a pattern speaks its own natural verb
+at the detailed level. The row this rule replaced said "1.4
+mistakes per game", "−34 points given up" and "62% winning positions converted"
+side by side, in one visual grammar, and nobody can rank those. If a figure
+cannot be said in the screen's unit, it belongs on `/profile`.
+
+**Colour is movement, never level.** A dial is coloured by the estimator's
+posterior that this thing improved against the same player's earlier games —
+the one comparison the estimator says is valid. Colouring by level is both
+unfair and uninformative: a beginner sits in the bottom band of every measure
+Forma has, so every mark would be red for as long as they need encouragement
+most. A thing nobody has compared yet is ink, not red.
+
+**No measurement lives only in a hover state.** It does not exist on a touch
+device, it does not exist for anybody walking past, and — because a hidden
+block still takes part in layout — it will quietly shove the marks around it
+out of line. If it is worth measuring it is worth a line on the page.
+
+**Never let one screen carry more than one box.** The action is the box.
+Dials, milestones and readings sit on the paper, like a piece on a board. When
+every object is in its own white card the page has no hierarchy left to spend
+on the one object that matters, and three cards in a row turn the thing a
+reader is meant to compare into three things they have to look past first.
+
+**Short lines, and a modal for the rest.** A metric label is four words. A card
+title is five. A line of body copy on a hub page is twelve, one clause, no
+semicolons. Anything longer goes into `FigureNote`: a mark and a dialog, which
+costs the page nothing until somebody asks. No em dashes in anything that ships
+to the screen — a period, a comma, a colon or two sentences, every time.
+
+**Mono is for figures, never for tone.** The numeral face marks a measurement.
+A pool name, a section heading and a unit label are words, and setting them in
+tracked uppercase mono is the face doing duty as a costume for "technical". A
+section heading is a heading: text face, reading size, ink.
+
+**One eyebrow is a system; an eyebrow per section is a rhythm nobody chose.**
+The hub carried four tracked uppercase micro-labels down one page. They are
+headings now, and the one true eyebrow — "Start here" over the action — is gone
+because the largest heading on the page and its only accented control already
+said it.
+
+### The dial
+
+The hub's one mark, at three sizes — large on `/today`, mid at the top of a
+phase page, small in a stack. A reader learns the scale once.
+
+- **the arc** is where you are: the published rate on the full 0–100 scale,
+  with the interval as a window on the same track. The track is neutral, never
+  a tint of the tone — a green arc on a green track is a ring whose length
+  cannot be read, which turns the mark's one quantitative channel back into
+  decoration.
+- **the disc** is which way you are going, and it is the only coloured surface.
+- **the mark** is which thing this is, knocked out of the disc.
+
+The claim wears the emphasis and the rate is context under it, not the other
+way round. Pooled phase rates are **not** comparable across phases — the
+concepts that fire are not the same mix in each — so a row of three big
+percentages invites a reading the figures cannot support. The caveat is
+printed on the page, not filed behind the note mark.
+
+### The path is a canvas, not a page
+
+`/path` is the one route in the product that is not a document. Three big
+circles stand in one space, unconnected, each with a road leaving it; pressing
+one flies a camera down that road into that phase's own territory, where a
+Duolingo-shaped path of stops climbs from the bottom of the screen upward.
+It carries **no product nav** — a sticky bar with a logo and three tabs across
+the top of a canvas is browser chrome bolted to a map, and it makes the space
+read as a page again. One back arrow is the whole of its navigation.
+
+Five rules, and they were each learned by breaking them:
+
+- **One progress value drives the camera.** `x`, `y` and `scale` are all
+  derived from it (`PathCanvas`). Three independent springs on the three
+  transform channels let the framing drift mid-flight, because the translation
+  is computed against a scale that has not arrived yet.
+- **A path runs the way you were already going**, and that is per territory.
+  The opening sits above the hub, so you fly up to it and its path climbs; the
+  middlegame and endgame sit below, so you fly down and theirs descend. Travel
+  and path are one continuous motion in every case. The first fix for this was
+  "every path climbs", which only moved the reversal from one territory onto
+  the other two.
+- **Stops carry a name beside them, never under.** The route swings left and
+  right down the middle of a territory, so a name centred under a face sits on
+  the line to the next stop. The name hangs off the outer side of the swing,
+  which keeps the middle clear and gives the eye one column to read.
+- **Every stop opens the same way.** A press opens the stop's own sheet and the
+  sheet carries the action; leaving the canvas is always a deliberate second
+  press. The draft where review stops opened a panel while lessons and drills
+  navigated straight out meant two identical-looking objects did two different
+  kinds of thing, one of them throwing away the place you were standing in.
+- **A stop is named the way chess names it.** "Forks", "Only moves",
+  "Hanging pieces" - not the catalogue's descriptions ("Attacking two things at
+  once", "Finding the move that held"), which are right where a reader meets a
+  measure once and read as generated filler repeated down a route. The
+  description survives as the sheet's subtitle, where explaining is the job.
+  The role is appended only when it is telling two stops apart, because
+  "Conversion - Convert" says the same word twice.
+- **The route is one dotted line in the accent, and it loops.** It was a grey
+  bed under a white surface under a centre-line, which is a lot of road for a
+  canvas whose only other marks are circles: the stops sat on top of it rather
+  than being threaded onto it. One line running behind every face reads as one
+  object. It carried a loop every third gap for one revision and they are gone:
+  a loop drawn in dots is a knot, it reads as the route doubling back, and it
+  tangled two stops that have nothing to do with each other. The swing of the
+  path is character enough.
+- **A stop's face says what kind of thing it is**, and a review stop's face
+  says what kind of chess situation it was, taken from the concept's published
+  category: tactical takes the burst, defensive the shield, conversion the
+  flag, and anything unclassed the board. Six identical board marks down one
+  route told a reader only that six things happened.
+- **An opened stop takes three quarters of the screen** and the canvas slides
+  left to make room, rather than shrinking. A sidebar-width column cannot hold
+  a board at reading size, and a board is the whole point of a review.
+- **Done is only ever real.** A stop is finished because stored progress says
+  so - lessons have `completedAt`, and nothing else does. There is no published
+  notion of having finished looking at a position, and inventing one would be
+  the awarded-for-effort badge the product refuses.
+- **A road is a departure, not a connection.** It leaves a circle and fades to
+  nothing well short of its territory. Two drafts drew the full distance and
+  both crossed the very path they led to, because a territory's climb occupies
+  the corridor its own road must travel.
+- **A stop carries its name and nothing else.** The counts live on the panel
+  beside the path and on the stop's own sheet. Forty counted lines down a route
+  is a table wearing a map's clothes.
+- **A measurement never sits among the stops.** A ring on a path reads as a
+  thing to complete, and nothing measured here is completable. It goes on the
+  panel, which is also why the three entrance circles count waiting evidence
+  ("6 to review") and never a percentage: a ring filled to 72% under the word
+  "Opening" says the opening is 72% done.
+
+A path ends in **faded, locked ground** saying more is coming, and those nodes
+are deliberately unnamed — a locked node promising a specific lesson is a
+roadmap the product has not committed to.
+
+**The accent is structural here, not decoration.** Orange means "this is your
+way through": it runs as a dashed centre-line down the made part of a route and
+stops dead where the locked ground begins, and it rings the one stop you are
+meant to start from. Green appears in exactly one place, the finished badge.
+Everything else on the canvas is ink, paper and the board's own two tones.
+
+**The drawn object is now the product's, not the canvas's.** A three-pixel ink
+outline with a solid plinth under it, pressing by the plinth's own depth. It
+started on `/path` and `/today` carries it too: the phase rings sit in drawn
+discs, the action card is outlined and plinthed, and the deck marks are drawn
+wells. The two screens are one product, and a ring on the hub and a stop on a
+path are the same kind of object at two sizes. The phase faces are shared
+outright, so the mark inside a hub ring and the mark inside a canvas orb are
+one drawing.
+
+**Stars are only ever earned on a task with a fixed denominator.** A lesson has
+one: everybody who takes it answers the same interactive moves, so a score out
+of them is the same question asked of everyone, and `bestScore` records it.
+Phases and patterns do not - the concepts that fire differ by phase, difficulty
+differs by pattern, and PAGES.md is explicit that the number is not a fair
+universal score. Stars there would tell a beginner they are one star at
+everything for exactly as long as they most need encouragement, which is the
+failure the colour-is-movement rule exists to prevent. A lesson nobody has
+finished shows no stars at all, because an empty row of outlines is a zero on a
+task never attempted. They are drawn in ink, not gold: the canvas spends its
+one colour on the route.
+
+**A territory's measurements stand on its masthead**, at the head of its own
+path, in the same outlined-and-plinthed object as everything else. They were a
+card pinned to the corner of the screen for one revision, which is the shape of
+a default modal: it hovered over the world instead of belonging to it, and said
+nothing about where you were standing. It is still not among the stops.
+
+`pathMarks.tsx` is the path's own mark family: heavy outline, flat fill. A
+separate family from `marks.tsx` because the job differs — those are small
+figures inside dials and rows, where two tints of one hue is right; these are
+96px faces a reader is meant to want to press, and at that size a two-tint
+glyph reads as a faint diagram. The three phase faces are one board with
+different ground lit up (the rank you start from, the centre you fight over,
+what is left), so they are obviously three states of one thing. **The rule that
+marks never draw pieces survives the restyle.**
+
+### Three tabs, and one scrolled game
+
+The product navigates on three questions, not on the parts of a chess game:
+**Today** (how am I doing), **Path** (what to work through),
+**Practice** (what is due right now).
+
+It was five tabs, and three of them were a third of a game each. Nobody decides
+to go and look at their middlegame - and `/middlegame` and `/endgame` were the
+same component differing in six string lookups across five hundred lines, sat
+in the nav beside `/openings`, which was a different kind of page entirely.
+
+`/patterns` is one page and you scroll it, opening to endgame, so the scroll
+itself is the shape of a game. It spent one revision as `/mistakes`, and the
+rename is the contract's: the page describes what recurs, and a recurring
+moment carries a handled count as well as a missed one - a name that opens on
+failure describes half its own evidence. Each phase is the same three things
+in the same order, which is what lets the second and third be read without
+being learned again:
+
+1. **the dial**, the same object the hub carries, at hero size;
+2. **one key moment, on the board it went wrong on** - the kind missed most
+   often in that phase, with its role named beside it (recognising, following
+   through, responding, converting - two skills under one concept name are two
+   different readings), and the move played beside the move that held. Three
+   boards down the page is a game coming apart in three places, and it beats a
+   ranked table of nineteen rows answering a question nobody asked on arrival;
+3. **everything else, folded**, behind a control that names the count it holds.
+
+A phase renders its section even when there is nothing in it: "your games do
+not reach here" is a fact about somebody's chess, and dropping the section
+would quietly shorten the game. The same rule at figure scale: **a phase with
+no publishable rate shows the reason in place of the percentage** - "none of
+your games reached here", "too few key moments yet" - and is never drawn as
+0%, because an empty dial and a bottom score are opposite statements.
+
+`/openings` survives as **Your lines**, the opening's line-by-line detail,
+linked from that section and out of the nav. It carries no phase dial - a
+reader met that dial at full size one click earlier, and this page is about
+your lines, not about the phase. It is the one phase with a deeper page
+because it is the one phase with line-level published data; the middlegame
+and endgame have no equivalent and get no matching subpage. `/mistakes`,
+`/middlegame` and `/endgame` survive as redirects,
+because a dead URL is a worse answer than the section it used to be.
+
+### One object, three sizes
+
+`/today`, `/openings`, `/middlegame` and `/endgame` draw the same three figures
+and they draw them with the same component — `PhaseRow` on the hub and the
+profile, `PhaseHero` at the top of each phase page, `Dial` at row size in a
+concept stack. Not a second design of the same figure: somebody arrives on a
+phase page by pressing a dial, and if the page they land on renders that phase
+as a different instrument under a different label, the two screens read as two
+opinions rather than as one thing at two levels of detail.
+
+`/profile` opens on the hub's own row for the same reason. It is `/today` with
+everything behind it, not a separate product.
+
+### One size per set
+
+Anything a reader is comparing side by side is one size. An option that is
+physically taller than the ones beside it reads as more important before a word
+of it has been read, which is a recommendation made with layout instead of
+evidence — and it was exactly what the choice cards did, because the card
+carrying a reason grew a line and each card was its own grid row.
+
+Two rules make it hold rather than needing to be re-fixed:
+
+- **Sets use equal rows** (`grid-auto-rows: 1fr`), so the tallest member sets
+  the height and the rest align to it.
+- **A component with an absent value renders the same shape as one with a
+  value.** A phase with nothing published draws the name, the chip and a figure
+  line of the same height saying so, rather than three elements where its
+  neighbours have four.
+
+And a mark inside a dial is a fixed share of that dial, set by the dial, at
+every size it is drawn. It used to be set per context, so the same mark came
+out at a different size inside the same component depending on which screen had
+rendered it.
+
+**The gallery renders the real components.** `/dev/foundation` hand-wrote its
+own copy of the phase node for one revision, and the copy went stale the moment
+the node changed — a gallery that reimplements what it documents is a second
+implementation to keep in step, and it will not be kept in step.
+
+### The plinth
+
+`--shadow-key` is a 2px lip drawn inside the shape. It reads on a 32px button
+and disappears under anything larger. `--shadow-lip` is the same idea at the
+depth a large object needs: a ring plus a solid offset below it in the object's
+own darker ink, so the object sits on a plinth rather than darkening its own
+bottom edge — a white card cannot shade its own two bottom pixels without
+looking soiled. Pressing translates by exactly `--lip`, so the plinth
+disappears and nothing beside it shifts.
+
+### The rook, speaking
+
+**Onboarding, and nowhere else.** A mascot speaking is charming on a screen
+somebody meets once and a mannerism on the screen they open every morning — a
+hub that greets you in character every day is performing at you rather than
+telling you something. Onboarding is where the product genuinely is introducing
+itself, so it is where the first person is earned.
+
+Everywhere else the same words go on the page as a short line, or into
+`FigureNote`. **One bubble per screen, ever** — two on one page means one of
+them is a measurement that has not been cut down yet.
+
+The bubble takes children rather than a string, which is most of the reason it
+is worth having: a move inside it should be a move mark, and a named concept
+should be a link to its own dial.
+
+### Milestones
+
+The closest thing Forma has to an achievement, and the difference from every
+other product's version is the point of shipping it:
+
+1. **Nothing is awarded for effort.** No streak of visits, no count of drills
+   done, no games synced. A product that congratulates you for turning up has
+   stopped measuring your chess.
+2. **A milestone can be lost.** Declines render in exactly the same shape as
+   gains. A wall that only fills up is a wall nobody reads twice.
+3. **The evidence is on the card**, not behind it: two rates and the chances
+   the recent one was counted over.
+
+The strip is ordered by certainty — distance of the posterior from 0.5 — not
+worst-first. Worst-first is right for `/profile`, which somebody opened
+deliberately to read every measure; on three cards it produces a hub that opens
+on two failures every day. Certainty-first surfaces a strong decline exactly as
+readily as a strong gain.
+
+### Choice cards
+
+A question asked as cards rather than a strip of pills, so the consequence of
+each option is readable before it is picked. An option may carry a *Forma
+suggests* tab, and the component requires a reason alongside it: a confident
+recommendation with nothing under it is the one move that would contradict
+everything else here. Nothing pre-selects — a default somebody has to notice
+and undo is not a recommendation.
+
 ## Voice
 
 Sharp, candid, calm (see PRODUCT.md). On marketing pages that means concrete
@@ -490,3 +981,20 @@ Animate `transform` and `opacity` first; `stroke-dashoffset`, `clip-path`, and
 
 WCAG AA minimum. Skip links on both shells. Focus is always visible. Colour never
 carries meaning alone. Keyboard-navigable throughout, including the board.
+
+Three rules that AA implies and that the product kept breaking:
+
+**A token that fails at the size it is used is a broken token, not a debt.**
+`--color-ink-faint` and `--color-accent` both failed, and between them they
+carry every caption and every primary control on the product. See the Color
+section for the values that replaced them and the ratios they measure.
+
+**The focus ring is an outline and only an outline.** `box-shadow` replaces the
+element's own, so a focus rule that adds a halo strips the plinth off the
+button it is ringing and squares its radius for as long as it is held. An
+outline is drawn outside the box, follows the real radius, and cannot disturb
+what it rings.
+
+**44px is the floor for anything you press**, including a mark set inline in a
+line of small type. Where the glyph has to stay small, a negative-inset
+`::after` gives it a real target without taking any layout.

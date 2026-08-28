@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { Board } from "./Board";
-import { InfoTip } from "./InfoTip";
+import { FigureNote } from "./FigureNote";
 import { OpeningBookPanel } from "./OpeningBookPanel";
 import { lessonForFamily } from "../lib/lessons";
 import { openingSlug } from "../lib/openingContent";
-import { OTHER_ROW, tallyCells } from "../lib/tearSheet";
+import { MAX_MOVE, OTHER_ROW, tallyCells } from "../lib/tearSheet";
 import type { SheetCell, SheetRow, TearSheet as Sheet } from "../lib/tearSheet";
 import type { OpeningExplorerCoverage } from "../lib/v1/types";
 
@@ -205,27 +205,52 @@ export function MoveStrip({
   small?: boolean;
 }) {
   const shown = cells.slice(0, maxMove);
+  /**
+   * The row's own worst move sets the height.
+   *
+   * One scale across the whole sheet was the first attempt, on the argument
+   * that a bar should mean the same trouble in the Scotch as in the Alekhine.
+   * It does not survive real data: one line with forty-six mistakes on a move
+   * flattens every other row on the page to a two-pixel stub, and the reader
+   * loses the only question these bars are here to answer - which move in
+   * *this* line goes wrong. The cross-row comparison is already carried, in
+   * words, by the mistake count beside the strip and by the order of the
+   * rows, which is worst first.
+   */
+  const top = Math.max(1, ...shown.map((cell) => cell.failures));
+
   return (
-    <div className={`line-strip ${small ? "is-small" : ""}`} aria-hidden={!onPick}>
+    <div className={`movebars ${small ? "is-small" : ""}`} aria-hidden={!onPick}>
       {shown.map((cell, i) => {
         const dead = cell.state === "pre" || cell.state === "blank";
         const className = [
-          "line-sq",
+          "movebar",
           markedMove === cell.moveNo ? "is-marked" : "",
           pickedMove === cell.moveNo ? "is-picked" : "",
         ]
           .filter(Boolean)
           .join(" ");
-        const style = { "--i": i } as React.CSSProperties;
+        const style = {
+          "--i": i,
+          "--h": `${Math.min(100, (cell.failures / top) * 100)}%`,
+        } as React.CSSProperties;
+
+        const body = (
+          <>
+            <span className="movebar-fill" aria-hidden="true" />
+            {onPick ? (
+              <span className="movebar-no" aria-hidden="true">
+                {cell.moveNo}
+              </span>
+            ) : null}
+          </>
+        );
+
         if (!onPick) {
           return (
-            <span
-              key={cell.moveNo}
-              className={className}
-              data-state={cell.state}
-              data-heat={cell.heat}
-              style={style}
-            />
+            <span key={cell.moveNo} className={className} data-state={cell.state} style={style}>
+              {body}
+            </span>
           );
         }
         const title = readCell(label, cell);
@@ -235,7 +260,6 @@ export function MoveStrip({
             type="button"
             className={className}
             data-state={cell.state}
-            data-heat={cell.heat}
             style={style}
             disabled={dead}
             title={title}
@@ -243,15 +267,14 @@ export function MoveStrip({
             aria-pressed={pickedMove === cell.moveNo}
             onClick={() => onPick(cell)}
           >
-            <span className="line-sq-no" aria-hidden="true">
-              {cell.moveNo}
-            </span>
+            {body}
           </button>
         );
       })}
     </div>
   );
 }
+
 
 /**
  * Practice, and the one thing the reader has to be told about it.
@@ -332,62 +355,49 @@ export function TearSheet({
 
   return (
     <div className="lsheet">
-      <header className="lsheet-head">
-        <h1>Openings</h1>
-        <p className="lsheet-facts">
-          <span>
-            <b>{lines}</b> {plural(lines, "line", "lines")}
-          </span>
-          <span>
-            <b>{mistakes}</b> {plural(mistakes, "mistake", "mistakes")}
-          </span>
-          {/* The model caps columns at `maxMove`, so a line that runs deeper
-              than the sheet is drawn reports the cap. Saying "to move 12" when
-              the real answer is "we stopped counting at 12" is the kind of
-              number that costs a reader their trust in the other two. */}
-          <span>
-            deepest {depth >= sheet.maxMove ? "past" : "to"} move{" "}
-            <b>{depth >= sheet.maxMove ? sheet.maxMove - 1 : depth}</b>
-          </span>
-        </p>
-        {/* The threshold is stated, not implied, and it is the canonical one.
-            A number a player can check is worth more than an adjective they
-            have to take on trust — and this number changed when the sheet
-            moved off the prototype graph, so restating the old 90cp rule would
-            have been two different measurements wearing one word. */}
-        <p className="lsheet-key">
-          One square per move, darkest where you make the most mistakes. A mistake is a
-          move Forma's published analysis judged outside tolerance: it gave up more than
-          0.02 of expected score against the best line the same search found.
-        </p>
-        {/* Coverage, said once, at the top. Every count above is over the
-            judged moves and not over all of them, and a reader who does not
-            know that reads an unexamined repertoire as a clean one. */}
-        <p className="lsheet-key">
-          {decided === 0 ? (
-            "None of your opening moves have been analysed yet, so nothing here is a verdict."
-          ) : waiting === 0 ? (
-            <>
-              All <b>{decided}</b> of your opening moves in these games have been analysed.
-            </>
-          ) : (
-            <>
-              <b>{scored}</b> of your <b>{decided}</b> opening moves have been analysed. The
-              other <b>{waiting}</b> are counted as unanalysed, never as moves that went well
-              {coverage.unanalysedGames > 0
-                ? ` — ${coverage.unanalysedGames} ${plural(coverage.unanalysedGames, "game is", "games are")} still waiting`
-                : ""}
-              .
-            </>
-          )}
-        </p>
-        {/* Stated because Practice is the one control that leaves this page
-            for a screen counting by the older rule. */}
-        <p className="lsheet-key">
-          Practice is drilled from the older opening graph.{" "}
-          <InfoTip label="what practice is built from">{PRACTICE_SOURCE}</InfoTip>
-        </p>
-      </header>
+      {/* No heading here.
+          The route above prints "Your lines" and this printed "Openings"
+          directly under it, at the same size, giving one screen two names and
+          restating the nav tab. The component owns rows; the route owns the
+          page. What survives is the method note, which belongs to the rows. */}
+      <div className="lsheet-note">
+          <FigureNote title="How this page counts">
+            <p>
+              <b>{lines}</b> {plural(lines, "line", "lines")}, <b>{mistakes}</b>{" "}
+              {plural(mistakes, "mistake", "mistakes")}, deepest{" "}
+              {depth >= MAX_MOVE ? "past" : "to"} move{" "}
+              <b>{depth >= MAX_MOVE ? MAX_MOVE : depth}</b>. The model stops counting at
+              move {MAX_MOVE}, so a line that runs deeper reports the cap rather than a
+              depth it did not measure.
+            </p>
+            <p>
+              One bar per move, tallest where you make the most mistakes, on one scale
+              across every line here. A mistake is a move Forma's published analysis judged
+              outside tolerance: it gave up more than 0.02 of expected score against the
+              best line the same search found.
+            </p>
+            <p>
+              {decided === 0 ? (
+                "None of your opening moves have been analysed yet, so nothing here is a verdict."
+              ) : waiting === 0 ? (
+                <>
+                  All <b>{decided}</b> of your opening moves in these games have been
+                  analysed.
+                </>
+              ) : (
+                <>
+                  <b>{scored}</b> of your <b>{decided}</b> opening moves have been analysed.
+                  The other <b>{waiting}</b> are counted as unanalysed, never as moves that
+                  went well
+                  {coverage.unanalysedGames > 0
+                    ? ` (${coverage.unanalysedGames} ${plural(coverage.unanalysedGames, "game is", "games are")} still waiting)`
+                    : ""}
+                  .
+                </>
+              )}
+            </p>
+        </FigureNote>
+      </div>
 
       {sheet.sections.map((section) => (
         <Section

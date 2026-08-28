@@ -148,7 +148,7 @@ export default function LessonPlayer({ loaderData }: Route.ComponentProps) {
       status: "wrong",
       reveal: secondMiss,
       text: secondMiss
-        ? `The move is ${step.san} — follow the green arrow.`
+        ? `The move is ${step.san}. Follow the green arrow.`
         : `Not the move this line wants. Think about the plan and try again.`,
     });
     return false;

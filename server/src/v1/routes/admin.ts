@@ -17,6 +17,7 @@
 import { z } from "zod";
 import { recordAuditEvent } from "../audit.js";
 import { decodeCursor, encodeCursor, resolveLimit, type CursorScope } from "../cursor.js";
+import { forgetAuthorizationContext } from "../auth/context.js";
 import { ProblemError } from "../problem.js";
 import { routeKey, type RouteDefinition } from "../registry.js";
 import { withOperatorContext } from "../../access/operator.js";
@@ -167,6 +168,12 @@ const decideRoute: RouteDefinition<
       decideAccessRequest(tx, userId, body.decision, note?.length ? note : null),
     );
     if (!decided) throw new ProblemError("NOT_FOUND", { detail: "No such account." });
+
+    // The gate reads `access.state` off the cached authorization context, so a
+    // decision that did not clear it would leave an approved person locked out
+    // for the rest of the window. Cleared here rather than waiting for the TTL,
+    // because this is the one moment we know the answer changed.
+    forgetAuthorizationContext(userId);
 
     await recordAuditEvent({
       actorKind: "user",

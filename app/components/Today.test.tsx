@@ -3,8 +3,11 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, test, vi } from "vitest";
 import type { OpeningShape } from "../lib/todayShape";
 import type { RecentGame } from "../lib/v1/games";
-import type { Measure, TodayReport } from "../lib/v1/dashboard";
+import type { TodayReport } from "../lib/v1/dashboard";
 import type { GoalProgress, GoalView } from "../lib/v1/goals";
+import type { TrajectoryBin } from "../lib/v1/types";
+import type { PhaseReading } from "../lib/v1/dashboard";
+import { buildCone } from "../lib/trajectory";
 import type { Destination } from "../lib/onboarding/nextScreen";
 
 /**
@@ -57,6 +60,7 @@ function draw(props: Partial<Parameters<typeof Today>[0]> = {}) {
         lastGame={null}
         run={null}
         report={null}
+        queue={null}
         goal={null}
         goalProgress={null}
         {...props}
@@ -65,27 +69,44 @@ function draw(props: Partial<Parameters<typeof Today>[0]> = {}) {
   );
 }
 
-const measure = (over: Partial<Measure> = {}): Measure => ({
-  baseKey: "material_safety_respond",
-  name: "Keeping your pieces safe",
-  role: "Responding to it",
-  definition: null,
-  rate: 0.431,
-  intervalLow: 0.411,
-  intervalHigh: 0.45,
-  sample: 1940,
+const bin = (
+  over: Partial<TrajectoryBin> & { phase: string; binOrdinal: number },
+): TrajectoryBin => ({
+  progressLow: over.binOrdinal / 4,
+  progressHigh: (over.binOrdinal + 1) / 4,
+  gamesContributing: 200,
+  medianExpectedScore: 0.5,
+  p25ExpectedScore: 0.34,
+  p75ExpectedScore: 0.68,
+  intervalLow: null,
+  intervalHigh: null,
+  phaseReachRate: 1,
+  ...over,
+});
+
+/** A real cone, so the figure that carries the provenance actually renders. */
+const cone = () =>
+  buildCone([
+    bin({ phase: "opening", binOrdinal: 0 }),
+    bin({ phase: "opening", binOrdinal: 1 }),
+    bin({ phase: "middlegame", binOrdinal: 0, gamesContributing: 160, phaseReachRate: 0.8 }),
+    bin({ phase: "middlegame", binOrdinal: 1, gamesContributing: 160, phaseReachRate: 0.8 }),
+  ])!;
+
+/** One published phase, so the dials the provenance hangs off actually draw. */
+const reading = (over: Partial<PhaseReading> = {}): PhaseReading => ({
+  phase: "opening",
+  rate: 0.62,
+  intervalLow: 0.58,
+  intervalHigh: 0.66,
+  took: 124,
+  chances: 200,
+  setAside: 8,
+  gamesReaching: 200,
   coverageStatus: "sufficient",
   unavailableReason: null,
-  // The real published figures for this measure, so the fixture exercises the
-  // same rounding the live page does.
-  change: {
-    from: 0.465,
-    to: 0.4,
-    delta: -0.06502,
-    improvementProbability: 0.00348,
-    movement: "declined",
-    sample: 970,
-  },
+  movement: "unclear",
+  change: null,
   ...over,
 });
 
@@ -94,6 +115,10 @@ const report = (over: Partial<TodayReport> = {}): TodayReport => ({
   detail: "At the start of the opening the middle half of your games sit between 51% and 52%.",
   finding: null,
   cone: null,
+  phases: [],
+  accuracy: [],
+  readings: [],
+  milestones: [],
   measured: 5,
   conclusions: 3,
   games: 200,
@@ -166,21 +191,121 @@ describe("Today", () => {
     // duplicated across two statistical frames, so the row count is not an
     // honest figure to put in front of somebody.
     draw({ report: report({ measured: 5, conclusions: 12, games: 200 }) });
-    expect(screen.getByText(/5 measured areas across 200 games/i)).toBeTruthy();
+    expect(screen.getByText(/over 200 games/i)).toBeTruthy();
+    expect(screen.getByText(/5 areas/i)).toBeTruthy();
     expect(screen.queryByText(/12 conclusions/i)).toBeNull();
   });
 
-  test("the cohort is dated, so a smaller count than the archive reads as correct", () => {
-    // A report is a frozen cohort. Printing 200 with no date invites a reader
-    // with 333 synced games to conclude the product cannot count.
-    draw({ report: report({ games: 200, publishedAt: "2026-08-20T18:22:33.011Z" }) });
-    expect(screen.getByText(/measured over/i).textContent).toMatch(/200.*20 August/);
+  test("the cohort and its date travel with the figure they qualify", () => {
+    // A report is a frozen cohort, and 200 with no date invites a reader with
+    // 333 synced games to conclude the product cannot count. It is provenance
+    // rather than a statistic, though, so it sits in the figure's own note
+    // instead of standing under the heading as a chip.
+    draw({
+      report: report({
+        games: 200,
+        publishedAt: "2026-08-20T18:22:33.011Z",
+        readings: [reading()],
+      }),
+    });
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Measured over 200 games");
+    expect(text).toContain("published 20 August");
   });
 
   test("a rating is quoted with the pool it came from, never on its own", () => {
-    draw({ report: report({ rating: { provider: "lichess", speed: "blitz", rating: 1842 } }) });
-    expect(screen.getByText(/1,842/)).toBeTruthy();
-    expect(screen.getByText(/blitz on lichess/i)).toBeTruthy();
+    draw({
+      report: report({
+        rating: { provider: "lichess", speed: "blitz", rating: 1842 },
+        readings: [reading()],
+      }),
+    });
+    const text = document.body.textContent ?? "";
+    // Pools are not comparable, so the figure never appears without the one
+    // it came from.
+    expect(text).toContain("1,842");
+    // As words, never as the wire's keys: "blitz on chesscom" is a database
+    // key reaching a customer.
+    expect(text).toContain("Blitz on Lichess");
+  });
+
+  test("the three dials are read in one unit, and never in three", () => {
+    // The row this replaced said "1.4 mistakes per game", "-34 points given
+    // up" and "62% winning positions converted" side by side. Those cannot be
+    // ranked against each other, and two of the three were coloured from
+    // thresholds that appear nowhere in the contract.
+    const { container } = draw({
+      report: report({
+        readings: [
+          reading({ phase: "opening", rate: 0.72, movement: "gaining" }),
+          reading({ phase: "middlegame", rate: 0.41, movement: "declined" }),
+          reading({ phase: "endgame", rate: 0.58, movement: "unclear" }),
+        ],
+      }),
+    });
+    const figures = container.querySelectorAll(".phase-node-read");
+    expect(figures).toHaveLength(3);
+    for (const figure of figures) {
+      // Label, figure, then what the figure is of - in one unit, every time.
+      expect(figure.textContent).toMatch(/^Handled\d+%[\d,]+ of [\d,]+ key moments$/);
+    }
+    // And the row says out loud that it is not a ranking, on the page rather
+    // than inside a dialog nobody opens.
+    expect(container.querySelector(".today-phases-caveat")!.textContent).toMatch(
+      /not against the others/,
+    );
+  });
+
+  test("the trajectory graph is not drawn on the hub, even when published", () => {
+    // It was, for one revision, with the rings as its legend - and the two
+    // instruments disagreed on sight: the line reads the median, the rings
+    // count key moments handled, and a hero that needs a footnote to hold
+    // its own two pictures apart is arguing with itself. The conclusion
+    // survives as the headline; the picture lives on /profile and /report.
+    const { container } = draw({
+      report: report({
+        cone: cone(),
+        readings: [reading({ phase: "opening" }), reading({ phase: "middlegame" })],
+      }),
+    });
+    expect(container.querySelector(".cone")).toBeNull();
+    expect(container.querySelector(".phase-row")).toBeTruthy();
+    expect(container.querySelector(".today-phases-caveat")!.textContent).toMatch(
+      /not against the others/,
+    );
+  });
+
+  test("a phase with no publishable rate shows the reason, never a score", () => {
+    // The contract's rule: an empty phase is never rendered as 0%, and the
+    // reason stands where the percentage would.
+    const { container } = draw({
+      report: report({
+        readings: [
+          reading({
+            phase: "endgame",
+            rate: null,
+            intervalLow: null,
+            intervalHigh: null,
+            took: 0,
+            chances: 0,
+            gamesReaching: 0,
+            unavailableReason: "no_observations",
+          }),
+        ],
+      }),
+    });
+    const read = container.querySelector(".phase-node-read.is-none");
+    expect(read?.textContent).toMatch(/None of your games reached here/);
+    expect(container.querySelector(".phase-node-read")!.textContent).not.toMatch(/0%/);
+  });
+
+  test("a phase nobody has compared is grey, not a verdict", () => {
+    // Colouring an uncompared phase either way is the product issuing a
+    // judgement the estimator declined to issue.
+    const { container } = draw({
+      report: report({ readings: [reading({ movement: "unclear", change: null })] }),
+    });
+    expect(container.querySelector(".phase-node")!.className).toContain("is-unclear");
   });
 
   test("a conclusion with no readable text leaves the slot empty", () => {
@@ -215,6 +340,17 @@ describe("Today", () => {
     expect(screen.getByText(/Lost against someone, 2d ago/)).toBeTruthy();
   });
 
+  test("a game with no link is stated, not turned into a link to this page", () => {
+    // `providerUrl` is nullable, and the card used to fall through to
+    // `to={item.to ?? "/today"}` - so a game Forma could not link to became a
+    // control that sent the reader to the page they were already on.
+    const { container } = draw({ lastGame: game({ providerUrl: null }) });
+    const card = container.querySelector(".deck-card.is-inert");
+    expect(card).toBeTruthy();
+    expect(card!.tagName).toBe("DIV");
+    expect(container.querySelector('.deck-card[href="/today"]')).toBeNull();
+  });
+
   test("a game with no provider link still states the fact", () => {
     draw({ lastGame: game({ providerUrl: null, opponent: null, outcome: null }) });
     expect(screen.getByText(/Played, 2d ago/)).toBeTruthy();
@@ -224,7 +360,9 @@ describe("Today", () => {
   test("a written report is a row that goes to it", () => {
     const run: Destination = { kind: "report", reportId: "r1" };
     draw({ run });
-    expect(screen.getByRole("link", { name: "Read it" }).getAttribute("href")).toBe("/report");
+    expect(
+      screen.getByRole("link", { name: /baseline report is ready/i }).getAttribute("href"),
+    ).toBe("/report");
   });
 
   test("a dead sync is not reported as work in progress", () => {
@@ -234,127 +372,30 @@ describe("Today", () => {
     expect(screen.queryByText(/Forma is reading your games/)).toBeNull();
   });
 
+  test("a stopped run is the one thing to do, and is not also a card below it", () => {
+    // The act and the deck both know how to render a run that needs attention,
+    // and a page that says "The examination stopped" twice reads as two
+    // different problems. Whatever the act takes, the deck gives up.
+    const run: Destination = { kind: "stuck", reason: null, workflowFailed: true };
+    draw({ run });
+    expect(screen.getAllByText(/The examination stopped/)).toHaveLength(1);
+  });
+
+  test("the queue is a counted destination, not the page's one big box", () => {
+    // The hub carried a large accented card saying "10 positions ready" and it
+    // was the last thing still trying to be the decision. The path is the
+    // decision; the queue is a real destination with a counted reason, which
+    // is the only test a deck card has to pass.
+    const { container } = draw({ queue: { due: 14, overdue: 3 }, lead: null });
+    const card = screen.getByRole("link", { name: /14 positions ready/i });
+    expect(card.getAttribute("href")).toBe("/practice");
+    expect(card.className).toContain("deck-card");
+    expect(container.querySelector(".today-act")).toBeNull();
+  });
+
   test("a run that could not be read produces no row at all", () => {
     draw({ run: null });
     expect(screen.queryByLabelText("Then")).toBeNull();
-  });
-
-  test("the stack leads with the measure going most clearly wrong", () => {
-    // Ranked by the posterior, not by rate: the rates are over different jobs
-    // and sorting them would rank the catalogue's difficulty, not the player.
-    // Here the worst *rate* is deliberately the one that is holding steady.
-    draw({
-      report: report({
-        measures: [
-          measure({
-            baseKey: "worse_position_defence_respond",
-            name: "Defending a worse position",
-            rate: 0.844,
-            change: {
-              from: 0.892, to: 0.8, delta: -0.0927,
-              improvementProbability: 0, movement: "declined", sample: 849,
-            },
-          }),
-          measure({
-            baseKey: "only_move_recognize",
-            name: "Finding the move that held",
-            rate: 0.047,
-            change: {
-              from: 0.046, to: 0.051, delta: 0.0049,
-              improvementProbability: 0.58, movement: "unclear", sample: 168,
-            },
-          }),
-        ],
-      }),
-    });
-    const rows = screen.getAllByRole("button", { expanded: true })
-      .concat(screen.getAllByRole("button", { expanded: false }));
-    expect(rows[0]!.textContent).toMatch(/Defending a worse position/);
-    expect(screen.getByText("Gone backwards")).toBeTruthy();
-  });
-
-  test("a decline is reported, not only an improvement", () => {
-    // The findings vocabulary has no decline type at all, so a page built from
-    // findings alone can report every gain and no loss. PRODUCT.md's whole
-    // first principle is that the unflattering figure is the one that earns
-    // trust, so the posterior is read directly.
-    draw({ report: report({ measures: [measure()] }) });
-    expect(screen.getByText("−7")).toBeTruthy();
-    expect(screen.getByText("Gone backwards")).toBeTruthy();
-  });
-
-  test("two measures of one concept are told apart by their job", () => {
-    // `critical_moment` is scored twice — noticing the position, and playing
-    // it — and both carry the concept name. Without the role the stack shows
-    // the same name twice and reads as a duplicated row.
-    draw({
-      report: report({
-        measures: [
-          measure({
-            baseKey: "critical_moment_recognize",
-            name: "Positions that decide the game",
-            role: "Recognising the chance",
-          }),
-          measure({
-            baseKey: "critical_moment_execute",
-            name: "Positions that decide the game",
-            role: "Following it through",
-          }),
-        ],
-      }),
-    });
-    expect(screen.getByText("Recognising the chance")).toBeTruthy();
-    expect(screen.getByText("Following it through")).toBeTruthy();
-  });
-
-  test("a near-zero posterior is never printed as impossible", () => {
-    // 0.3% rounds to "0%", which tells somebody it is impossible their play
-    // improved. The server's renderer refuses the same rounding at the other
-    // end, and this is that rule mirrored.
-    draw({ report: report({ measures: [measure()] }) });
-    expect(screen.getByText(/under 1%/i)).toBeTruthy();
-  });
-
-  test("a posterior stored as exactly zero is still not impossible", () => {
-    // `worse_position_defence` really is published as 0.00000: the column keeps
-    // five decimal places and the model cannot produce a true zero, so this is
-    // a rounded small number wearing an absolute.
-    draw({
-      report: report({
-        measures: [
-          measure({
-            change: {
-              from: 0.892, to: 0.8, delta: -0.09267,
-              improvementProbability: 0, movement: "declined", sample: 849,
-            },
-          }),
-        ],
-      }),
-    });
-    expect(screen.getByText(/under 1%/i)).toBeTruthy();
-    expect(screen.queryByText(/at 0%/i)).toBeNull();
-  });
-
-  test("a movement that rounds to nothing does not wear a sign", () => {
-    draw({
-      report: report({
-        measures: [
-          measure({
-            change: {
-              from: 0.046, to: 0.051, delta: 0.0049,
-              improvementProbability: 0.58, movement: "unclear", sample: 168,
-            },
-          }),
-        ],
-      }),
-    });
-    expect(screen.getByText("0")).toBeTruthy();
-    expect(screen.queryByText("+0")).toBeNull();
-  });
-
-  test("a measure with no second window is not reported as holding steady", () => {
-    draw({ report: report({ measures: [measure({ change: null })] }) });
-    expect(screen.getByText(/Not compared yet/i)).toBeTruthy();
   });
 
   test("no goal is an honest empty state, not a hidden section", () => {
@@ -365,15 +406,26 @@ describe("Today", () => {
   test("a goal with nothing measured yet says so by name", () => {
     draw({ goal: goal({ statedObjective: "Reach 1600 blitz on lichess" }) });
     expect(screen.getByText("Reach 1600 blitz on lichess")).toBeTruthy();
-    expect(screen.getByText(/Nothing has been measured on this goal yet/i)).toBeTruthy();
+    expect(screen.getByText(/Nothing measured on it yet/i)).toBeTruthy();
   });
 
-  test("progress keeps adherence and evidence apart from the claim", () => {
-    // An activity counter is not the same field as the claim state, and the
-    // page must not let one stand in for the other.
+  test("progress counts targets met, and never a metric's database key", () => {
+    // `/v1/goals` returns each metric under a key and no display name, so the
+    // rows this replaced printed a slug per line. How many of the goal's
+    // targets are met is the one thing that can be said without naming a
+    // metric, and it is also what somebody wants to know.
+    const { container } = draw({ goal: goal(), goalProgress: progress() });
+    const targets = container.querySelector(".today-progress-targets");
+    expect(targets?.textContent).toMatch(/^\d+\/\d+ targets? met$/);
+    expect(container.querySelector(".today-progress-card")!.textContent).not.toMatch(/_/);
+  });
+
+  test("adherence never stands in for progress", () => {
+    // An activity counter is not a measurement. A page that renders "you did
+    // 80% of what you committed to" beside a goal is telling somebody that
+    // practising and improving are the same thing.
     draw({ goal: goal(), goalProgress: progress() });
-    expect(screen.getByText("Improving")).toBeTruthy();
-    expect(screen.getByText(/12 real games have counted as evidence/i)).toBeTruthy();
-    expect(screen.getByText(/This is how much of what you committed to you did/i)).toBeTruthy();
+    expect(screen.queryByText(/what you committed to/i)).toBeNull();
+    expect(screen.getByText(/real games count toward this/i)).toBeTruthy();
   });
 });

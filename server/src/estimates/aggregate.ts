@@ -325,6 +325,108 @@ async function readTrajectoryGames(
  */
 const MEASURED_FRAMES: readonly Frame[] = ["objective", "personal_current"];
 
+interface ConceptPhaseGroup {
+  readonly phase: Phase;
+  readonly rows: Evidence[];
+}
+
+/**
+ * Publish the same concept-and-role estimate at the phase grain.
+ *
+ * These rows deliberately do not feed the findings pipeline. They exist so a
+ * phase detail can show an estimator-backed rate, interval and movement for the
+ * exact evidence it is displaying. A thin split is still written as an
+ * unavailable estimate; dropping it would turn "not enough evidence" into a
+ * missing pattern.
+ */
+async function writeConceptPhaseEstimates(
+  sql: Sql,
+  input: AggregateInput,
+  groups: ReadonlyMap<string, ConceptPhaseGroup>,
+): Promise<{ estimates: number; unavailable: number }> {
+  let estimates = 0;
+  let unavailable = 0;
+
+  for (const frame of MEASURED_FRAMES) {
+    for (const [baseKey, group] of groups) {
+      const { phase, rows } = group;
+      const scopedEvidence = frame === "personal_current" ? recentHalf(rows) : rows;
+      const result = estimate(
+        scopedEvidence.map((item) => item.observation),
+        input.cutoff,
+        {
+          outsideCalibratedRange:
+            frame !== "objective" && input.outsideCalibratedRange === true,
+        },
+      );
+      const first = rows[0]!.row;
+      const description = describeConceptRole(first.concept_slug, first.role);
+      const dimensionId = await ensureDimension(sql, {
+        dimensionKey: `${baseKey}_${frame}`,
+        version: ESTIMATOR_POLICY.version,
+        conceptVersionId: first.concept_version_id,
+        role: first.role,
+        speed: null,
+        phase,
+        frame,
+        displayName: description.label,
+      });
+
+      let comparisonEstimateId: string | null = null;
+      let comparison = null;
+      if (frame === "personal_current" && result.status === "available") {
+        const earlier = estimate(
+          earlierHalf(rows).map((item) => item.observation),
+          input.cutoff,
+        );
+        if (earlier.status === "available") {
+          comparison = compare(earlier, result as Estimate);
+          comparisonEstimateId = await writeEstimate(
+            sql,
+            {
+              analysisRunId: input.analysisRunId,
+              subjectId: input.subjectId,
+              subjectDataSnapshotId: input.subjectDataSnapshotId,
+              estimatorComponentVersionId: input.versions.estimatorVersionId,
+            },
+            {
+              skillDimensionId: dimensionId,
+              windowKind: "baseline",
+              result: earlier,
+              comparisonEstimateId: null,
+              delta: null,
+              improvementProbability: null,
+            },
+          );
+          estimates += 1;
+        }
+      }
+
+      await writeEstimate(
+        sql,
+        {
+          analysisRunId: input.analysisRunId,
+          subjectId: input.subjectId,
+          subjectDataSnapshotId: input.subjectDataSnapshotId,
+          estimatorComponentVersionId: input.versions.estimatorVersionId,
+        },
+        {
+          skillDimensionId: dimensionId,
+          windowKind: frame === "personal_current" ? "recent_form" : "lifetime",
+          result,
+          comparisonEstimateId,
+          delta: comparison?.delta ?? null,
+          improvementProbability: comparison?.improvementProbability ?? null,
+        },
+      );
+      estimates += 1;
+      if (result.status === "unavailable") unavailable += 1;
+    }
+  }
+
+  return { estimates, unavailable };
+}
+
 export async function aggregateSubjectReport(
   sql: Sql,
   input: AggregateInput,
@@ -366,9 +468,17 @@ export async function aggregateSubjectReport(
   // out of v1's dimension key on purpose — splitting a thin corpus by speed as
   // well produces four dimensions that each say "insufficient evidence".
   const byDimension = new Map<string, Evidence[]>();
+  const byPhaseDimension = new Map<string, ConceptPhaseGroup>();
   for (const item of evidence) {
     const key = `${item.row.concept_slug}_${item.row.role}`;
     byDimension.set(key, [...(byDimension.get(key) ?? []), item]);
+    const phase = item.moment.phase;
+    if (phase !== null) {
+      const phaseKey = `${key}_${phase}`;
+      const group = byPhaseDimension.get(phaseKey) ?? { phase, rows: [] };
+      group.rows.push(item);
+      byPhaseDimension.set(phaseKey, group);
+    }
   }
 
   const dimensionInputs: DimensionInput[] = [];
@@ -486,6 +596,10 @@ export async function aggregateSubjectReport(
     }
   }
 
+  const phaseConceptSummary = await writeConceptPhaseEstimates(sql, input, byPhaseDimension);
+  summary.estimates += phaseConceptSummary.estimates;
+  summary.unavailableEstimates += phaseConceptSummary.unavailable;
+
   // ---------------------------------------------------------------------
   // Phase, as a dimension in its own right.
   //
@@ -498,6 +612,9 @@ export async function aggregateSubjectReport(
   const phaseStrata = new Map<Phase, Map<string, Observation[]>>();
   const phaseMoments = new Map<Phase, Moment[]>();
   const strataLabels = new Map<string, string>();
+  // The evidence itself, kept per phase so the personal window below can split
+  // it in half by date. The strata map above throws the dates away.
+  const phaseEvidence = new Map<Phase, Evidence[]>();
   for (const item of evidence) {
     const phase = item.moment.phase;
     if (phase === null) continue;
@@ -507,7 +624,25 @@ export async function aggregateSubjectReport(
     strata.set(key, [...(strata.get(key) ?? []), item.observation]);
     phaseStrata.set(phase, strata);
     phaseMoments.set(phase, [...(phaseMoments.get(phase) ?? []), item.moment]);
+    phaseEvidence.set(phase, [...(phaseEvidence.get(phase) ?? []), item]);
   }
+
+  /**
+   * The strata a pooled phase estimate needs, rebuilt from a list of evidence.
+   *
+   * `poolPhase` stratifies by concept and role so a phase whose chances are
+   * mostly one easy concept is not scored as though every concept were equally
+   * represented. Splitting the phase's evidence by date and re-pooling means
+   * rebuilding that map for each half, which is what this is for.
+   */
+  const strataOf = (items: readonly Evidence[]): Map<string, Observation[]> => {
+    const out = new Map<string, Observation[]>();
+    for (const item of items) {
+      const key = `${item.row.concept_slug}_${item.row.role}`;
+      out.set(key, [...(out.get(key) ?? []), item.observation]);
+    }
+    return out;
+  };
 
   for (const phase of PHASE_ORDER) {
     const strata = phaseStrata.get(phase);
@@ -543,6 +678,80 @@ export async function aggregateSubjectReport(
         improvementProbability: null,
       },
     );
+
+    // -------------------------------------------------------------------
+    // The same phase against this player's own earlier games.
+    //
+    // Every concept has been measured in both frames since v1, and the phase
+    // was measured in one: `objective` over the lifetime, with a null
+    // posterior. That left the client with a standing rate per phase and no
+    // way to say which direction it was going — so a screen that wanted to
+    // report a phase getting worse had to derive one, and the hub did exactly
+    // that, from thresholds it invented.
+    //
+    // This writes the missing half, by the same rule the concept loop uses:
+    // pool the recent half of the phase's evidence, pool the earlier half,
+    // and let `compare` produce the delta and the posterior. Nothing new is
+    // computed here — it is the existing estimator run over two windows of
+    // one phase instead of one.
+    //
+    // The strata are rebuilt per half rather than halving each stratum, so a
+    // concept that only started firing recently lands in the recent window
+    // rather than being split down the middle of a period it does not cover.
+    // -------------------------------------------------------------------
+    const items = phaseEvidence.get(phase) ?? [];
+    const recent = poolPhase(strataOf(recentHalf(items)), input.cutoff);
+    if (recent.status === "available") {
+      const earlier = poolPhase(strataOf(earlierHalf(items)), input.cutoff);
+      if (earlier.status === "available") {
+        const personalId = await ensureDimension(sql, {
+          dimensionKey: `phase_${phase}_personal_current`,
+          version: ESTIMATOR_POLICY.version,
+          conceptVersionId: null,
+          role: null,
+          speed: null,
+          phase,
+          frame: "personal_current",
+          displayName: `Every chance in ${phaseLabel(phase)}`,
+        });
+        const comparison = compare(earlier, recent as Estimate);
+        const baselineId = await writeEstimate(
+          sql,
+          {
+            analysisRunId: input.analysisRunId,
+            subjectId: input.subjectId,
+            subjectDataSnapshotId: input.subjectDataSnapshotId,
+            estimatorComponentVersionId: input.versions.estimatorVersionId,
+          },
+          {
+            skillDimensionId: personalId,
+            windowKind: "baseline",
+            result: earlier,
+            comparisonEstimateId: null,
+            delta: null,
+            improvementProbability: null,
+          },
+        );
+        await writeEstimate(
+          sql,
+          {
+            analysisRunId: input.analysisRunId,
+            subjectId: input.subjectId,
+            subjectDataSnapshotId: input.subjectDataSnapshotId,
+            estimatorComponentVersionId: input.versions.estimatorVersionId,
+          },
+          {
+            skillDimensionId: personalId,
+            windowKind: "recent_form",
+            result: recent,
+            comparisonEstimateId: baselineId,
+            delta: comparison.delta,
+            improvementProbability: comparison.improvementProbability,
+          },
+        );
+        summary.estimates += 2;
+      }
+    }
     summary.estimates += 1;
     if (result.status === "unavailable") summary.unavailableEstimates += 1;
   }

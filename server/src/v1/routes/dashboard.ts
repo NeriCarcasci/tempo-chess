@@ -70,7 +70,7 @@ const estimateSchema = z.object({
     }).nullable(),
   }),
   frame: z.string(),
-  /** Set on the pooled per-phase rows, null on the per-concept ones. */
+  /** Set on every phase-scoped row, null on cross-phase concept rows. */
   phase: z.string().nullable(),
   windowKind: z.string(),
   /**
@@ -132,6 +132,10 @@ const phasesSchema = z.object({
       intervalHigh: z.number().nullable(),
       coverageStatus: z.string(),
       unavailableReason: z.string().nullable(),
+      baselineRate: z.number().nullable(),
+      recentRate: z.number().nullable(),
+      delta: z.number().nullable(),
+      improvementProbability: z.number().nullable(),
       gamesReaching: z.number().nullable(),
       phaseReachRate: z.number().nullable(),
     }),

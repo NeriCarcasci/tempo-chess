@@ -1,0 +1,23 @@
+Third-party assets
+==================
+
+Streamline "Plump Color" icons
+------------------------------
+Some of the marks in `app/components/marks.tsx` are derived from Streamline's
+Plump Color icon set.
+
+  Source:  https://icon-sets.iconify.design/streamline-plump-color/
+           https://github.com/webalys-hq/streamline-vectors
+  Author:  Streamline (https://streamlinehq.com)
+  Licence: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+
+Used under CC BY 4.0, which permits commercial use and requires attribution.
+The icons are modified: each ships two hardcoded colours, and both are
+rewritten as CSS custom properties so the marks take Forma's palette. The
+attribution is also shown to readers on /brand.
+
+Cburnett chess pieces
+---------------------
+The board and piece artwork is Cburnett's, used under CC BY-SA 3.0.
+  Source:  https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces
+  Licence: https://creativecommons.org/licenses/by-sa/3.0/

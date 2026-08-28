@@ -317,7 +317,7 @@ describe("the measures", () => {
       if (!text.includes("No figure")) {
         expect(text).toMatch(/\d+% to \d+%/);
       }
-      expect(text).toMatch(/chances?/);
+      expect(text).toMatch(/key moments?/);
     }
   });
 
@@ -349,7 +349,7 @@ describe("the measures", () => {
     // and "measured at zero" are opposite statements.
     const text = shown();
     expect(text).toContain("No figure");
-    expect(text).toContain("Too few chances so far to put a number on this.");
+    expect(text).toContain("Too few key moments so far to put a number on this.");
   });
 
   test("a change is reported with how sure Forma is of it", () => {
@@ -358,9 +358,41 @@ describe("the measures", () => {
     expect(text).toContain("82%");
   });
 
+  test("a decline is reported as plainly as an improvement", () => {
+    // PRODUCT.md's first principle: the unflattering figure is the one that
+    // earns trust, and the findings vocabulary has no decline type at all, so
+    // a page built from findings alone could report every gain and no loss.
+    // The posterior is read directly, and its complement is the sentence: a
+    // confident fall must never print as an unlikely improvement.
+    const text = shown({
+      dashboard: dashboard({
+        estimates: [
+          estimate({
+            dimensionKey: "material_safety_respond_objective",
+            estimate: 0.4,
+            rawSampleSize: 970,
+          }),
+          estimate({
+            dimensionKey: "material_safety_respond_personal_current",
+            frame: "personal_current",
+            windowKind: "recent_form",
+            estimate: 0.4,
+            delta: -0.065,
+            improvementProbability: 0.00348,
+          }),
+        ],
+      }),
+    });
+    expect(text).toContain("down on your earlier ones");
+    // Never "100%": a posterior of 0.997 printed as certainty claims it is
+    // impossible their play held, which no evidence about chess earns.
+    expect(text).toContain("genuinely gone down at over 99%");
+    expect(text).not.toContain("gone down at 100%");
+  });
+
   test("nothing measured is a sentence, not an empty page", () => {
     const text = shown({ dashboard: dashboard({ estimates: [] }) });
-    expect(text).toContain("No measure has any chances behind it");
+    expect(text).toContain("No measure has any key moments behind it");
   });
 });
 

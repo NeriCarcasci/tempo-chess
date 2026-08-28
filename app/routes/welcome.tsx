@@ -3,6 +3,7 @@ import { Form, Link, redirect, useActionData, useNavigation } from "react-router
 import type { Route } from "./+types/welcome";
 import { OnboardingShell } from "../components/onboarding/OnboardingShell";
 import { ProviderChoice, type Provider } from "../components/onboarding/ProviderChoice";
+import { RookSays } from "../components/RookSays";
 import { ConnectPanel } from "../components/onboarding/ConnectPanel";
 import { RouteError } from "../components/RouteError";
 import {
@@ -376,10 +377,22 @@ export default function Welcome({ loaderData }: Route.ComponentProps) {
         />
       }
       title={started ? "Add another account?" : "Connect your chess account"}
+      /* The one screen where the mascot speaking is the right register: this
+         is the product introducing itself, to somebody who has met it once.
+         It does not follow them to the hub — a page you open every morning
+         that greets you in character is doing something to you rather than
+         telling you something. */
       sub={
-        started
-          ? "Add every site you play on and the first report covers all of them together. You can start whenever you are ready."
-          : "Forma reads the games you have already played. Nothing is posted, and only public game data is read."
+        <RookSays mood="curious" size={64}>
+          {started ? (
+            <p>Add every site you play on. The first report covers all of them.</p>
+          ) : (
+            <p>
+              I read games you have already played. Nothing is posted, and only public
+              data is read.
+            </p>
+          )}
+        </RookSays>
       }
     >
       <section

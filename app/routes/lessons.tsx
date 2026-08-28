@@ -1,11 +1,13 @@
 import { useMemo } from "react";
 import { Link } from "react-router";
 import type { Route } from "./+types/lessons";
+import { PieceGlyph } from "../components/PieceGlyph";
 import { TopNav } from "../components/TopNav";
 import { requireSession } from "../lib/session";
 import { fetchLessonProgress, type LessonProgress } from "../lib/account";
 import { LESSONS } from "../lib/lessons";
 import { RouteError } from "../components/RouteError";
+import { Donut } from "../components/instruments";
 
 export function meta() {
   return [{ title: "Lessons · Forma" }];
@@ -19,25 +21,6 @@ export async function clientLoader({}: Route.ClientLoaderArgs) {
   const session = await requireSession();
   const progress = await fetchLessonProgress(session.username);
   return { progress };
-}
-
-function Ring({ done, total }: { done: number; total: number }) {
-  const pct = total ? Math.round((done / total) * 100) : 0;
-  const r = 15;
-  const circ = 2 * Math.PI * r;
-  return (
-    <svg width="38" height="38" viewBox="0 0 38 38" className="lesson-ring" aria-hidden="true">
-      <circle cx="19" cy="19" r={r} fill="none" stroke="var(--color-surface-2)" strokeWidth="4" />
-      <circle
-        cx="19" cy="19" r={r} fill="none" stroke="var(--color-win)" strokeWidth="4"
-        strokeDasharray={circ} strokeDashoffset={circ * (1 - pct / 100)} strokeLinecap="round"
-        transform="rotate(-90 19 19)"
-      />
-      <text x="19" y="20" textAnchor="middle" dominantBaseline="central" fontSize="10" fontWeight="800" fill="var(--color-ink)">
-        {pct}
-      </text>
-    </svg>
-  );
 }
 
 export default function Lessons({ loaderData }: Route.ComponentProps) {
@@ -59,11 +42,23 @@ export default function Lessons({ loaderData }: Route.ComponentProps) {
       <TopNav current="lessons" />
       <main className="lessons-shell">
         <header className="lessons-head">
-          <p className="eyebrow">Guided lessons</p>
+          {/* No kicker. "Guided lessons" over "Learn an opening" restated the
+              heading in smaller type, which is furniture, and the nav already
+              says where you are. The count is a chip, like every other
+              standing figure in the product. */}
           <h1>Learn an opening, one idea at a time</h1>
+          {doneCount ? (
+            <p className="figchips on-paper lessons-standing">
+              <span className="figchip">
+                <b>
+                  {doneCount} of {LESSONS.length}
+                </b>
+                <small>completed</small>
+              </span>
+            </p>
+          ) : null}
           <p>
-            Play the moves yourself and Forma explains the why behind each one — plans, targets, and
-            the principles that make the opening work. {doneCount ? `${doneCount} completed so far.` : ""}
+            Play the moves yourself; Forma explains the plan behind each one.
           </p>
         </header>
 
@@ -74,12 +69,20 @@ export default function Lessons({ loaderData }: Route.ComponentProps) {
             <section key={group.color} className="lessons-group">
               <h2 className="lessons-group-title">{group.label}</h2>
               <div className="lessons-grid">
-                {lessons.map((lesson) => {
+                {lessons.map((lesson, index) => {
                   const p = progressBySlug.get(lesson.slug);
                   const started = p && p.completedSteps > 0;
                   const complete = !!p?.completedAt;
+                  // An ascending run of pieces, the product's own mark for a
+                  // sequence (see Scenes): the glyph names nothing about the
+                  // lesson, so it repeats on a cycle rather than pretending
+                  // each opening has a piece.
+                  const glyph = ["p", "n", "b", "r", "q"][index % 5]!;
                   return (
                     <Link key={lesson.slug} to={`/lessons/${lesson.slug}`} className="lesson-card">
+                      <span className="lesson-mark" aria-hidden="true">
+                        <PieceGlyph letter={glyph} white={lesson.color === "white"} />
+                      </span>
                       <div className="lesson-card-body">
                         <span className="lesson-family">{lesson.family}</span>
                         <strong>{lesson.title}</strong>
@@ -88,7 +91,22 @@ export default function Lessons({ loaderData }: Route.ComponentProps) {
                           {complete ? "Review ✓" : started ? "Continue →" : "Start →"}
                         </span>
                       </div>
-                      <Ring done={p?.completedSteps ?? 0} total={lesson.interactiveCount} />
+                      {/* The product's one ring, not a second one drawn
+                          here: a lesson's progress and a phase's rate are
+                          the same kind of claim and must look it. */}
+                      <Donut
+                        value={lesson.interactiveCount ? (p?.completedSteps ?? 0) / lesson.interactiveCount : 0}
+                        size={44}
+                        stroke={4}
+                      >
+                        <b className="lesson-ring-figure metric">
+                          {Math.round(
+                            lesson.interactiveCount
+                              ? ((p?.completedSteps ?? 0) / lesson.interactiveCount) * 100
+                              : 0,
+                          )}
+                        </b>
+                      </Donut>
                     </Link>
                   );
                 })}

@@ -660,9 +660,21 @@ await report.check("practice is assigned from the player's own mistakes", async 
   }
 
   const [assignment] = await sql<
-    { reason: string; fen: string; solution_uci: string[]; id: string }[]
+    {
+      reason: string;
+      fen: string;
+      solution_uci: string[];
+      id: string;
+      source_game_id: string | null;
+      concept_slug: string | null;
+      role: string | null;
+      phase: string | null;
+      move_number: number | null;
+      side: string | null;
+    }[]
   >`
-    select la.id, la.reason, tv.fen, tv.solution_uci
+    select la.id, la.reason, la.source_game_id, la.concept_slug, la.role,
+           la.phase, la.move_number, la.side, tv.fen, tv.solution_uci
     from coaching.learning_assignments la
     join coaching.training_item_versions tv on tv.id = la.training_item_version_id
     where la.subject_id = ${subjectId}
@@ -670,6 +682,12 @@ await report.check("practice is assigned from the player's own mistakes", async 
   `;
   assert.equal(assignment!.reason.length >= 15, true, "an assignment must say why");
   assert.equal(assignment!.solution_uci.length >= 1, true);
+  assert.ok(assignment!.source_game_id, "the drill lost its source game");
+  assert.ok(assignment!.concept_slug, "the drill lost its catalogue pattern");
+  assert.ok(["recognize", "execute", "respond", "convert"].includes(assignment!.role ?? ""));
+  assert.ok(["opening", "middlegame", "endgame"].includes(assignment!.phase ?? ""));
+  assert.ok((assignment!.move_number ?? 0) >= 1);
+  assert.ok(assignment!.side === "white" || assignment!.side === "black");
 
   const [item] = await sql<{ source_kind: string; retention_class: string }[]>`
     select ti.source_kind, ti.retention_class

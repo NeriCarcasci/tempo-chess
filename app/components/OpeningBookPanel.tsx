@@ -112,17 +112,23 @@ export function OpeningBookPanel({
         /* The board on screen is past the last position the catalogue names.
            Saying the position "is" the Najdorf when the book stopped naming
            two plies ago is the kind of small lie a player checks. */
-        <p className="line-book-note">
-          The catalogue stops naming positions after this. It is the deepest name on your
-          move order, not a name for the square you are looking at.
-        </p>
+        <p className="line-book-note">Named from your move order, not from this square.</p>
       ) : null}
 
       {departure ? (
+        /* Long algebraic, not the wire's `b7b6`. A raw UCI pair is a database
+           value: it is the one thing on this panel a chess player cannot
+           read at a glance, on a panel whose whole job is to be read by one.
+           Rendering it as SAN would need the position, which this component
+           is not given; from-to with a hyphen is real notation and is true
+           to exactly what the field holds. */
         <p className="line-book-note">
-          Your line left the book at move {moveNoOf(departure.ply)}
-          {departure.side === "white" ? " for White" : " for Black"}: {departure.uci}.
-          {departure.lastBookName ? ` The last position it had was the ${departure.lastBookName}.` : ""}
+          Left the book at move {moveNoOf(departure.ply)}{" "}
+          {departure.side === "white" ? "for White" : "for Black"}:{" "}
+          <b>
+            {departure.uci.slice(0, 2)}-{departure.uci.slice(2, 4)}
+          </b>
+          {departure.lastBookName ? `, last in the ${departure.lastBookName}.` : "."}
         </p>
       ) : book.requested.line ? (
         <p className="line-book-note">Every move of this line is in the book.</p>
@@ -130,8 +136,7 @@ export function OpeningBookPanel({
 
       {!book.book.atRequestedPosition ? (
         <p className="line-book-note">
-          The book has nothing at this position, so the moves below are the ones it offers
-          from the last position on your line that it did have.
+          The book stops here; the moves below are from the last position it had.
         </p>
       ) : null}
 

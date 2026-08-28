@@ -79,13 +79,20 @@ const productSurface = [
   // `/explorer` was the second build of the same idea. It redirects now rather
   // than 404s, because the URL has been linked.
   route("explorer", "routes/explorer.tsx"),
+  // What to work through: three entrances, and a computed route through each.
+  route("path", "routes/path.tsx"),
+  // Kept as redirects into the page above; see the modules for why.
+  route("patterns", "routes/patterns.tsx"),
+  route("mistakes", "routes/mistakes.tsx"),
   route("middlegame", "routes/middlegame.tsx"),
   route("endgame", "routes/endgame.tsx"),
   route("lessons", "routes/lessons.tsx"),
   route("lessons/:slug", "routes/lesson.tsx"),
   route("account", "routes/account.tsx"),
   route("profile", "routes/profile.tsx"),
-  route("mistakes", "routes/mistakes.tsx"),
+  // The drill queue, on `/v1`. It replaced `/mistakes`, which read the
+  // prototype's opening observations and could never see the rest of a game.
+  route("practice", "routes/practice.tsx"),
   route("play", "routes/play.tsx"),
   route("train", "routes/train.tsx"),
   route("dev/operations", "routes/operations.tsx"),

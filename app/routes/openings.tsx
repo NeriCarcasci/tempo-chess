@@ -227,8 +227,20 @@ export default function OpeningsRoute({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="relative z-10 min-h-dvh">
-      <TopNav current="openings" />
+      <TopNav current="openings" back={{ to: "/path#opening", label: "Path" }} />
       <main className="tsheet-page">
+        {/* No phase hero here any more.
+
+            It was added when `/openings` was the opening's own page and a
+            reader arrived on it straight from the hub's dial. They arrive from
+            the opening section of `/patterns` now, which carries that dial at
+            full size one click earlier, so drawing it again at the top of this
+            page is the same figure twice in two screens. This page is not
+            about the phase. It is about your lines. */}
+        <header className="tsheet-head">
+          <h1>Your lines</h1>
+          <p>Every opening you play, worst first, move by move.</p>
+        </header>
         <SideFilter side={side} family={openFamily} />
         {empty ? <NothingToRead empty={empty} games={coverage.games} /> : null}
         {sheet.sections.length ? (

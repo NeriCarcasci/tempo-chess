@@ -40,6 +40,24 @@ export default function Brand() {
             endorsed by, or operated by Chess.com or Lichess. Their names and
             marks belong to their respective owners.
           </p>
+
+          {/* CC BY 4.0 requires a visible credit and a link, so it is on the
+              page rather than only in NOTICE. */}
+          <p className="brand-disclosure">
+            <strong>Credits.</strong> Forma's marks are derived from{" "}
+            <a href="https://streamlinehq.com" target="_blank" rel="noreferrer">
+              Streamline
+            </a>
+            's Plump Color icons, used and modified under{" "}
+            <a
+              href="https://creativecommons.org/licenses/by/4.0/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              CC BY 4.0
+            </a>
+            . The pieces are Cburnett's, under CC BY-SA 3.0.
+          </p>
         </div>
       </section>
     </PublicPage>

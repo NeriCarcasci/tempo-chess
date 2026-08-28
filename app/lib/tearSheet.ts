@@ -22,8 +22,16 @@ const TEARS_AT = 0.25;
 const SHAKY_AT = 0.12;
 /** Families below this many games fold into one quiet row per section. */
 const MIN_ROW_GAMES = 2;
-/** Columns never run past here, however deep the book goes. */
-const MAX_MOVE = 12;
+/**
+ * Columns never run past here, however deep the book goes.
+ *
+ * Exported because the sheet's own method note has to compare a measured depth
+ * against the real cap. It used to compare against `sheet.maxMove`, which is
+ * derived from the deepest line on the sheet - so for any repertoire reaching
+ * move 8 the test was always true, the note always claimed the model had hit
+ * its cap, and it always reported a depth one move short of the truth.
+ */
+export const MAX_MOVE = 12;
 const MIN_MOVE_SPAN = 8;
 /** Positions kept per cell for the detail panel. */
 const MAX_CELL_POSITIONS = 3;

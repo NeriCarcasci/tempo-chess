@@ -61,20 +61,33 @@ export default function App() {
   return <Outlet />;
 }
 
+/**
+ * The shape of a product page, not the shape of a page we deleted.
+ *
+ * This drew a five-panel dashboard - a bordered bar, a wide pulse and four
+ * `.panel` boxes in a 1+1+2 grid - which is the layout `/today` was rebuilt
+ * away from. Every route without a fallback of its own borrowed it, so the
+ * first thing a reader met on the hub, on `/mistakes` and on `/profile` was a
+ * skeleton of a page that no longer exists, at `max-w-[1200px] px-5` against
+ * the product shell's own 1160px and 1.5rem, so the column jumped sideways on
+ * hydration.
+ *
+ * It also used Tailwind's `animate-pulse`, which this product's reduced-motion
+ * block never reaches: the block turns off `ghost-breathe`, the product's own
+ * skeleton animation, and knows nothing about Tailwind's.
+ *
+ * What the pages behind it actually share is a heading over a wide block, so
+ * that is what this is - on the product shell's own measure, in the product's
+ * own ghost, and still under one roof rather than five boxes.
+ */
 export function HydrateFallback() {
   return (
-    <div className="min-h-dvh">
-      <div className="h-14 border-b border-line" />
-      <div className="mx-auto max-w-[1200px] px-5 pt-8 sm:px-8">
-        <div className="mb-6 h-14 w-64 animate-pulse rounded-panel bg-surface" />
-        <div className="space-y-6">
-          <div className="panel h-40 animate-pulse" />
-          <div className="panel h-36 animate-pulse" />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="panel h-56 animate-pulse" />
-            <div className="panel h-56 animate-pulse" />
-          </div>
-        </div>
+    <div className="min-h-dvh" aria-busy="true">
+      <div className="hydrate-bar" />
+      <div className="hydrate-shell">
+        <span className="ghost-block is-head" />
+        <span className="ghost-block is-lead" />
+        <span className="ghost-block is-body" />
       </div>
     </div>
   );

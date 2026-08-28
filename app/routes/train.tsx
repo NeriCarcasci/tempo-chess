@@ -177,7 +177,7 @@ export default function Train({ loaderData }: Route.ComponentProps) {
 
   const explainEdge = useCallback(
     (edge: OpeningGraphEdge): string => {
-      const bits = [`Your main move here — played in ${edge.g} of your game${edge.g === 1 ? "" : "s"}.`];
+      const bits = [`Your main move here, played in ${edge.g} of your game${edge.g === 1 ? "" : "s"}.`];
       if (edge.lb) bits.push(`It stays in the ${edge.lb}.`);
       if (edge.ev != null) bits.push(`The engine keeps it at ${formatEvalPawns(userColor === "b" ? -edge.ev : edge.ev)}.`);
       return bits.join(" ");
@@ -321,7 +321,7 @@ export default function Train({ loaderData }: Route.ComponentProps) {
       expectedSan: expected.s,
       reveal: secondMiss,
       text: secondMiss
-        ? `The move here is ${expected.s} — follow the green arrow, or reveal & continue.`
+        ? `The move here is ${expected.s}. Follow the green arrow, or reveal and continue.`
         : `${move.san} isn't your line here. Take another look and try again.`,
     });
     setSelected(null);
@@ -436,7 +436,7 @@ export default function Train({ loaderData }: Route.ComponentProps) {
                     {stats.total ? ` · ${Math.round((stats.correct / stats.total) * 100)}%` : ""}
                   </span>
                 </div>
-                <p>Here's the {lineFamily ?? "line"} you drilled — tap a move to review the position.</p>
+                <p>Here's the {lineFamily ?? "line"} you drilled. Tap a move to review the position.</p>
                 <ol className="train-movelist">
                   {Array.from({ length: Math.ceil(line.length / 2) }, (_, r) => {
                     const wi = r * 2;
@@ -559,7 +559,7 @@ export default function Train({ loaderData }: Route.ComponentProps) {
             )}
             {lineFamily ? (
               <p className="train-tip">
-                <b>Plan — {lineFamily}:</b> {openingLesson(lineFamily).ideas[0]}
+                <b>Plan for {lineFamily}:</b> {openingLesson(lineFamily).ideas[0]}
               </p>
             ) : null}
           </div>

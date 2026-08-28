@@ -63,7 +63,10 @@ export function OnboardingShell({
           <h1 ref={headingRef} tabIndex={headingRef ? -1 : undefined}>
             {title}
           </h1>
-          {sub ? <p className="auth-sub">{sub}</p> : null}
+          {/* A `div`, not a `p`: a screen may hand the rook in here, and a
+              mascot beside a bubble is block content the parser will not
+              accept inside a paragraph. */}
+          {sub ? <div className="auth-sub">{sub}</div> : null}
           {children}
         </div>
         {split}

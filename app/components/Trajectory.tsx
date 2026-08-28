@@ -1,76 +1,45 @@
-import { useId } from "react";
-import type { Cone, PhaseAccuracy, PlotBox } from "../lib/trajectory";
+import { useId, type ReactNode } from "react";
+import type { Cone, PhaseAccuracy, PhaseCard } from "../lib/trajectory";
 import { FigureNote } from "./FigureNote";
+import { TrajectoryLine } from "./instruments";
 import {
   accuracyFinding,
-  bandPath,
   coneFinding,
   coneText,
-  decayStops,
-  LEVEL,
-  medianIntervalPaths,
-  medianPath,
   phaseCards,
-  project,
-  railPath,
 } from "../lib/trajectory";
 
 /**
- * The trajectory: one evaluation graph across a whole archive, and a card per
- * phase underneath it.
+ * The trajectory: one evaluation picture across a whole archive, and a card
+ * per phase underneath it.
  *
- * The graph is the familiar single-game evaluation curve applied to a
- * distribution. The shaded region is the middle half of the games at that point
- * and the line through it is the median; a dashed divider marks each phase
- * boundary. See `lib/trajectory.ts` for why this is a band and not a line — the
- * short version is that the median of two hundred games is level everywhere, so
- * a line chart of it is a flat rule that reads as a broken component.
+ * The picture is a row of readings, one per bin: the capsule's height is the
+ * middle half of the games at that point (p25 to p75), the accent notch is
+ * the median, and a dashed divider marks each phase boundary. See
+ * `lib/trajectory.ts` for why the quantiles and not the median alone — the
+ * short version is that the median of two hundred games is level everywhere,
+ * so a line chart of it is a flat rule that reads as a broken component.
  *
- * ## Why the band is coloured, and what the colour means
+ * ## Why capsules and not a smooth band
  *
- * The band is split at level: the part above 0.5 takes the win colour, the part
- * below takes the loss colour. The obvious objection is that this only
- * relabels the axis and produces a ribbon that is green on top and red
- * underneath for its whole length. It does not, and the real numbers are why.
- * The two tails are strongly asymmetric — a losing quarter that reaches 0.00
- * beside a winning quarter that only reaches 0.67 — so the red half of the band
- * is three times the depth of the green half through the middlegame, and the
- * first bins are entirely above level and therefore entirely green. The shape
- * of that asymmetry is the reading, and it is exactly what a single-colour band
- * hides. `coneFinding` states it in words too, so the colour is never the only
- * carrier of it.
- *
- * DESIGN.md allows two coloured things: the accent and a semantic result. A
- * band drawn from expected score *is* a result, and these are the two semantic
- * colours. Nothing else here is coloured.
- *
- * ## Why there is no text in the SVG
- *
- * The graph has to be legible at 375px and at full width. A `font-size` inside
- * a scaled viewBox is either unreadable on a phone or shouting on a monitor,
- * and there is no unit that fixes it. So the SVG carries only geometry, with
- * `preserveAspectRatio="none"` and `vector-effect="non-scaling-stroke"` on
- * every stroke, and every label is HTML. The phase names live on the cards,
- * which sit directly under the segment they describe, so the graph needs no
- * labels of its own.
+ * The band was the familiar analytics mark: a filled curve between p25 and
+ * p75, smoothed across bins. It smoothed away the one thing the product's own
+ * mark vocabulary is built on — discrete cells. The move strip, the pattern
+ * grid and the board itself all say "one square, one fact"; a bin here is one
+ * fact (the published quantiles of that slice of the game), and drawing it as
+ * its own capsule makes the widening a countable row of readings instead of a
+ * shape a curve fit could have invented. Nothing is interpolated: every
+ * capsule is exactly its bin, and hovering one states its numbers.
  *
  * ## Carrying the sample decay
  *
- * Only about a quarter of a typical archive reaches an endgame. Three things
- * say so, because this is the failure the picture would otherwise commit: the
- * band is masked by a gradient built from the per-bin game count, so it fades
- * where the evidence thins; the rail under the curve is that same count drawn
- * as bars; and each card states the games and the reach rate in words.
+ * Only about a quarter of a typical archive reaches an endgame. The capsules
+ * carry that themselves: opacity is the games behind the bin, so the picture
+ * physically fades where the archive thins, and each card states the games
+ * and the reach rate in words. The separate sample rail retired with the
+ * band — a second register under the plot was furniture once the marks could
+ * carry their own evidence.
  */
-
-/** The plot, in viewBox units. x is 0–100 so HTML labels can share the scale. */
-const PLOT: PlotBox = { x: 0, y: 0, width: 100, height: 58 };
-const RAIL_TOP = 63;
-const RAIL_HEIGHT = 11;
-const VIEW_HEIGHT = RAIL_TOP + RAIL_HEIGHT;
-
-/** Expected-score gridlines. Level is drawn differently: it is the only one that means something. */
-const GRID = [0, 0.25, 0.75, 1];
 
 const pct = (value: number): string => `${Math.round(value * 100)}%`;
 
@@ -87,16 +56,14 @@ const DEFINITIONS = (
       either of you could still take.
     </p>
     <p>
-      The band is the middle half of your games at that point — a quarter are above it and a
-      quarter below — and the line through it is the median. It is drawn in one weight rather
-      than split by colour: the spread is what this figure measures, and the asymmetry between
-      its halves is said in words above rather than left to a hue to carry.
+      The line is the median: at each point across the game, half your games stand above it
+      and half below. It passes through every measured point, and the curve between them only
+      says how it travels, never adds a reading of its own.
     </p>
     <p>
-      The curve under the band is how many games are still being counted, and the band fades
-      with it, so where the archive thins the figure says so instead of claiming the same
-      strength over fifty games as over two hundred. Each phase is measured across its own
-      length, which is what the dashed dividers mark.
+      Fewer games reach the end than the start, so the later part of the line stands on less
+      evidence; each phase states how many games reached it. Every phase is measured across
+      its own length, which is what the dashed dividers mark.
     </p>
   </>
 );
@@ -105,6 +72,10 @@ export function Trajectory({
   cone,
   accuracy = [],
   printable = false,
+  compact = false,
+  provenance,
+  renderPhase,
+  notes,
 }: {
   cone: Cone;
   /**
@@ -116,37 +87,62 @@ export function Trajectory({
    */
   printable?: boolean;
   /**
-   * How often chances were taken in each phase. Empty today: no route
-   * publishes per-phase rates, and the cards say so rather than deriving one.
+   * The hub's cut of the same figure: a shorter plot, the phase legend down
+   * to a name, its evidence and the one reading that earned a sentence (the
+   * decisive phase's), and no caption prose at all — the definitions stay
+   * behind the mark, and the findings live on the surfaces that own them.
+   * The full reading is `/profile` and `/report`; the hub is a glance.
+   */
+  compact?: boolean;
+  /**
+   * How to read every figure this picture stands behind: the cohort it was
+   * measured over and when it was published. It lives inside the note rather
+   * than on the page, because it qualifies the figures rather than being one.
+   */
+  provenance?: string;
+  /**
+   * How often chances were taken in each phase, from the published dashboard.
+   * Empty when the publication predates the phases section, and the cards say
+   * so rather than deriving one.
    */
   accuracy?: readonly PhaseAccuracy[];
+  /**
+   * Replace a phase's legend entry with the caller's own node.
+   *
+   * The legend row is aligned under the plot's own segments by
+   * `--phase-columns`, and that alignment is exactly what the hub's phase
+   * tiles want — so rather than drawing a second row of phases under the
+   * graph (two strips saying "opening, middlegame, endgame" a hundred pixels
+   * apart), the hub hands its tile in here and the legend *is* the tiles.
+   */
+  renderPhase?: (card: PhaseCard) => ReactNode;
+  /**
+   * More for the note, from whoever owns the marks in the legend.
+   *
+   * The hub renders its phase dials *into* this figure, so the graph and the
+   * three figures under it are one object with one edge — and an object with
+   * one edge gets one note. Without this the hub had to hang a second `(i)`
+   * under the first, and both opened on the same provenance sentence.
+   */
+  notes?: ReactNode;
 }) {
   const uid = useId();
-  const maskId = `cone-decay-${uid}`;
-  const gradientId = `cone-decay-grad-${uid}`;
   const descriptionId = `cone-desc-${uid}`;
 
   const finding = coneFinding(cone);
-  const band = bandPath(cone.points, PLOT);
-  const medianInterval = medianIntervalPaths(cone.points, PLOT);
-  const stops = decayStops(cone);
   const cards = phaseCards(cone, accuracy);
   const rowFinding = accuracyFinding(cards);
-  const [, levelY] = project(PLOT, 0, LEVEL);
 
   return (
-    <figure className="cone">
-      {/* The axis labels sit beside the plot in HTML, so they need to know how
-          much of the drawing is plot and how much is the sample rail under it.
-          Passed as a custom property rather than duplicated in the stylesheet:
-          two copies of 58/74 would drift the first time the rail changes
-          height, and the failure is silent — "Lost" quietly stops meaning
-          zero. */}
+    <figure className={`cone${compact ? " is-compact" : ""}`}>
+      {/* `--cone-plot-share` survives from the era of the sample rail under
+          the plot; the capsules carry the evidence themselves now, so the
+          plot is all plot and the axis labels span the whole of it. */}
       <div
         className="cone-frame"
         style={
           {
-            "--cone-plot-share": `${(PLOT.height / VIEW_HEIGHT) * 100}%`,
+            "--cone-plot-share": "100%",
             "--phase-columns": cards
               .map((card) => `${Math.round((card.to - card.from) * 1000)}fr`)
               .join(" "),
@@ -159,106 +155,11 @@ export function Trajectory({
           <span className="is-bottom">Lost</span>
         </div>
 
-        <div className="cone-plot">
-          <svg
-            viewBox={`0 0 100 ${VIEW_HEIGHT}`}
-            preserveAspectRatio="none"
-            role="img"
-            aria-describedby={descriptionId}
-          >
-            <title>{finding.headline}</title>
-            {stops.length > 0 ? (
-              <defs>
-                {/* The evidence, as transparency. Each stop is one bin's share
-                    of the largest bin, so the band physically fades where the
-                    games run out instead of claiming the same strength over
-                    forty-eight games as over two hundred. */}
-                <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
-                  {stops.map((stop) => (
-                    <stop
-                      key={stop.key}
-                      offset={stop.offset}
-                      stopColor="#ffffff"
-                      stopOpacity={stop.strength}
-                    />
-                  ))}
-                </linearGradient>
-                <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="100" height={VIEW_HEIGHT}>
-                  <rect x="0" y="0" width="100" height={VIEW_HEIGHT} fill={`url(#${gradientId})`} />
-                </mask>
-              </defs>
-            ) : null}
-
-            {GRID.map((line) => {
-              const [, y] = project(PLOT, 0, line);
-              return (
-                <line
-                  key={line}
-                  className="cone-grid"
-                  x1={0}
-                  y1={y}
-                  x2={100}
-                  y2={y}
-                  vectorEffect="non-scaling-stroke"
-                />
-              );
-            })}
-
-            <g className="cone-sweep" mask={stops.length > 0 ? `url(#${maskId})` : undefined}>
-              {/* One neutral band, fill plus a same-colour round-joined stroke,
-                  so the corners turn where the data turns. */}
-              <path className="cone-band" d={band} vectorEffect="non-scaling-stroke" />
-            </g>
-
-            <line
-              className="cone-level"
-              x1={0}
-              y1={levelY}
-              x2={100}
-              y2={levelY}
-              vectorEffect="non-scaling-stroke"
-            />
-
-            {/* How precisely the median is known, from the stored bootstrap.
-                Under the line it qualifies, over the band it sits inside. */}
-            {medianInterval.map((d, index) => (
-              <path key={index} className="cone-median-interval" d={d} vectorEffect="non-scaling-stroke" />
-            ))}
-
-            <path
-              className="cone-median"
-              d={medianPath(cone.points, PLOT)}
-              fill="none"
-              vectorEffect="non-scaling-stroke"
-            />
-
-            {/* Where the ruler changes. Each phase is normalised across its own
-                length, so the curve is continuous but the x axis is three
-                separate runs, and these say where one ends. */}
-            {cone.dividers.map((at) => (
-              <line
-                key={at}
-                className="cone-divider"
-                x1={at * 100}
-                y1={0}
-                x2={at * 100}
-                y2={RAIL_TOP + RAIL_HEIGHT}
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-
-            {/* The evidence under the reading, as a curve rather than a second
-                row of bars pretending not to be the band. */}
-            {(() => {
-              const rail = railPath(cone, PLOT, RAIL_TOP, RAIL_HEIGHT);
-              return rail.edge ? (
-                <g className="cone-rail">
-                  <path className="cone-rail-area" d={rail.area} />
-                  <path className="cone-rail-edge" d={rail.edge} vectorEffect="non-scaling-stroke" />
-                </g>
-              ) : null;
-            })()}
-          </svg>
+        {/* The plot: one line, the same mark the phase pages use, so the
+            whole and the slice are one instrument. The spread behind it is a
+            deep reading and is drawn only where deep reading happens. */}
+        <div className="cone-plot" role="img" aria-label={finding.headline} aria-describedby={descriptionId}>
+          <TrajectoryLine points={cone.points} dividers={cone.dividers} spread={!compact} />
         </div>
 
         {/*
@@ -280,21 +181,58 @@ export function Trajectory({
           furniture. The width the band opens by is already drawn, at the only
           scale it is true at, immediately above.
         */}
-        <ol className="cone-phases" aria-label="The phases of a game, across the figure">
-          {cards.map((card) => (
-            <li key={card.phase} className="cone-phase">
-              <b className="cap">{card.name}</b>
-              <span className="cone-phase-reading">{card.reading}</span>
-              <span className="cone-phase-evidence">
-                {card.games.toLocaleString()} {card.games === 1 ? "game" : "games"} ·{" "}
-                {pct(card.reachRate)} reach it
-              </span>
-              {card.caution ? <span className="cone-phase-caution">{card.caution}</span> : null}
-            </li>
-          ))}
+        <ol
+          className={`cone-phases${renderPhase ? " is-tiles" : ""}`}
+          aria-label="The phases of a game, across the figure"
+        >
+          {cards.map((card) => {
+            if (renderPhase) {
+              return (
+                <li key={card.phase} className="cone-phase-tile">
+                  {renderPhase(card)}
+                </li>
+              );
+            }
+            // In the compact cut only the phase that earned a sentence keeps
+            // one; the rest are a name and their evidence. Everywhere else
+            // every phase states its reading.
+            const decisive = cone.decisive?.phase === card.phase;
+            return (
+              <li key={card.phase} className="cone-phase">
+                <b className="cap">{card.name}</b>
+                {!compact || decisive ? (
+                  <span className="cone-phase-reading">{card.reading}</span>
+                ) : null}
+                <span className="cone-phase-evidence">
+                  {card.games.toLocaleString()} {card.games === 1 ? "game" : "games"} ·{" "}
+                  {pct(card.reachRate)} reach it
+                </span>
+                {card.caution && !compact ? (
+                  <span className="cone-phase-caution">{card.caution}</span>
+                ) : null}
+              </li>
+            );
+          })}
         </ol>
       </div>
 
+      {compact ? (
+        <figcaption className="cone-caption-compact">
+          {cone.unreached.length > 0 ? (
+            <p className="cone-absent">
+              Your games did not reach the {cone.unreached.join(" or ")}, so that part of the
+              picture is absent rather than flat.
+            </p>
+          ) : null}
+          <div className="cone-note">
+            <FigureNote title="How this figure is measured">
+              {provenance ? <p>{provenance}</p> : null}
+              {DEFINITIONS}
+              {notes}
+            </FigureNote>
+          </div>
+        </figcaption>
+      ) : (
       <figcaption>
         <p className="cone-finding">{finding.detail}</p>
         {finding.lopsided ? <p className="cone-finding">{finding.lopsided}</p> : null}
@@ -326,7 +264,12 @@ export function Trajectory({
         </div>
         {printable ? <div className="cone-note">{DEFINITIONS}</div> : null}
       </figcaption>
+      )}
+      {/* The finding in words, for a reader who is not looking at the marks.
+          The old SVG carried the headline as its <title>; the capsule plot
+          carries it here, ahead of the full description. */}
       <p id={descriptionId} className="sr-only">
+        {finding.headline}{" "}
         {coneText(cone)}
       </p>
     </figure>

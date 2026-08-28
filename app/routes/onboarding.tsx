@@ -152,7 +152,7 @@ export default function Onboarding() {
         {destination.kind === "diagnostic" ? (
           <EmptyState
             title="The optional examination is not built yet"
-            detail="Your report does not need it — it is built from your real games either way."
+            detail="Your report does not need it. It is built from your real games either way."
             action={
               destination.reportId ? (
                 <Link to="/report" className="primary-button">

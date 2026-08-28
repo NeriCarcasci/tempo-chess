@@ -89,7 +89,7 @@ export interface EstimateView {
    */
   copy: ConceptCopy;
   frame: string;
-  /** Set on the pooled per-phase estimates, null on the per-concept ones. */
+  /** Set on every phase-scoped estimate, null on cross-phase concept rows. */
   phase: string | null;
   windowKind: string;
   /** Null with a reason, never a placeholder number. */
@@ -143,6 +143,11 @@ export interface PhaseView {
   intervalHigh: number | null;
   coverageStatus: CoverageStatus;
   unavailableReason: string | null;
+  /** The published personal comparison, kept on the card so clients do not join estimates. */
+  baselineRate: number | null;
+  recentRate: number | null;
+  delta: number | null;
+  improvementProbability: number | null;
   /**
    * Games in the cohort that reached this phase, from the trajectory.
    *
@@ -274,7 +279,7 @@ export async function readDashboard(
   `;
   if (!publication) return null;
 
-  const estimates = await sql<
+  const estimatesQuery = sql<
     {
       dimension_key: string;
       display_name: string;
@@ -320,7 +325,7 @@ export async function readDashboard(
     order by d.frame, d.dimension_key
   `;
 
-  const findingRows = await sql<
+  const findingRowsQuery = sql<
     {
       id: string;
       finding_type: FindingType;
@@ -340,7 +345,7 @@ export async function readDashboard(
     order by f.priority desc, f.created_at
   `;
 
-  const evidenceRows = await sql<
+  const evidenceRowsQuery = sql<
     { finding_id: string; evidence_item_id: string; role: string; display_rank: number }[]
   >`
     select e.finding_id, e.evidence_item_id, e.role, e.display_rank
@@ -350,13 +355,54 @@ export async function readDashboard(
     order by e.finding_id, e.display_rank
   `;
 
-  const [trajectorySnapshot] = await sql<
+  const trajectoryQuery = sql<
     { id: string; included_game_count: number }[]
   >`
     select id, included_game_count from analysis.player_trajectory_snapshots
     where analysis_run_id = ${publication.run_id} and speed is null and color is null
     limit 1
   `;
+
+
+  const poolRowsQuery = sql<
+    {
+      provider: string;
+      pool: string;
+      speed: string;
+      observed_rating: number | null;
+      scale_estimate: string | null;
+      interval_low: string | null;
+      interval_high: string | null;
+      in_supported_range: boolean;
+      suppressed_reason: string | null;
+    }[]
+  >`
+    select c.provider, c.pool, s.speed, s.observed_rating, s.scale_estimate,
+           s.interval_low, s.interval_high, s.in_supported_range, s.suppressed_reason
+    from analysis.subject_rating_scale_estimates s
+    join analysis.rating_pool_calibration_versions c on c.id = s.calibration_version_id
+    where s.analysis_run_id = ${publication.run_id}
+    order by c.provider, s.speed
+  `;
+
+  /**
+   * The five independent reads, together.
+   *
+   * They were awaited one after another, and every one of them is keyed on
+   * the same `publication.run_id` with nothing between them to depend on. On
+   * a managed Postgres that is five round trips of latency to fetch data the
+   * database could have been working on at once, paid on every load of the
+   * profile, the report and the hub. Only the bins genuinely depend on
+   * anything (the snapshot id), so they stay behind it.
+   */
+  const [estimates, findingRows, evidenceRows, trajectoryRows, poolRows] = await Promise.all([
+    estimatesQuery,
+    findingRowsQuery,
+    evidenceRowsQuery,
+    trajectoryQuery,
+    poolRowsQuery,
+  ]);
+  const trajectorySnapshot = trajectoryRows[0];
 
   const binRows = trajectorySnapshot
     ? await sql<
@@ -382,27 +428,6 @@ export async function readDashboard(
         order by phase, bin_ordinal
       `
     : [];
-
-  const poolRows = await sql<
-    {
-      provider: string;
-      pool: string;
-      speed: string;
-      observed_rating: number | null;
-      scale_estimate: string | null;
-      interval_low: string | null;
-      interval_high: string | null;
-      in_supported_range: boolean;
-      suppressed_reason: string | null;
-    }[]
-  >`
-    select c.provider, c.pool, s.speed, s.observed_rating, s.scale_estimate,
-           s.interval_low, s.interval_high, s.in_supported_range, s.suppressed_reason
-    from analysis.subject_rating_scale_estimates s
-    join analysis.rating_pool_calibration_versions c on c.id = s.calibration_version_id
-    where s.analysis_run_id = ${publication.run_id}
-    order by c.provider, s.speed
-  `;
 
   const evidenceByFinding = new Map<string, FindingView["evidence"]>();
   for (const row of evidenceRows) {
@@ -482,10 +507,40 @@ export async function readDashboard(
     if (!reachByPhase.has(row.phase)) reachByPhase.set(row.phase, Number(row.phase_reach_rate));
   }
   const cohortGames = trajectorySnapshot?.included_game_count ?? 0;
+  const pooledPersonalByPhase = new Map(
+    estimateViews
+      .filter(
+        (view) =>
+          view.phase !== null
+          && view.copy.conceptSlug === null
+          && view.frame === "personal_current"
+          && view.windowKind === "recent_form",
+      )
+      .map((view) => [view.phase!, view]),
+  );
+  const pooledBaselineByPhase = new Map(
+    estimateViews
+      .filter(
+        (view) =>
+          view.phase !== null
+          && view.copy.conceptSlug === null
+          && view.frame === "personal_current"
+          && view.windowKind === "baseline",
+      )
+      .map((view) => [view.phase!, view]),
+  );
   const phaseViews: PhaseView[] = estimateViews
-    .filter((view) => view.phase !== null)
+    .filter(
+      (view) =>
+        view.phase !== null
+        && view.copy.conceptSlug === null
+        && view.frame === "objective"
+        && view.windowKind === "lifetime",
+    )
     .map((view) => {
       const reachRate = reachByPhase.get(view.phase!) ?? null;
+      const personal = pooledPersonalByPhase.get(view.phase!);
+      const baseline = pooledBaselineByPhase.get(view.phase!);
       return {
         phase: view.phase!,
         chances: view.rawSampleSize,
@@ -497,6 +552,10 @@ export async function readDashboard(
         intervalHigh: view.intervalHigh,
         coverageStatus: view.coverageStatus,
         unavailableReason: view.unavailableReason,
+        baselineRate: baseline?.estimate ?? null,
+        recentRate: personal?.estimate ?? null,
+        delta: personal?.delta ?? null,
+        improvementProbability: personal?.improvementProbability ?? null,
         gamesReaching:
           reachRate === null || cohortGames === 0 ? null : Math.round(reachRate * cohortGames),
         phaseReachRate: reachRate,
